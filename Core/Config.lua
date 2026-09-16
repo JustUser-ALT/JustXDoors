@@ -1,6 +1,6 @@
 local Config = {}
 
-local Environment = require(script.Parent.Environment)
+local Environment = require("Core/Environment")
 
 local writefile = Environment:Get("writefile")
 local readfile = Environment:Get("readfile")
