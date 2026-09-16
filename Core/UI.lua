@@ -1,7 +1,7 @@
 local UI = {}
 
-local Environment = require(script.Parent.Environment)
-local Notifications = require(script.Parent.Notifications)
+local Environment = require("Core/Environment")
+local Notifications = require("Core/Notifications")
 
 local loadstring = Environment:Get("loadstring")
 local request = Environment:Get("request")
