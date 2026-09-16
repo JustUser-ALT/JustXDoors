@@ -1,436 +1,919 @@
 local Notifications = {}
 
 local Services = require("Core/Services")
-local Connections = require("Core/Connections")
 
-local Players = Services.Players
 local TweenService = Services.TweenService
+local Players = Services.Players
 
-local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+Notifications.Config = {
+    DefaultDuration = 4,
 
-local GUI_NAME = "JustXDoorsNotifications"
-
-local DEFAULTS = {
-    Duration = 4,
     MaxVisible = 5,
-    Width = 310,
-    Height = 72,
-    Spacing = 8,
-    TweenTime = 0.28
+
+    Side = "Right",
+
+    UseObsidian = true,
+
+    SoundEnabled = false,
+    SoundId = nil,
+    SoundVolume = 0.5,
+
+    Colors = {
+        Success = Color3.fromRGB(75, 210, 125),
+        Warning = Color3.fromRGB(245, 190, 75),
+        Error = Color3.fromRGB(235, 85, 95),
+        Info = Color3.fromRGB(90, 155, 255),
+        Default = Color3.fromRGB(150, 150, 165)
+    }
 }
 
-local COLORS = {
-    Default = Color3.fromRGB(25, 25, 30),
-    Success = Color3.fromRGB(55, 185, 105),
-    Warning = Color3.fromRGB(220, 165, 65),
-    Error = Color3.fromRGB(210, 75, 75),
-    Info = Color3.fromRGB(75, 135, 220)
-}
+Notifications._Library = nil
+Notifications._Gui = nil
+Notifications._Holder = nil
 
-Notifications.Settings = table.clone(DEFAULTS)
-Notifications._items = {}
-Notifications._id = 0
-Notifications._gui = nil
-Notifications._container = nil
+Notifications._Active = {}
+Notifications._Ids = 0
 
-local function create(className, properties, parent)
-    local object = Instance.new(className)
+--------------------------------------------------
+-- INTERNAL
+--------------------------------------------------
 
-    for property, value in pairs(properties or {}) do
-        object[property] = value
-    end
-
-    object.Parent = parent
-
-    return object
-end
-
-local function getGui()
-    if Notifications._gui and Notifications._gui.Parent then
-        return Notifications._gui
-    end
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = GUI_NAME
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.DisplayOrder = 999999
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.Parent = playerGui
-
-    local container = create("Frame", {
-        Name = "Container",
-        AnchorPoint = Vector2.new(1, 1),
-        BackgroundTransparency = 1,
-        Position = UDim2.new(1, -18, 1, -18),
-        Size = UDim2.new(0, Notifications.Settings.Width, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-    }, gui)
-
-    create("UIListLayout", {
-        FillDirection = Enum.FillDirection.Vertical,
-        HorizontalAlignment = Enum.HorizontalAlignment.Right,
-        VerticalAlignment = Enum.VerticalAlignment.Bottom,
-        Padding = UDim.new(0, Notifications.Settings.Spacing),
-        SortOrder = Enum.SortOrder.LayoutOrder
-    }, container)
-
-    Notifications._gui = gui
-    Notifications._container = container
-
-    return gui
-end
-
-local function getContainer()
-    getGui()
-    return Notifications._container
+local function nextId()
+    Notifications._Ids += 1
+    return Notifications._Ids
 end
 
 local function getColor(notificationType)
-    return COLORS[notificationType] or COLORS.Default
+    return Notifications.Config.Colors[
+        notificationType
+    ] or Notifications.Config.Colors.Default
 end
 
-local function updateLayout()
-    local container = Notifications._container
-
-    if not container then
-        return
-    end
-
-    local visibleCount = 0
-
-    for index = #Notifications._items, 1, -1 do
-        local item = Notifications._items[index]
-
-        if not item.Frame or not item.Frame.Parent then
-            table.remove(Notifications._items, index)
-        elseif not item.Hidden then
-            visibleCount += 1
-            item.Frame.LayoutOrder = visibleCount
-        end
-    end
-end
-
-local function removeItem(item, instant)
-    if not item or item.Removed then
-        return
-    end
-
-    item.Removed = true
-
-    if item.TimerConnection then
-        Connections:Disconnect(item.TimerConnection)
-        item.TimerConnection = nil
-    end
-
-    if item.Frame and item.Frame.Parent then
-        if instant then
-            item.Frame:Destroy()
-        else
-            local tween = TweenService:Create(
-                item.Frame,
-                TweenInfo.new(
-                    Notifications.Settings.TweenTime,
-                    Enum.EasingStyle.Quad,
-                    Enum.EasingDirection.In
-                ),
-                {
-                    Position = UDim2.new(
-                        1,
-                        Notifications.Settings.Width + 30,
-                        0,
-                        0
-                    ),
-                    BackgroundTransparency = 1
-                }
-            )
-
-            tween:Play()
-
-            task.delay(Notifications.Settings.TweenTime, function()
-                if item.Frame then
-                    item.Frame:Destroy()
-                end
-            end)
-        end
-    end
-
-    for index, existing in ipairs(Notifications._items) do
-        if existing == item then
-            table.remove(Notifications._items, index)
-            break
-        end
-    end
-
-    updateLayout()
-end
-
-local function enforceLimit()
-    while #Notifications._items > Notifications.Settings.MaxVisible do
-        local oldest = Notifications._items[1]
-
-        if oldest then
-            removeItem(oldest, false)
-        else
-            break
-        end
-    end
-end
-
-function Notifications:Notify(options, text, duration)
-    if type(options) == "string" then
-        options = {
-            Title = options,
-            Text = text,
-            Duration = duration
+local function normalize(options)
+    if type(options) ~= "table" then
+        return {
+            Title = "JustXDoors",
+            Text = tostring(options or ""),
+            Type = "Info",
+            Duration = Notifications.Config.DefaultDuration
         }
     end
 
-    options = options or {}
+    return {
+        Title = tostring(
+            options.Title
+            or "JustXDoors"
+        ),
 
-    local title = tostring(options.Title or "JustXDoors")
-    local message = tostring(options.Text or "")
-    local notificationType = options.Type or "Default"
-    local displayDuration = tonumber(options.Duration) or self.Settings.Duration
-    local icon = options.Icon
-    local callback = options.Callback
+        Text = tostring(
+            options.Text
+            or options.Description
+            or ""
+        ),
 
-    local container = getContainer()
+        Type = tostring(
+            options.Type
+            or "Info"
+        ),
 
-    self._id += 1
+        Duration = tonumber(
+            options.Duration
+            or options.Time
+            or Notifications.Config.DefaultDuration
+        ) or Notifications.Config.DefaultDuration,
 
-    local item = {
-        Id = self._id,
-        Removed = false,
-        Hidden = false
+        Icon = options.Icon,
+
+        Persist = options.Persist == true,
+
+        SoundId = options.SoundId,
+
+        SoundVolume = tonumber(
+            options.SoundVolume
+        ) or Notifications.Config.SoundVolume,
+
+        Key = options.Key,
+
+        OnClick = options.OnClick,
+
+        OnDestroy = options.OnDestroy
     }
+end
 
-    local frame = create("Frame", {
-        Name = "Notification_" .. item.Id,
-        BackgroundColor3 = getColor(notificationType),
-        BackgroundTransparency = 0.08,
-        BorderSizePixel = 0,
-        Position = UDim2.new(
-            1,
-            self.Settings.Width + 30,
-            0,
-            0
-        ),
-        Size = UDim2.new(
-            0,
-            self.Settings.Width,
-            0,
-            self.Settings.Height
-        ),
-        ClipsDescendants = true
-    }, container)
+--------------------------------------------------
+-- OBSIDIAN
+--------------------------------------------------
 
-    item.Frame = frame
+function Notifications:SetLibrary(library)
+    self._Library = library
 
-    create("UICorner", {
-        CornerRadius = UDim.new(0, 10)
-    }, frame)
+    if library then
+        pcall(function()
+            library:SetNotifySide(
+                self.Config.Side
+            )
+        end)
+    end
+end
 
-    local stroke = create("UIStroke", {
-        Thickness = 1,
-        Transparency = 0.65,
-        Color = Color3.fromRGB(255, 255, 255)
-    }, frame)
+function Notifications:SetSide(side)
+    side = tostring(side)
 
-    local content = create("Frame", {
-        Name = "Content",
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 12, 0, 8),
-        Size = UDim2.new(1, -24, 1, -16)
-    }, frame)
-
-    local titleLabel = create("TextLabel", {
-        Name = "Title",
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 0, 0, 0),
-        Size = UDim2.new(1, 0, 0, 20),
-        Font = Enum.Font.GothamBold,
-        Text = title,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Center
-    }, content)
-
-    local messageLabel = create("TextLabel", {
-        Name = "Text",
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 0, 0, 21),
-        Size = UDim2.new(1, 0, 1, -21),
-        Font = Enum.Font.Gotham,
-        Text = message,
-        TextColor3 = Color3.fromRGB(235, 235, 240),
-        TextSize = 12,
-        TextWrapped = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top
-    }, content)
-
-    if icon then
-        local image = create("ImageLabel", {
-            Name = "Icon",
-            BackgroundTransparency = 1,
-            Position = UDim2.new(1, -28, 0, 0),
-            Size = UDim2.new(0, 20, 0, 20),
-            Image = tostring(icon),
-            ImageColor3 = Color3.fromRGB(255, 255, 255)
-        }, content)
-
-        titleLabel.Size = UDim2.new(1, -32, 0, 20)
-        messageLabel.Size = UDim2.new(1, -32, 1, -21)
+    if side ~= "Left"
+        and side ~= "Right"
+    then
+        return false
     end
 
-    local progress = create("Frame", {
-        Name = "Progress",
-        AnchorPoint = Vector2.new(0, 1),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        BackgroundTransparency = 0.35,
-        BorderSizePixel = 0,
-        Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 2)
-    }, frame)
+    self.Config.Side = side
 
-    create("UICorner", {
-        CornerRadius = UDim.new(1, 0)
-    }, progress)
+    if self._Library then
+        pcall(function()
+            self._Library:SetNotifySide(side)
+        end)
+    end
 
-    table.insert(self._items, item)
+    return true
+end
 
-    updateLayout()
-    enforceLimit()
+function Notifications:_NotifyObsidian(options)
+    if not self._Library then
+        return nil
+    end
 
-    local enterTween = TweenService:Create(
-        frame,
+    if self.Config.UseObsidian ~= true then
+        return nil
+    end
+
+    local color = getColor(
+        options.Type
+    )
+
+    local success, result = pcall(function()
+
+        return self._Library:Notify({
+            Title = options.Title,
+
+            Description = options.Text,
+
+            Time =
+                options.Persist
+                and math.huge
+                or options.Duration,
+
+            Icon = options.Icon,
+
+            IconColor = color,
+
+            Persist = options.Persist,
+
+            SoundId =
+                options.SoundId
+                or (
+                    self.Config.SoundEnabled
+                    and self.Config.SoundId
+                ),
+
+            Volume =
+                options.SoundVolume
+        })
+
+    end)
+
+    if success then
+        return result
+    end
+
+    return nil
+end
+
+--------------------------------------------------
+-- CUSTOM FALLBACK UI
+--------------------------------------------------
+
+function Notifications:_CreateGui()
+
+    if self._Gui
+        and self._Gui.Parent
+    then
+        return
+    end
+
+    local player =
+        Players.LocalPlayer
+
+    if not player then
+        return
+    end
+
+    local playerGui =
+        player:FindFirstChildOfClass(
+            "PlayerGui"
+        )
+
+    if not playerGui then
+        return
+    end
+
+    local gui =
+        Instance.new("ScreenGui")
+
+    gui.Name =
+        "JustXDoorsNotifications"
+
+    gui.ResetOnSpawn = false
+
+    gui.IgnoreGuiInset = true
+
+    gui.DisplayOrder = 999999
+
+    gui.ZIndexBehavior =
+        Enum.ZIndexBehavior.Sibling
+
+    gui.Parent = playerGui
+
+    local holder =
+        Instance.new("Frame")
+
+    holder.Name = "Holder"
+
+    holder.BackgroundTransparency = 1
+
+    holder.AnchorPoint =
+        Vector2.new(1, 0)
+
+    holder.Position =
+        UDim2.new(
+            1,
+            -14,
+            0,
+            14
+        )
+
+    holder.Size =
+        UDim2.new(
+            0,
+            330,
+            1,
+            -28
+        )
+
+    holder.Parent = gui
+
+    local layout =
+        Instance.new("UIListLayout")
+
+    layout.FillDirection =
+        Enum.FillDirection.Vertical
+
+    layout.HorizontalAlignment =
+        Enum.HorizontalAlignment.Right
+
+    layout.VerticalAlignment =
+        Enum.VerticalAlignment.Top
+
+    layout.Padding =
+        UDim.new(0, 8)
+
+    layout.SortOrder =
+        Enum.SortOrder.LayoutOrder
+
+    layout.Parent = holder
+
+    self._Gui = gui
+    self._Holder = holder
+end
+
+function Notifications:_CreateCustom(options)
+
+    self:_CreateGui()
+
+    if not self._Holder then
+        return nil
+    end
+
+    --------------------------------------------------
+    -- Limit visible notifications
+    --------------------------------------------------
+
+    while #self._Active >=
+        self.Config.MaxVisible
+    do
+
+        local oldest =
+            self._Active[1]
+
+        if oldest then
+            self:Remove(oldest.Id)
+        else
+            break
+        end
+    end
+
+    --------------------------------------------------
+    -- Root
+    --------------------------------------------------
+
+    local id = nextId()
+
+    local color =
+        getColor(options.Type)
+
+    local root =
+        Instance.new("TextButton")
+
+    root.Name =
+        "Notification_" .. id
+
+    root.AutoButtonColor = false
+
+    root.BackgroundColor3 =
+        Color3.fromRGB(
+            19,
+            20,
+            25
+        )
+
+    root.BackgroundTransparency = 0.04
+
+    root.BorderSizePixel = 0
+
+    root.Size =
+        UDim2.new(
+            1,
+            0,
+            0,
+            72
+        )
+
+    root.Text = ""
+
+    root.LayoutOrder = id
+
+    root.Parent =
+        self._Holder
+
+    --------------------------------------------------
+    -- Corner
+    --------------------------------------------------
+
+    local corner =
+        Instance.new("UICorner")
+
+    corner.CornerRadius =
+        UDim.new(0, 10)
+
+    corner.Parent = root
+
+    --------------------------------------------------
+    -- Stroke
+    --------------------------------------------------
+
+    local stroke =
+        Instance.new("UIStroke")
+
+    stroke.Color =
+        Color3.fromRGB(
+            55,
+            57,
+            68
+        )
+
+    stroke.Transparency = 0.25
+
+    stroke.Thickness = 1
+
+    stroke.Parent = root
+
+    --------------------------------------------------
+    -- Accent
+    --------------------------------------------------
+
+    local accent =
+        Instance.new("Frame")
+
+    accent.Name = "Accent"
+
+    accent.BackgroundColor3 =
+        color
+
+    accent.BorderSizePixel = 0
+
+    accent.Size =
+        UDim2.new(
+            0,
+            3,
+            1,
+            -16
+        )
+
+    accent.Position =
+        UDim2.new(
+            0,
+            8,
+            0,
+            8
+        )
+
+    accent.Parent = root
+
+    local accentCorner =
+        Instance.new("UICorner")
+
+    accentCorner.CornerRadius =
+        UDim.new(1, 0)
+
+    accentCorner.Parent =
+        accent
+
+    --------------------------------------------------
+    -- Icon
+    --------------------------------------------------
+
+    local icon =
+        Instance.new("TextLabel")
+
+    icon.Name = "Icon"
+
+    icon.BackgroundTransparency = 1
+
+    icon.Position =
+        UDim2.new(
+            0,
+            22,
+            0,
+            15
+        )
+
+    icon.Size =
+        UDim2.fromOffset(
+            32,
+            32
+        )
+
+    icon.Font =
+        Enum.Font.GothamBold
+
+    icon.TextSize = 17
+
+    icon.TextColor3 = color
+
+    icon.Text =
+
+        options.Type == "Success"
+        and "✓"
+
+        or options.Type == "Warning"
+        and "!"
+
+        or options.Type == "Error"
+        and "×"
+
+        or "i"
+
+    icon.Parent = root
+
+    --------------------------------------------------
+    -- Title
+    --------------------------------------------------
+
+    local title =
+        Instance.new("TextLabel")
+
+    title.Name = "Title"
+
+    title.BackgroundTransparency = 1
+
+    title.Position =
+        UDim2.new(
+            0,
+            62,
+            0,
+            12
+        )
+
+    title.Size =
+        UDim2.new(
+            1,
+            -76,
+            0,
+            20
+        )
+
+    title.Font =
+        Enum.Font.GothamSemibold
+
+    title.TextSize = 14
+
+    title.TextXAlignment =
+        Enum.TextXAlignment.Left
+
+    title.TextColor3 =
+        Color3.fromRGB(
+            245,
+            245,
+            248
+        )
+
+    title.Text =
+        options.Title
+
+    title.Parent = root
+
+    --------------------------------------------------
+    -- Description
+    --------------------------------------------------
+
+    local description =
+        Instance.new("TextLabel")
+
+    description.Name =
+        "Description"
+
+    description.BackgroundTransparency = 1
+
+    description.Position =
+        UDim2.new(
+            0,
+            62,
+            0,
+            34
+        )
+
+    description.Size =
+        UDim2.new(
+            1,
+            -76,
+            0,
+            26
+        )
+
+    description.Font =
+        Enum.Font.Gotham
+
+    description.TextSize = 12
+
+    description.TextWrapped = true
+
+    description.TextXAlignment =
+        Enum.TextXAlignment.Left
+
+    description.TextYAlignment =
+        Enum.TextYAlignment.Top
+
+    description.TextColor3 =
+        Color3.fromRGB(
+            165,
+            168,
+            180
+        )
+
+    description.Text =
+        options.Text
+
+    description.Parent = root
+
+    --------------------------------------------------
+    -- Progress bar
+    --------------------------------------------------
+
+    local progressBackground =
+        Instance.new("Frame")
+
+    progressBackground.Name =
+        "ProgressBackground"
+
+    progressBackground.BackgroundColor3 =
+        Color3.fromRGB(
+            45,
+            46,
+            55
+        )
+
+    progressBackground.BorderSizePixel = 0
+
+    progressBackground.Position =
+        UDim2.new(
+            0,
+            62,
+            1,
+            -7
+        )
+
+    progressBackground.Size =
+        UDim2.new(
+            1,
+            -76,
+            0,
+            2
+        )
+
+    progressBackground.Parent = root
+
+    local progress =
+        Instance.new("Frame")
+
+    progress.Name =
+        "Progress"
+
+    progress.BackgroundColor3 =
+        color
+
+    progress.BorderSizePixel = 0
+
+    progress.Size =
+        UDim2.fromScale(
+            1,
+            1
+        )
+
+    progress.Parent =
+        progressBackground
+
+    --------------------------------------------------
+    -- Object
+    --------------------------------------------------
+
+    local notification = {
+        Id = id,
+
+        Instance = root,
+
+        Title = title,
+
+        Description = description,
+
+        Progress = progress,
+
+        Destroyed = false
+    }
+
+    table.insert(
+        self._Active,
+        notification
+    )
+
+    --------------------------------------------------
+    -- Click
+    --------------------------------------------------
+
+    root.Activated:Connect(function()
+
+        if type(options.OnClick)
+            == "function"
+        then
+            task.spawn(
+                options.OnClick,
+                notification
+            )
+        end
+
+        self:Remove(id)
+    end)
+
+    --------------------------------------------------
+    -- Entrance
+    --------------------------------------------------
+
+    root.Size =
+        UDim2.new(
+            1,
+            0,
+            0,
+            0
+        )
+
+    root.BackgroundTransparency = 1
+
+    TweenService:Create(
+        root,
         TweenInfo.new(
-            self.Settings.TweenTime,
-            Enum.EasingStyle.Quart,
+            0.22,
+            Enum.EasingStyle.Quint,
             Enum.EasingDirection.Out
         ),
         {
-            Position = UDim2.new(1, 0, 0, 0)
+            Size = UDim2.new(
+                1,
+                0,
+                0,
+                72
+            ),
+
+            BackgroundTransparency = 0.04
         }
-    )
+    ):Play()
 
-    enterTween:Play()
+    --------------------------------------------------
+    -- Timer
+    --------------------------------------------------
 
-    local progressTween = TweenService:Create(
-        progress,
-        TweenInfo.new(
-            displayDuration,
-            Enum.EasingStyle.Linear,
-            Enum.EasingDirection.In
-        ),
-        {
-            Size = UDim2.new(0, 0, 0, 2)
-        }
-    )
+    if not options.Persist
+        and options.Duration > 0
+    then
 
-    progressTween:Play()
+        TweenService:Create(
+            progress,
+            TweenInfo.new(
+                options.Duration,
+                Enum.EasingStyle.Linear
+            ),
+            {
+                Size =
+                    UDim2.new(
+                        0,
+                        0,
+                        1,
+                        0
+                    )
+            }
+        ):Play()
 
-    if displayDuration > 0 then
-        task.delay(displayDuration, function()
-            removeItem(item, false)
-        end)
+        task.delay(
+            options.Duration,
+            function()
+
+                if not notification.Destroyed then
+                    self:Remove(id)
+                end
+
+            end
+        )
     end
 
-    if callback then
-        task.spawn(function()
-            pcall(callback, item)
-        end)
+    return notification
+end
+
+--------------------------------------------------
+-- PUBLIC
+--------------------------------------------------
+
+function Notifications:Notify(options)
+
+    options = normalize(options)
+
+    local result =
+        self:_NotifyObsidian(options)
+
+    if result then
+        return result
     end
 
-    return item
+    return self:_CreateCustom(options)
 end
 
 function Notifications:Success(title, text, duration)
+
     return self:Notify({
         Title = title,
         Text = text,
-        Duration = duration,
-        Type = "Success"
+        Type = "Success",
+        Duration =
+            duration
+            or self.Config.DefaultDuration
     })
 end
 
 function Notifications:Warning(title, text, duration)
+
     return self:Notify({
         Title = title,
         Text = text,
-        Duration = duration,
-        Type = "Warning"
+        Type = "Warning",
+        Duration =
+            duration
+            or self.Config.DefaultDuration
     })
 end
 
 function Notifications:Error(title, text, duration)
+
     return self:Notify({
         Title = title,
         Text = text,
-        Duration = duration,
-        Type = "Error"
+        Type = "Error",
+        Duration =
+            duration
+            or self.Config.DefaultDuration
     })
 end
 
 function Notifications:Info(title, text, duration)
+
     return self:Notify({
         Title = title,
         Text = text,
-        Duration = duration,
-        Type = "Info"
+        Type = "Info",
+        Duration =
+            duration
+            or self.Config.DefaultDuration
     })
 end
 
-function Notifications:Remove(item, instant)
-    removeItem(item, instant)
+--------------------------------------------------
+-- REMOVE
+--------------------------------------------------
+
+function Notifications:Remove(id)
+
+    for index, notification
+        in ipairs(self._Active)
+    do
+
+        if notification.Id == id then
+
+            notification.Destroyed = true
+
+            local instance =
+                notification.Instance
+
+            if instance
+                and instance.Parent
+            then
+
+                local tween =
+                    TweenService:Create(
+                        instance,
+
+                        TweenInfo.new(
+                            0.18,
+                            Enum.EasingStyle.Quint,
+                            Enum.EasingDirection.In
+                        ),
+
+                        {
+                            Size =
+                                UDim2.new(
+                                    1,
+                                    0,
+                                    0,
+                                    0
+                                ),
+
+                            BackgroundTransparency = 1
+                        }
+                    )
+
+                tween:Play()
+
+                task.delay(
+                    0.2,
+                    function()
+                        if instance then
+                            instance:Destroy()
+                        end
+                    end
+                )
+            end
+
+            table.remove(
+                self._Active,
+                index
+            )
+
+            return true
+        end
+    end
+
+    return false
 end
 
-function Notifications:Clear(instant)
-    for index = #self._items, 1, -1 do
-        removeItem(self._items[index], instant)
+function Notifications:Clear()
+
+    for index =
+        #self._Active,
+        1,
+        -1
+    do
+
+        local notification =
+            self._Active[index]
+
+        notification.Destroyed = true
+
+        if notification.Instance then
+            notification.Instance:Destroy()
+        end
+
+        self._Active[index] = nil
     end
 end
 
-function Notifications:SetMaxVisible(value)
-    value = math.max(1, math.floor(tonumber(value) or DEFAULTS.MaxVisible))
-
-    self.Settings.MaxVisible = value
-
-    enforceLimit()
-end
-
-function Notifications:SetDuration(value)
-    value = tonumber(value)
-
-    if value and value >= 0 then
-        self.Settings.Duration = value
-    end
-end
-
-function Notifications:SetPosition(position)
-    local container = self._container
-
-    if not container then
-        return
-    end
-
-    if typeof(position) == "UDim2" then
-        container.Position = position
-    end
-end
+--------------------------------------------------
+-- DESTROY
+--------------------------------------------------
 
 function Notifications:Destroy()
-    self:Clear(true)
 
-    if self._gui then
-        self._gui:Destroy()
+    self:Clear()
+
+    if self._Gui then
+        self._Gui:Destroy()
     end
 
-    self._gui = nil
-    self._container = nil
-    self._items = {}
+    self._Gui = nil
+    self._Holder = nil
+    self._Library = nil
 end
 
 return Notifications
