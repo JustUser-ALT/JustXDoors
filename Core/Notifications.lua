@@ -1,7 +1,7 @@
 local Notifications = {}
 
-local Services = require(script.Parent.Services)
-local Connections = require(script.Parent.Connections)
+local Services = require("Core/Services")
+local Connections = require("Core/Connections")
 
 local Players = Services.Players
 local TweenService = Services.TweenService
