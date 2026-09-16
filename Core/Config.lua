@@ -1,6 +1,7 @@
 local Config = {}
 
 local Environment = require("Core/Environment")
+local Services = require("Core/Services")
 
 local writefile = Environment:Get("writefile")
 local readfile = Environment:Get("readfile")
@@ -10,20 +11,36 @@ local listfiles = Environment:Get("listfiles")
 local makefolder = Environment:Get("makefolder")
 local isfolder = Environment:Get("isfolder")
 
+local HttpService = Services.HttpService
+
 Config.Folder = "JustXDoors"
-Config.ConfigFolder = Config.Folder .. "/Configs"
+Config.ConfigFolder = "JustXDoors/Configs"
 Config.Extension = ".json"
 
 Config.Current = {}
 Config.Name = nil
 
-local function canUseFileAPI()
-    return writefile and readfile and isfile
+Config.AutoloadName = nil
+
+--------------------------------------------------
+-- UTIL
+--------------------------------------------------
+
+local function normalizeName(name)
+    name = tostring(name or "")
+
+    name = name:gsub("[\\/:*?\"<>|]", "")
+    name = name:gsub("^%s+", "")
+    name = name:gsub("%s+$", "")
+
+    if name == "" then
+        return nil
+    end
+
+    return name
 end
 
 local function encode(data)
-    local HttpService = game:GetService("HttpService")
-
     local success, result = pcall(function()
         return HttpService:JSONEncode(data)
     end)
@@ -36,8 +53,6 @@ local function encode(data)
 end
 
 local function decode(data)
-    local HttpService = game:GetService("HttpService")
-
     local success, result = pcall(function()
         return HttpService:JSONDecode(data)
     end)
@@ -49,41 +64,53 @@ local function decode(data)
     return nil
 end
 
-local function ensureFolders()
+local function ensureFolder(path)
     if not makefolder then
         return false
     end
 
-    if isfolder and not isfolder(Config.Folder) then
-        pcall(makefolder, Config.Folder)
+    if isfolder then
+        if isfolder(path) then
+            return true
+        end
     end
 
-    if isfolder and not isfolder(Config.ConfigFolder) then
-        pcall(makefolder, Config.ConfigFolder)
-    end
+    local success = pcall(function()
+        makefolder(path)
+    end)
 
-    return true
+    return success
+end
+
+local function ensureFolders()
+    ensureFolder(Config.Folder)
+    ensureFolder(Config.ConfigFolder)
 end
 
 local function getPath(name)
-    return Config.ConfigFolder .. "/" .. name .. Config.Extension
+    return Config.ConfigFolder
+        .. "/"
+        .. name
+        .. Config.Extension
 end
 
-local function normalizeName(name)
-    name = tostring(name or "")
-    name = name:gsub("[\\/:*?\"<>|]", "")
-    name = name:gsub("^%s+", "")
-    name = name:gsub("%s+$", "")
-
-    if name == "" then
-        return nil
-    end
-
-    return name
+local function getAutoloadPath()
+    return Config.Folder .. "/autoload.txt"
 end
+
+local function canUseFiles()
+    return
+        type(writefile) == "function"
+        and type(readfile) == "function"
+        and type(isfile) == "function"
+end
+
+--------------------------------------------------
+-- BASIC
+--------------------------------------------------
 
 function Config:IsAvailable()
-    return canUseFileAPI()
+    return canUseFiles()
 end
 
 function Config:SetFolder(folder)
@@ -115,8 +142,16 @@ function Config:Get()
     return Config.Current
 end
 
+function Config:GetName()
+    return Config.Name
+end
+
+--------------------------------------------------
+-- SAVE
+--------------------------------------------------
+
 function Config:Save(name, data)
-    if not canUseFileAPI() then
+    if not canUseFiles() then
         return false, "File API is unavailable"
     end
 
@@ -156,8 +191,12 @@ function Config:Save(name, data)
     return true
 end
 
+--------------------------------------------------
+-- LOAD
+--------------------------------------------------
+
 function Config:Load(name)
-    if not canUseFileAPI() then
+    if not canUseFiles() then
         return false, "File API is unavailable"
     end
 
@@ -193,6 +232,10 @@ function Config:Load(name)
     return true, data
 end
 
+--------------------------------------------------
+-- DELETE
+--------------------------------------------------
+
 function Config:Delete(name)
     if not delfile or not isfile then
         return false, "File API is unavailable"
@@ -220,10 +263,19 @@ function Config:Delete(name)
 
     if Config.Name == name then
         Config.Name = nil
+        Config.Current = {}
+    end
+
+    if Config.AutoloadName == name then
+        Config:SetAutoload(nil)
     end
 
     return true
 end
+
+--------------------------------------------------
+-- EXISTS
+--------------------------------------------------
 
 function Config:Exists(name)
     if not isfile then
@@ -238,6 +290,10 @@ function Config:Exists(name)
 
     return isfile(getPath(name))
 end
+
+--------------------------------------------------
+-- LIST
+--------------------------------------------------
 
 function Config:List()
     if not listfiles then
@@ -257,24 +313,48 @@ function Config:List()
     local configs = {}
 
     for _, path in ipairs(files) do
-        local fileName = path:match("([^/\\]+)$")
 
-        if fileName and fileName:sub(-#Config.Extension) == Config.Extension then
-            local name = fileName:sub(1, -#Config.Extension - 1)
+        local fileName =
+            path:match("([^/\\]+)$")
+
+        if fileName
+            and fileName:sub(
+                -#Config.Extension
+            ) == Config.Extension
+        then
+
+            local name =
+                fileName:sub(
+                    1,
+                    -#Config.Extension - 1
+                )
 
             if name ~= "" then
-                table.insert(configs, name)
+                table.insert(
+                    configs,
+                    name
+                )
             end
         end
     end
 
-    table.sort(configs)
+    table.sort(configs, function(a, b)
+        return string.lower(a)
+            < string.lower(b)
+    end)
 
     return configs
 end
 
+--------------------------------------------------
+-- RENAME
+--------------------------------------------------
+
 function Config:Rename(oldName, newName)
-    if not canUseFileAPI() or not writefile or not delfile then
+    if not canUseFiles()
+        or not delfile
+        or not writefile
+    then
         return false, "File API is unavailable"
     end
 
@@ -285,6 +365,10 @@ function Config:Rename(oldName, newName)
         return false, "Invalid config name"
     end
 
+    if oldName == newName then
+        return false, "Names are identical"
+    end
+
     if not self:Exists(oldName) then
         return false, "Source config does not exist"
     end
@@ -293,29 +377,45 @@ function Config:Rename(oldName, newName)
         return false, "Target config already exists"
     end
 
-    local success, data = self:Load(oldName)
+    local success, data =
+        self:Load(oldName)
 
     if not success then
         return false, data
     end
 
-    local saved, errorMessage = self:Save(newName, data)
+    local saved, errorMessage =
+        self:Save(newName, data)
 
     if not saved then
         return false, errorMessage
     end
 
-    self:Delete(oldName)
-    self.Name = newName
+    local deleted, deleteError =
+        self:Delete(oldName)
+
+    if not deleted then
+        return false, deleteError
+    end
+
+    Config.Name = newName
+
+    if Config.AutoloadName == oldName then
+        Config:SetAutoload(newName)
+    end
 
     return true
 end
 
+--------------------------------------------------
+-- RESET
+--------------------------------------------------
+
 function Config:Reset(data)
-    if type(data) ~= "table" then
-        Config.Current = {}
-    else
+    if type(data) == "table" then
         Config.Current = data
+    else
+        Config.Current = {}
     end
 
     Config.Name = nil
@@ -328,10 +428,117 @@ function Config:Clear()
     Config.Name = nil
 end
 
-function Config:GetName()
-    return Config.Name
+--------------------------------------------------
+-- AUTOLOAD
+--------------------------------------------------
+
+function Config:SetAutoload(name)
+    if not canUseFiles() then
+        return false, "File API is unavailable"
+    end
+
+    ensureFolders()
+
+    name = normalizeName(name)
+
+    if not name then
+
+        if delfile
+            and isfile
+            and isfile(getAutoloadPath())
+        then
+
+            pcall(function()
+                delfile(getAutoloadPath())
+            end)
+        end
+
+        Config.AutoloadName = nil
+
+        return true
+    end
+
+    if not self:Exists(name) then
+        return false, "Config does not exist"
+    end
+
+    local success, errorMessage = pcall(function()
+        writefile(
+            getAutoloadPath(),
+            name
+        )
+    end)
+
+    if not success then
+        return false, errorMessage
+    end
+
+    Config.AutoloadName = name
+
+    return true
 end
 
+function Config:GetAutoload()
+    if Config.AutoloadName then
+        return Config.AutoloadName
+    end
+
+    if not canUseFiles()
+        or not isfile
+        or not readfile
+    then
+        return nil
+    end
+
+    local path = getAutoloadPath()
+
+    if not isfile(path) then
+        return nil
+    end
+
+    local success, name = pcall(function()
+        return readfile(path)
+    end)
+
+    if not success then
+        return nil
+    end
+
+    name = normalizeName(name)
+
+    Config.AutoloadName = name
+
+    return name
+end
+
+function Config:ClearAutoload()
+    return self:SetAutoload(nil)
+end
+
+--------------------------------------------------
+-- AUTOLOAD CONFIG
+--------------------------------------------------
+
+function Config:LoadAutoload()
+    local name = self:GetAutoload()
+
+    if not name then
+        return false, "No autoload config"
+    end
+
+    if not self:Exists(name) then
+        self:ClearAutoload()
+        return false, "Autoload config does not exist"
+    end
+
+    return self:Load(name)
+end
+
+--------------------------------------------------
+-- STARTUP
+--------------------------------------------------
+
 ensureFolders()
+Config:GetAutoload()
 
 return Config
