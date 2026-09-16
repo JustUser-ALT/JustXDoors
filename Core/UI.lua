@@ -173,8 +173,10 @@ function UI:Load()
     end
 
     Library = result
-
+    
     self.Library = Library
+
+    Notifications:SetLibrary(Library)
 
     --------------------------------------------------
     -- Obsidian options
