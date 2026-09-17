@@ -1,26 +1,35 @@
 local SettingsFeature = {}
 
 local Settings
-local Config
 local Notifications
 local UI
 local Configs
-local Environment
 
 local Elements = {}
 
 local Refreshing = false
 local Built = false
 
+------------------------------------------------------
+-- HELPERS
+------------------------------------------------------
+
 local function safeCall(callback, ...)
     if type(callback) ~= "function" then
         return false
     end
 
-    local success, result = pcall(callback, ...)
+    local success, result = pcall(
+        callback,
+        ...
+    )
 
     if not success then
-        warn("[JustXDoors Settings] " .. tostring(result))
+        warn(
+            "[JustXDoors Settings] "
+                .. tostring(result)
+        )
+
         return false
     end
 
@@ -44,12 +53,18 @@ local function setValue(element, value)
         return
     end
 
-    pcall(function()
-        element:SetValue(value)
-    end)
+    safeCall(
+        function()
+            element:SetValue(value)
+        end
+    )
 end
 
-local function notifyInfo(title, description, time)
+local function notifyInfo(
+    title,
+    description,
+    time
+)
     if not Notifications then
         return
     end
@@ -59,28 +74,16 @@ local function notifyInfo(title, description, time)
             Notifications:Info(
                 title,
                 description,
-                time
+                time or 4
             )
         end
     )
 end
 
-local function notifyError(description)
-    if not Notifications then
-        return
-    end
-
-    safeCall(
-        function()
-            Notifications:Error(
-                "Settings",
-                description
-            )
-        end
-    )
-end
-
-local function notifySuccess(description)
+local function notifySuccess(
+    description,
+    time
+)
     if not Notifications then
         return
     end
@@ -89,15 +92,35 @@ local function notifySuccess(description)
         function()
             Notifications:Success(
                 "Settings",
-                description
+                description,
+                time or 4
             )
         end
     )
 end
 
-local function bool(value)
-    return value == true
+local function notifyError(
+    description,
+    time
+)
+    if not Notifications then
+        return
+    end
+
+    safeCall(
+        function()
+            Notifications:Error(
+                "Settings",
+                description,
+                time or 5
+            )
+        end
+    )
 end
+
+------------------------------------------------------
+-- INIT
+------------------------------------------------------
 
 function SettingsFeature:Init(Core)
     if type(Core) ~= "table" then
@@ -105,19 +128,21 @@ function SettingsFeature:Init(Core)
     end
 
     Settings = Core.Settings
-    Config = Core.Config
     Notifications = Core.Notifications
     UI = Core.UI
     Configs = Core.Configs
-    Environment = Core.Environment
 
     Elements = {}
 
-    Built = false
     Refreshing = false
+    Built = false
 
     return true
 end
+
+------------------------------------------------------
+-- ELEMENT ACCESS
+------------------------------------------------------
 
 function SettingsFeature:GetElement(name)
     return Elements[name]
@@ -126,6 +151,10 @@ end
 function SettingsFeature:GetElements()
     return Elements
 end
+
+------------------------------------------------------
+-- APPLY RUNTIME SETTINGS
+------------------------------------------------------
 
 function SettingsFeature:ApplyRuntimeSettings()
     if not Settings then
@@ -137,30 +166,63 @@ function SettingsFeature:ApplyRuntimeSettings()
     --------------------------------------------------
 
     local alwaysOnTop =
-        Settings:Get("UI.AlwaysOnTop")
+        Settings:Get(
+            "UI.AlwaysOnTop"
+        )
 
     local cornerRadius =
-        Settings:Get("UI.CornerRadius")
+        Settings:Get(
+            "UI.CornerRadius"
+        )
 
-    local showCustomCursor =
-        Settings:Get("UI.ShowCustomCursor")
+    local customCursor =
+        Settings:Get(
+            "UI.ShowCustomCursor"
+        )
 
     if UI then
+        --------------------------------------------------
+        -- Always On Top
+        --------------------------------------------------
+
         if alwaysOnTop ~= nil then
             safeCall(
                 function()
                     UI:SetAlwaysOnTop(
-                        bool(alwaysOnTop)
+                        alwaysOnTop == true
                     )
                 end
             )
         end
+
+        --------------------------------------------------
+        -- Corner Radius
+        --------------------------------------------------
 
         if cornerRadius ~= nil then
             safeCall(
                 function()
                     UI:SetCornerRadius(
-                        tonumber(cornerRadius) or 8
+                        tonumber(cornerRadius)
+                            or 8
+                    )
+                end
+            )
+        end
+
+        --------------------------------------------------
+        -- Custom Cursor
+        --
+        -- Only call this if UI implements it.
+        --------------------------------------------------
+
+        if type(UI.SetCustomCursor)
+            == "function"
+        then
+            safeCall(
+                function()
+                    UI:SetCustomCursor(
+                        customCursor == true
                     )
                 end
             )
@@ -168,55 +230,55 @@ function SettingsFeature:ApplyRuntimeSettings()
     end
 
     --------------------------------------------------
-    -- Notifications
+    -- NOTIFICATIONS
     --------------------------------------------------
 
     local provider =
-        Settings:Get("Notifications.Provider")
+        Settings:Get(
+            "Notifications.Provider"
+        )
 
     local side =
-        Settings:Get("Notifications.Side")
+        Settings:Get(
+            "Notifications.Side"
+        )
 
     if Notifications then
+        --------------------------------------------------
+        -- Provider
+        --------------------------------------------------
+
         if provider then
             safeCall(
                 function()
                     Notifications:SetProvider(
-                        provider
+                        tostring(provider)
                     )
                 end
             )
         end
 
+        --------------------------------------------------
+        -- Side
+        --------------------------------------------------
+
         if side then
             safeCall(
                 function()
-                    Notifications:SetSide(side)
+                    Notifications:SetSide(
+                        tostring(side)
+                    )
                 end
             )
         end
     end
 
-    --------------------------------------------------
-    -- Custom cursor
-    --
-    -- Actual cursor implementation can be handled
-    -- by Core/UI later. Here we only keep the setting
-    -- synchronized.
-    --------------------------------------------------
-
-    if UI and type(UI.SetCustomCursor) == "function" then
-        safeCall(
-            function()
-                UI:SetCustomCursor(
-                    bool(showCustomCursor)
-                )
-            end
-        )
-    end
-
     return true
 end
+
+------------------------------------------------------
+-- REFRESH UI
+------------------------------------------------------
 
 function SettingsFeature:RefreshUI()
     if not Settings then
@@ -231,17 +293,23 @@ function SettingsFeature:RefreshUI()
 
     setValue(
         Elements.AlwaysOnTop,
-        Settings:Get("UI.AlwaysOnTop")
+        Settings:Get(
+            "UI.AlwaysOnTop"
+        )
     )
 
     setValue(
         Elements.CustomCursor,
-        Settings:Get("UI.ShowCustomCursor")
+        Settings:Get(
+            "UI.ShowCustomCursor"
+        )
     )
 
     setValue(
         Elements.CornerRadius,
-        Settings:Get("UI.CornerRadius")
+        Settings:Get(
+            "UI.CornerRadius"
+        )
     )
 
     --------------------------------------------------
@@ -250,36 +318,37 @@ function SettingsFeature:RefreshUI()
 
     setValue(
         Elements.NotificationProvider,
-        Settings:Get("Notifications.Provider")
+        Settings:Get(
+            "Notifications.Provider"
+        )
     )
 
     setValue(
         Elements.NotificationSide,
-        Settings:Get("Notifications.Side")
+        Settings:Get(
+            "Notifications.Side"
+        )
     )
 
     setValue(
         Elements.NotificationDuration,
-        Settings:Get("Notifications.DefaultDuration")
+        Settings:Get(
+            "Notifications.DefaultDuration"
+        )
     )
 
     setValue(
         Elements.NotificationMaxVisible,
-        Settings:Get("Notifications.MaxVisible")
+        Settings:Get(
+            "Notifications.MaxVisible"
+        )
     )
 
     setValue(
         Elements.NotificationSound,
-        Settings:Get("Notifications.SoundEnabled")
-    )
-
-    --------------------------------------------------
-    -- Debug
-    --------------------------------------------------
-
-    setValue(
-        Elements.DebugMode,
-        Settings:Get("General.Debug")
+        Settings:Get(
+            "Notifications.SoundEnabled"
+        )
     )
 
     Refreshing = false
@@ -293,15 +362,22 @@ end
 -- INTERFACE
 ------------------------------------------------------
 
-function SettingsFeature:BuildInterface(groupbox)
+function SettingsFeature:BuildInterface(
+    groupbox
+)
     if not groupbox then
-        return
+        return false
     end
+
+    --------------------------------------------------
+    -- ALWAYS ON TOP
+    --------------------------------------------------
 
     groupbox:AddToggle(
         "SettingsAlwaysOnTop",
         {
             Text = "Always On Top",
+
             Default = Settings:Get(
                 "UI.AlwaysOnTop"
             ),
@@ -313,7 +389,7 @@ function SettingsFeature:BuildInterface(groupbox)
 
                 Settings:Set(
                     "UI.AlwaysOnTop",
-                    value
+                    value == true
                 )
 
                 self:ApplyRuntimeSettings()
@@ -322,12 +398,19 @@ function SettingsFeature:BuildInterface(groupbox)
     )
 
     Elements.AlwaysOnTop =
-        groupbox:Get("SettingsAlwaysOnTop")
+        groupbox:Get(
+            "SettingsAlwaysOnTop"
+        )
+
+    --------------------------------------------------
+    -- CUSTOM CURSOR
+    --------------------------------------------------
 
     groupbox:AddToggle(
         "SettingsCustomCursor",
         {
             Text = "Custom Cursor",
+
             Default = Settings:Get(
                 "UI.ShowCustomCursor"
             ),
@@ -339,7 +422,7 @@ function SettingsFeature:BuildInterface(groupbox)
 
                 Settings:Set(
                     "UI.ShowCustomCursor",
-                    value
+                    value == true
                 )
 
                 self:ApplyRuntimeSettings()
@@ -348,24 +431,37 @@ function SettingsFeature:BuildInterface(groupbox)
     )
 
     Elements.CustomCursor =
-        groupbox:Get("SettingsCustomCursor")
+        groupbox:Get(
+            "SettingsCustomCursor"
+        )
+
+    --------------------------------------------------
+    -- CORNER RADIUS
+    --------------------------------------------------
 
     groupbox:AddSlider(
         "SettingsCornerRadius",
         {
             Text = "Corner Radius",
-            Default = Settings:Get(
-                "UI.CornerRadius"
-            ) or 8,
+
+            Default =
+                Settings:Get(
+                    "UI.CornerRadius"
+                ) or 8,
 
             Min = 0,
             Max = 20,
+
             Rounding = 0,
 
             Callback = function(value)
                 if Refreshing then
                     return
                 end
+
+                value =
+                    tonumber(value)
+                    or 8
 
                 Settings:Set(
                     "UI.CornerRadius",
@@ -378,17 +474,27 @@ function SettingsFeature:BuildInterface(groupbox)
     )
 
     Elements.CornerRadius =
-        groupbox:Get("SettingsCornerRadius")
+        groupbox:Get(
+            "SettingsCornerRadius"
+        )
+
+    return true
 end
 
 ------------------------------------------------------
 -- NOTIFICATIONS
 ------------------------------------------------------
 
-function SettingsFeature:BuildNotifications(groupbox)
+function SettingsFeature:BuildNotifications(
+    groupbox
+)
     if not groupbox then
-        return
+        return false
     end
+
+    --------------------------------------------------
+    -- PROVIDER
+    --------------------------------------------------
 
     groupbox:AddDropdown(
         "SettingsNotificationProvider",
@@ -400,16 +506,22 @@ function SettingsFeature:BuildNotifications(groupbox)
                 "Obsidian"
             },
 
-            Default = Settings:Get(
-                "Notifications.Provider"
-            ),
+            Default =
+                Settings:Get(
+                    "Notifications.Provider"
+                ),
 
             Callback = function(value)
                 if Refreshing then
                     return
                 end
 
-                value = tostring(value)
+                value =
+                    tostring(value)
+
+                if not Notifications then
+                    return
+                end
 
                 local success =
                     safeCall(
@@ -435,6 +547,10 @@ function SettingsFeature:BuildNotifications(groupbox)
             "SettingsNotificationProvider"
         )
 
+    --------------------------------------------------
+    -- POSITION
+    --------------------------------------------------
+
     groupbox:AddDropdown(
         "SettingsNotificationSide",
         {
@@ -445,16 +561,18 @@ function SettingsFeature:BuildNotifications(groupbox)
                 "Right"
             },
 
-            Default = Settings:Get(
-                "Notifications.Side"
-            ),
+            Default =
+                Settings:Get(
+                    "Notifications.Side"
+                ),
 
             Callback = function(value)
                 if Refreshing then
                     return
                 end
 
-                value = tostring(value)
+                value =
+                    tostring(value)
 
                 Settings:Set(
                     "Notifications.Side",
@@ -479,17 +597,23 @@ function SettingsFeature:BuildNotifications(groupbox)
             "SettingsNotificationSide"
         )
 
+    --------------------------------------------------
+    -- DURATION
+    --------------------------------------------------
+
     groupbox:AddSlider(
         "SettingsNotificationDuration",
         {
             Text = "Duration",
 
-            Default = Settings:Get(
-                "Notifications.DefaultDuration"
-            ) or 4,
+            Default =
+                Settings:Get(
+                    "Notifications.DefaultDuration"
+                ) or 4,
 
             Min = 1,
             Max = 15,
+
             Rounding = 1,
 
             Callback = function(value)
@@ -499,7 +623,8 @@ function SettingsFeature:BuildNotifications(groupbox)
 
                 Settings:Set(
                     "Notifications.DefaultDuration",
-                    value
+                    tonumber(value)
+                        or 4
                 )
             end
         }
@@ -510,17 +635,23 @@ function SettingsFeature:BuildNotifications(groupbox)
             "SettingsNotificationDuration"
         )
 
+    --------------------------------------------------
+    -- MAX VISIBLE
+    --------------------------------------------------
+
     groupbox:AddSlider(
         "SettingsNotificationMaxVisible",
         {
             Text = "Max Visible",
 
-            Default = Settings:Get(
-                "Notifications.MaxVisible"
-            ) or 5,
+            Default =
+                Settings:Get(
+                    "Notifications.MaxVisible"
+                ) or 5,
 
             Min = 1,
             Max = 10,
+
             Rounding = 0,
 
             Callback = function(value)
@@ -530,7 +661,8 @@ function SettingsFeature:BuildNotifications(groupbox)
 
                 Settings:Set(
                     "Notifications.MaxVisible",
-                    value
+                    tonumber(value)
+                        or 5
                 )
             end
         }
@@ -541,14 +673,19 @@ function SettingsFeature:BuildNotifications(groupbox)
             "SettingsNotificationMaxVisible"
         )
 
+    --------------------------------------------------
+    -- SOUND
+    --------------------------------------------------
+
     groupbox:AddToggle(
         "SettingsNotificationSound",
         {
             Text = "Notification Sound",
 
-            Default = Settings:Get(
-                "Notifications.SoundEnabled"
-            ),
+            Default =
+                Settings:Get(
+                    "Notifications.SoundEnabled"
+                ),
 
             Callback = function(value)
                 if Refreshing then
@@ -557,7 +694,7 @@ function SettingsFeature:BuildNotifications(groupbox)
 
                 Settings:Set(
                     "Notifications.SoundEnabled",
-                    value
+                    value == true
                 )
             end
         }
@@ -567,6 +704,10 @@ function SettingsFeature:BuildNotifications(groupbox)
         groupbox:Get(
             "SettingsNotificationSound"
         )
+
+    --------------------------------------------------
+    -- TEST
+    --------------------------------------------------
 
     groupbox:AddButton(
         {
@@ -580,24 +721,30 @@ function SettingsFeature:BuildNotifications(groupbox)
                 Notifications:Info(
                     "JustXDoors",
                     "Notification system is working.",
-                    4
+                    Settings:Get(
+                        "Notifications.DefaultDuration"
+                    ) or 4
                 )
             end
         }
     )
+
+    return true
 end
 
 ------------------------------------------------------
 -- CONFIGS
 ------------------------------------------------------
 
-function SettingsFeature:BuildConfigs(groupbox)
+function SettingsFeature:BuildConfigs(
+    groupbox
+)
     if not groupbox then
-        return
+        return false
     end
 
     --------------------------------------------------
-    -- Config dropdown
+    -- CONFIG DROPDOWN
     --------------------------------------------------
 
     groupbox:AddDropdown(
@@ -612,7 +759,8 @@ function SettingsFeature:BuildConfigs(groupbox)
             Default = "No configs",
 
             Callback = function()
-                -- Selection is handled by Features/Configs.lua.
+                -- Config selection is read
+                -- directly by Features/Configs.lua.
             end
         }
     )
@@ -623,7 +771,7 @@ function SettingsFeature:BuildConfigs(groupbox)
         )
 
     --------------------------------------------------
-    -- Config name
+    -- CONFIG NAME
     --------------------------------------------------
 
     groupbox:AddInput(
@@ -633,7 +781,8 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Default = "",
 
-            Placeholder = "Enter config name",
+            Placeholder =
+                "Enter config name",
 
             Numeric = false,
 
@@ -651,18 +800,22 @@ function SettingsFeature:BuildConfigs(groupbox)
         )
 
     --------------------------------------------------
-    -- Pass UI references to Configs.lua
+    -- GIVE ELEMENTS TO CONFIG FEATURE
     --------------------------------------------------
 
     if Configs then
-        Configs:SetElements(
-            {
-                ConfigDropdown =
-                    Elements.ConfigDropdown,
+        safeCall(
+            function()
+                Configs:SetElements(
+                    {
+                        ConfigDropdown =
+                            Elements.ConfigDropdown,
 
-                ConfigName =
-                    Elements.ConfigName
-            }
+                        ConfigName =
+                            Elements.ConfigName
+                    }
+                )
+            end
         )
     end
 
@@ -676,6 +829,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -694,6 +851,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -701,8 +862,11 @@ function SettingsFeature:BuildConfigs(groupbox)
                     Configs:Load()
 
                 if success then
-                    self:ApplyRuntimeSettings()
                     self:RefreshUI()
+
+                    notifySuccess(
+                        "Config loaded and applied."
+                    )
                 end
             end
         }
@@ -718,6 +882,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -736,6 +904,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -745,7 +917,7 @@ function SettingsFeature:BuildConfigs(groupbox)
     )
 
     --------------------------------------------------
-    -- AUTOLOAD
+    -- SET AUTOLOAD
     --------------------------------------------------
 
     groupbox:AddButton(
@@ -754,6 +926,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -772,6 +948,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -779,7 +959,6 @@ function SettingsFeature:BuildConfigs(groupbox)
                     Configs:LoadAutoload()
 
                 if success then
-                    self:ApplyRuntimeSettings()
                     self:RefreshUI()
 
                     notifySuccess(
@@ -800,6 +979,10 @@ function SettingsFeature:BuildConfigs(groupbox)
 
             Func = function()
                 if not Configs then
+                    notifyError(
+                        "Config system is unavailable."
+                    )
+
                     return
                 end
 
@@ -807,12 +990,12 @@ function SettingsFeature:BuildConfigs(groupbox)
                     Configs:Reset()
 
                 if success then
-                    self:ApplyRuntimeSettings()
                     self:RefreshUI()
 
                     notifyInfo(
                         "Settings",
-                        "All settings restored to defaults."
+                        "All settings restored to defaults.",
+                        4
                     )
                 end
             end
@@ -820,290 +1003,18 @@ function SettingsFeature:BuildConfigs(groupbox)
     )
 
     --------------------------------------------------
-    -- Initial config list
+    -- INITIAL REFRESH
     --------------------------------------------------
 
     if Configs then
-        safeCall(function()
-            Configs:Refresh()
-        end)
-    end
-end
-
-------------------------------------------------------
--- DEBUG
-------------------------------------------------------
-
-function SettingsFeature:BuildDebug(groupbox)
-    if not groupbox then
-        return
-    end
-
-    groupbox:AddToggle(
-        "SettingsDebugMode",
-        {
-            Text = "Debug Mode",
-
-            Default = Settings:Get(
-                "General.Debug"
-            ),
-
-            Callback = function(value)
-                if Refreshing then
-                    return
-                end
-
-                Settings:Set(
-                    "General.Debug",
-                    value
-                )
+        safeCall(
+            function()
+                Configs:Refresh()
             end
-        }
-    )
-
-    Elements.DebugMode =
-        groupbox:Get(
-            "SettingsDebugMode"
         )
+    end
 
-    --------------------------------------------------
-    -- Environment information
-    --------------------------------------------------
-
-    groupbox:AddButton(
-        {
-            Text = "Executor Info",
-
-            Func = function()
-                if not Environment then
-                    notifyError(
-                        "Environment module is unavailable."
-                    )
-
-                    return
-                end
-
-                local name =
-                    "Unknown"
-
-                local version =
-                    "Unknown"
-
-                safeCall(
-                    function()
-                        name =
-                            Environment:GetExecutorName()
-                            or "Unknown"
-
-                        version =
-                            Environment:GetExecutorVersion()
-                            or "Unknown"
-                    end
-                )
-
-                notifyInfo(
-                    "Executor",
-                    tostring(name)
-                        .. " "
-                        .. tostring(version),
-                    5
-                )
-            end
-        }
-    )
-
-    --------------------------------------------------
-    -- Environment capabilities
-    --------------------------------------------------
-
-    groupbox:AddButton(
-        {
-            Text = "Environment Info",
-
-            Func = function()
-                if not Environment then
-                    notifyError(
-                        "Environment module is unavailable."
-                    )
-
-                    return
-                end
-
-                local info
-
-                safeCall(
-                    function()
-                        info =
-                            Environment:GetInfo()
-                    end
-                )
-
-                if type(info) ~= "table" then
-                    notifyError(
-                        "Unable to read environment."
-                    )
-
-                    return
-                end
-
-                local executor =
-                    tostring(
-                        info.Executor
-                        or "Unknown"
-                    )
-
-                local capabilityCount = 0
-
-                if type(info.Capabilities)
-                    == "table"
-                then
-                    for _, enabled in pairs(
-                        info.Capabilities
-                    ) do
-                        if enabled == true then
-                            capabilityCount += 1
-                        end
-                    end
-                end
-
-                notifyInfo(
-                    "Environment",
-                    "Executor: "
-                        .. executor
-                        .. "\nCapabilities: "
-                        .. tostring(
-                            capabilityCount
-                        ),
-                    6
-                )
-            end
-        }
-    )
-
-    --------------------------------------------------
-    -- Notifications
-    --------------------------------------------------
-
-    groupbox:AddButton(
-        {
-            Text = "Test Notifications",
-
-            Func = function()
-                if not Notifications then
-                    return
-                end
-
-                Notifications:Info(
-                    "Information",
-                    "This is an information notification.",
-                    3
-                )
-
-                task.delay(
-                    0.25,
-                    function()
-                        Notifications:Success(
-                            "Success",
-                            "This is a success notification.",
-                            3
-                        )
-                    end
-                )
-
-                task.delay(
-                    0.5,
-                    function()
-                        Notifications:Warning(
-                            "Warning",
-                            "This is a warning notification.",
-                            3
-                        )
-                    end
-                )
-
-                task.delay(
-                    0.75,
-                    function()
-                        Notifications:Error(
-                            "Error",
-                            "This is an error notification.",
-                            3
-                        )
-                    end
-                )
-            end
-        }
-    )
-
-    --------------------------------------------------
-    -- Clear notifications
-    --------------------------------------------------
-
-    groupbox:AddButton(
-        {
-            Text = "Clear Notifications",
-
-            Func = function()
-                if not Notifications then
-                    return
-                end
-
-                safeCall(
-                    function()
-                        Notifications:Clear()
-                    end
-                )
-            end
-        }
-    )
-
-    --------------------------------------------------
-    -- Reload UI
-    --------------------------------------------------
-
-    groupbox:AddButton(
-        {
-            Text = "Reload UI",
-
-            Func = function()
-                if not UI then
-                    return
-                end
-
-                notifyInfo(
-                    "Settings",
-                    "Reloading UI...",
-                    2
-                )
-
-                task.defer(
-                    function()
-                        safeCall(
-                            function()
-                                UI:Unload()
-                            end
-                        )
-
-                        task.wait(0.15)
-
-                        safeCall(
-                            function()
-                                UI:Load()
-                            end
-                        )
-
-                        task.wait(0.15)
-
-                        safeCall(
-                            function()
-                                UI:Create()
-                            end
-                        )
-                    end
-                )
-            end
-        }
-    )
+    return true
 end
 
 ------------------------------------------------------
@@ -1116,28 +1027,41 @@ function SettingsFeature:Build()
     end
 
     if not UI then
+        warn(
+            "[JustXDoors Settings] UI is unavailable."
+        )
+
         return false
     end
 
     if not Settings then
+        warn(
+            "[JustXDoors Settings] Settings is unavailable."
+        )
+
         return false
     end
 
     --------------------------------------------------
-    -- Create Settings tab
+    -- SETTINGS TAB
     --------------------------------------------------
 
-    local tab = UI:AddTab(
-        "Settings",
-        "settings"
-    )
+    local tab =
+        UI:AddTab(
+            "Settings",
+            "settings"
+        )
 
     if not tab then
+        warn(
+            "[JustXDoors Settings] Failed to create tab."
+        )
+
         return false
     end
 
     --------------------------------------------------
-    -- Interface
+    -- INTERFACE
     --------------------------------------------------
 
     local interfaceGroup =
@@ -1151,7 +1075,7 @@ function SettingsFeature:Build()
     )
 
     --------------------------------------------------
-    -- Notifications
+    -- NOTIFICATIONS
     --------------------------------------------------
 
     local notificationGroup =
@@ -1165,7 +1089,7 @@ function SettingsFeature:Build()
     )
 
     --------------------------------------------------
-    -- Configs
+    -- CONFIGS
     --------------------------------------------------
 
     local configGroup =
@@ -1179,25 +1103,10 @@ function SettingsFeature:Build()
     )
 
     --------------------------------------------------
-    -- Debug
-    --------------------------------------------------
-
-    local debugGroup =
-        UI:AddRightGroupbox(
-            tab,
-            "Debug"
-        )
-
-    self:BuildDebug(
-        debugGroup
-    )
-
-    --------------------------------------------------
-    -- Apply current settings
+    -- APPLY
     --------------------------------------------------
 
     self:ApplyRuntimeSettings()
-
     self:RefreshUI()
 
     Built = true
@@ -1210,10 +1119,18 @@ end
 ------------------------------------------------------
 
 function SettingsFeature:Destroy()
+    if Configs then
+        safeCall(
+            function()
+                Configs:SetElements({})
+            end
+        )
+    end
+
     Elements = {}
 
-    Built = false
     Refreshing = false
+    Built = false
 
     return true
 end
