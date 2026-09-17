@@ -1,12 +1,46 @@
 local Environment = {}
 
-local function getGlobal(name)
-    local success, value = pcall(function()
-        return getfenv(0)[name]
-    end)
+local function safeCall(fn, ...)
+    if type(fn) ~= "function" then
+        return nil
+    end
 
+    local success, result = pcall(fn, ...)
     if success then
-        return value
+        return result
+    end
+
+    return nil
+end
+
+local function getGlobal(name)
+    -- 1. Executor global environment
+    local getgenvFn = rawget(_G, "getgenv")
+
+    if type(getgenvFn) == "function" then
+        local env = safeCall(getgenvFn)
+
+        if type(env) == "table" and env[name] ~= nil then
+            return env[name]
+        end
+    end
+
+    -- 2. Current environment
+    local getfenvFn = rawget(_G, "getfenv")
+
+    if type(getfenvFn) == "function" then
+        local env = safeCall(getfenvFn, 0)
+
+        if type(env) == "table" and env[name] ~= nil then
+            return env[name]
+        end
+    end
+
+    -- 3. _G fallback
+    local global = rawget(_G, name)
+
+    if global ~= nil then
+        return global
     end
 
     return nil
@@ -26,143 +60,168 @@ local function has(name)
     return getFunction(name) ~= nil
 end
 
-Environment.Executor = {
-    Name = "Unknown",
-    Version = "Unknown"
-}
 
-do
-    local identifyexecutor = getFunction("identifyexecutor")
+--==================================================
+-- Executor
+--==================================================
 
-    if identifyexecutor then
-        local success, name, version = pcall(identifyexecutor)
+local identifyexecutor = getFunction("identifyexecutor")
+local getexecutorname = getFunction("getexecutorname")
+local getexecutorversion = getFunction("getexecutorversion")
 
-        if success then
-            if type(name) == "string" then
-                Environment.Executor.Name = name
-            end
+local executorName
+local executorVersion
 
-            if type(version) == "string" then
-                Environment.Executor.Version = version
-            end
-        end
+if identifyexecutor then
+    local success, name, version = pcall(identifyexecutor)
+
+    if success then
+        executorName = name
+        executorVersion = version
     end
 end
 
+if not executorName and getexecutorname then
+    executorName = safeCall(getexecutorname)
+end
+
+if not executorVersion and getexecutorversion then
+    executorVersion = safeCall(getexecutorversion)
+end
+
+Environment.Executor = {
+    Name = executorName or "Unknown",
+    Version = executorVersion or "Unknown"
+}
+
+
+--==================================================
+-- Capabilities
+--==================================================
+
 Environment.Capabilities = {
+
+    -- Environment
     GetGenv = has("getgenv"),
     GetRenv = has("getrenv"),
     GetFenv = has("getfenv"),
 
+    -- Loading
     Loadstring = has("loadstring"),
-    Request = has("request") or has("http_request"),
 
-    GetHui = has("gethui"),
-    CloneRef = has("cloneref"),
+    -- HTTP
+    Request =
+        has("request")
+        or has("http_request")
+        or has("syn_request")
+        or has("http"),
 
-    WriteFile = has("writefile"),
-    ReadFile = has("readfile"),
+    -- File system
     IsFile = has("isfile"),
-    DeleteFile = has("delfile"),
+    ReadFile = has("readfile"),
+    WriteFile = has("writefile"),
     AppendFile = has("appendfile"),
     MakeFolder = has("makefolder"),
     IsFolder = has("isfolder"),
-    DeleteFolder = has("delfolder"),
     ListFiles = has("listfiles"),
+    DeleteFile = has("delfile"),
 
-    GetInstances = has("getinstances"),
-    GetNilInstances = has("getnilinstances"),
-    GetConnections = has("getconnections"),
-
-    FireSignal = has("firesignal"),
-    ReplicateSignal = has("replicatesignal"),
-
-    FireProximityPrompt = has("fireproximityprompt"),
-    FireClickDetector = has("fireclickdetector"),
-    FireTouchInterest = has("firetouchinterest"),
-
-    CloneFunction = has("clonefunction"),
-    NewCClosure = has("newcclosure"),
-
-    GetThreadIdentity = has("getthreadidentity"),
-    SetThreadIdentity = has("setthreadidentity"),
-
-    IsNetworkOwner = has("isnetworkowner"),
-
-    Drawing = type(getGlobal("Drawing")) == "table",
-
+    -- Hooks
     HookFunction = has("hookfunction"),
-    RestoreFunction = has("restorefunction"),
     HookMetamethod = has("hookmetamethod"),
-    GetNamecallMethod = has("getnamecallmethod"),
-    GetRawMetatable = has("getrawmetatable"),
-    SetRawMetatable = has("setrawmetatable"),
+    NewCClosure = has("newcclosure"),
+    CheckCaller = has("checkcaller"),
 
-    GetHiddenProperty = has("gethiddenproperty"),
-    SetHiddenProperty = has("sethiddenproperty"),
+    -- Debug
+    GetConstants = has("getconstants"),
+    GetConstant = has("getconstant"),
+    GetUpvalues = has("getupvalues"),
+    GetUpvalue = has("getupvalue"),
+    GetProtos = has("getprotos"),
+    GetProto = has("getproto"),
+    GetInfo = has("getinfo"),
 
-    IsReadonly = has("isreadonly"),
-    SetReadonly = has("setreadonly")
+    -- Drawing
+    Drawing = has("Drawing"),
+
+    -- Clipboard
+    SetClipboard =
+        has("setclipboard")
+        or has("toclipboard"),
+
+    -- Input
+    Mouse1Click = has("mouse1click"),
+    Mouse1Press = has("mouse1press"),
+    Mouse1Release = has("mouse1release"),
+
+    -- Misc
+    QueueOnTeleport = has("queue_on_teleport"),
+    SetIdentity = has("setidentity"),
+    GetIdentity = has("getidentity"),
 }
 
-Environment.API = {
-    getgenv = getFunction("getgenv"),
-    getrenv = getFunction("getrenv"),
-    getfenv = getFunction("getfenv"),
 
-    loadstring = getFunction("loadstring"),
+--==================================================
+-- API
+--==================================================
 
-    request = getFunction("request") or getFunction("http_request"),
+Environment.API = {}
 
-    gethui = getFunction("gethui"),
-    cloneref = getFunction("cloneref"),
+local API_NAMES = {
+    "getgenv",
+    "getrenv",
+    "getfenv",
 
-    writefile = getFunction("writefile"),
-    readfile = getFunction("readfile"),
-    isfile = getFunction("isfile"),
-    delfile = getFunction("delfile"),
-    appendfile = getFunction("appendfile"),
+    "loadstring",
 
-    makefolder = getFunction("makefolder"),
-    isfolder = getFunction("isfolder"),
-    delfolder = getFunction("delfolder"),
-    listfiles = getFunction("listfiles"),
+    "request",
+    "http_request",
+    "syn_request",
+    "http",
 
-    getinstances = getFunction("getinstances"),
-    getnilinstances = getFunction("getnilinstances"),
-    getconnections = getFunction("getconnections"),
+    "isfile",
+    "readfile",
+    "writefile",
+    "appendfile",
+    "makefolder",
+    "isfolder",
+    "listfiles",
+    "delfile",
 
-    firesignal = getFunction("firesignal"),
-    replicatesignal = getFunction("replicatesignal"),
+    "hookfunction",
+    "hookmetamethod",
+    "newcclosure",
+    "checkcaller",
 
-    fireproximityprompt = getFunction("fireproximityprompt"),
-    fireclickdetector = getFunction("fireclickdetector"),
-    firetouchinterest = getFunction("firetouchinterest"),
+    "getconstants",
+    "getconstant",
+    "getupvalues",
+    "getupvalue",
+    "getprotos",
+    "getproto",
+    "getinfo",
 
-    clonefunction = getFunction("clonefunction"),
-    newcclosure = getFunction("newcclosure"),
+    "setclipboard",
+    "toclipboard",
 
-    getthreadidentity = getFunction("getthreadidentity"),
-    setthreadidentity = getFunction("setthreadidentity"),
+    "mouse1click",
+    "mouse1press",
+    "mouse1release",
 
-    isnetworkowner = getFunction("isnetworkowner"),
+    "queue_on_teleport",
 
-    hookfunction = getFunction("hookfunction"),
-    restorefunction = getFunction("restorefunction"),
-    hookmetamethod = getFunction("hookmetamethod"),
-    getnamecallmethod = getFunction("getnamecallmethod"),
-
-    getrawmetatable = getFunction("getrawmetatable"),
-    setrawmetatable = getFunction("setrawmetatable"),
-
-    gethiddenproperty = getFunction("gethiddenproperty"),
-    sethiddenproperty = getFunction("sethiddenproperty"),
-
-    isreadonly = getFunction("isreadonly"),
-    setreadonly = getFunction("setreadonly"),
-
-    identifyexecutor = getFunction("identifyexecutor")
+    "setidentity",
+    "getidentity",
 }
+
+for _, name in ipairs(API_NAMES) do
+    Environment.API[name] = getFunction(name)
+end
+
+
+--==================================================
+-- Methods
+--==================================================
 
 function Environment:Has(capability)
     return self.Capabilities[capability] == true
@@ -173,7 +232,12 @@ function Environment:Get(name)
 end
 
 function Environment:IsExecutor(name)
-    return string.lower(self.Executor.Name) == string.lower(name)
+    if not name then
+        return false
+    end
+
+    return string.lower(tostring(self.Executor.Name))
+        == string.lower(tostring(name))
 end
 
 function Environment:GetExecutorName()
@@ -185,23 +249,10 @@ function Environment:GetExecutorVersion()
 end
 
 function Environment:GetInfo()
-    local available = 0
-    local total = 0
-
-    for _, supported in pairs(self.Capabilities) do
-        total += 1
-
-        if supported then
-            available += 1
-        end
-    end
-
     return {
-        Executor = self.Executor.Name,
+        Name = self.Executor.Name,
         Version = self.Executor.Version,
-        Available = available,
-        Total = total,
-        Capabilities = self.Capabilities
+        Capabilities = self.Capabilities,
     }
 end
 
