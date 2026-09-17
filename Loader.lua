@@ -1,165 +1,165 @@
 --[[
     JustXDoors
-    Core/UI.lua
+    Loader.lua
+    Modular loader
 
-    Obsidian UI adapter
-    Version: 3.0.0
-
-    This module is intentionally independent from Environment.lua
-    for loading external UI libraries.
+    Version: 1.3.2
 ]]
 
-local UI = {}
+local Loader = {}
 
-UI.Version = "3.0.0"
-UI.LibraryURL =
-    "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua"
+Loader.Version = "1.3.2"
 
-UI.Library = nil
-UI.Window = nil
-UI.Loaded = false
-UI.Unloaded = false
-UI.LoadError = nil
+--//==================================================
+--// Configuration
+--//==================================================
 
-local Environment
-local Settings
-local Notifications
+local REPOSITORY =
+    "https://raw.githubusercontent.com/JustUser-ALT/JustXDoors/refs/heads/main/"
+
+local GLOBAL_NAME = "JustXDoors"
 
 
 --//==================================================
---// Safe utilities
+--// Executor / Global environment
 --//==================================================
 
-local function safeToString(value)
-    local success, result = pcall(function()
-        return tostring(value)
-    end)
+local function getGlobalEnvironment()
 
-    if success then
-        return result
-    end
-
-    return "<tostring failed>"
-end
-
-
-local function traceError(err)
-    local message = safeToString(err)
+    local genv = nil
+    local getgenvCandidate
 
     pcall(function()
-        if debug and debug.traceback then
-            message = message .. "\n" .. debug.traceback()
-        end
+        getgenvCandidate = getgenv
     end)
 
-    return message
-end
+    if type(getgenvCandidate) == "function" then
 
+        local success, result =
+            pcall(getgenvCandidate)
 
-local function log(...)
-    print("[JustXDoors UI]", ...)
-end
-
-
-local function warnLog(...)
-    warn("[JustXDoors UI]", ...)
-end
-
-
---//==================================================
---// Load core references
---//==================================================
-
-function UI:Init(core)
-
-    core = core or {}
-
-    Environment = core.Environment
-    Settings = core.Settings
-    Notifications = core.Notifications
-
-    log("Init()")
-    log("Environment:", typeof(Environment))
-    log("Settings:", typeof(Settings))
-    log("Notifications:", typeof(Notifications))
-
-    return self
-end
-
-
---//==================================================
---// Resolve loadstring
---//==================================================
-
-local function resolveLoadstring()
-
-    -- 1. Current environment
-    local fn = nil
-
-    pcall(function()
-        fn = loadstring
-    end)
-
-    if type(fn) == "function" then
-        return fn, "module environment"
-    end
-
-
-    -- 2. getgenv()
-    pcall(function()
-
-        if type(getgenv) == "function" then
-
-            local genv = getgenv()
-
-            if type(genv) == "table"
-                and type(genv.loadstring) == "function"
-            then
-                fn = genv.loadstring
-            end
-        end
-
-    end)
-
-    if type(fn) == "function" then
-        return fn, "getgenv"
-    end
-
-
-    -- 3. _G
-    pcall(function()
-
-        if type(_G) == "table"
-            and type(_G.loadstring) == "function"
-        then
-            fn = _G.loadstring
-        end
-
-    end)
-
-    if type(fn) == "function" then
-        return fn, "_G"
-    end
-
-
-    -- 4. Environment module
-    if Environment
-        and type(Environment.Get) == "function"
-    then
-
-        pcall(function()
-
-            fn = Environment:Get("loadstring")
-
-        end)
-
-        if type(fn) == "function" then
-            return fn, "Environment:Get"
+        if success and type(result) == "table" then
+            genv = result
         end
     end
 
+    if type(genv) ~= "table" then
+        genv = _G
+    end
 
-    return nil, "loadstring not found"
+    return genv
+end
+
+
+local GLOBAL_ENV =
+    getGlobalEnvironment()
+
+
+--//==================================================
+--// Executor APIs
+--//==================================================
+
+local function getGlobalFunction(name)
+
+    local value
+
+    pcall(function()
+        value = GLOBAL_ENV[name]
+    end)
+
+    if type(value) == "function" then
+        return value
+    end
+
+    return nil
+end
+
+
+local getgenvFn =
+    getGlobalFunction("getgenv")
+
+local getfenvFn =
+    getGlobalFunction("getfenv")
+
+local setfenvFn =
+    getGlobalFunction("setfenv")
+
+local loadstringFn =
+    getGlobalFunction("loadstring")
+
+
+local requestFn =
+    getGlobalFunction("request")
+    or getGlobalFunction("http_request")
+    or getGlobalFunction("syn_request")
+
+
+--//==================================================
+--// State
+--//==================================================
+
+local State = {
+
+    Started = false,
+    Finished = false,
+
+    Loading = {},
+    Loaded = {},
+    Failed = {},
+
+    Core = {},
+    Features = {},
+    Game = {},
+
+    Main = nil
+}
+
+
+Loader.State = State
+
+
+--//==================================================
+--// Helpers
+--//==================================================
+
+local function normalizePath(path)
+
+    path = tostring(path or "")
+
+    path = path:gsub("\\", "/")
+    path = path:gsub("^/+", "")
+    path = path:gsub("/+$", "")
+
+    if path:sub(-4) ~= ".lua" then
+        path = path .. ".lua"
+    end
+
+    return path
+end
+
+
+local function getURL(path)
+
+    return REPOSITORY
+        .. normalizePath(path)
+        .. "?v="
+        .. tostring(os.clock())
+end
+
+
+local function isLoaded(path)
+
+    path = normalizePath(path)
+
+    return State.Loaded[path] ~= nil
+end
+
+
+local function getLoaded(path)
+
+    path = normalizePath(path)
+
+    return State.Loaded[path]
 end
 
 
@@ -169,18 +169,15 @@ end
 
 local function httpGet(url)
 
-    local errors = {}
-
-
     --================================================
     -- Roblox HttpGet
     --================================================
 
-    local success, result = pcall(function()
+    local success, result =
+        pcall(function()
+            return game:HttpGet(url)
+        end)
 
-        return game:HttpGet(url)
-
-    end)
 
     if success
         and type(result) == "string"
@@ -188,19 +185,6 @@ local function httpGet(url)
     then
 
         return result
-
-    end
-
-    if not success then
-        table.insert(
-            errors,
-            "game:HttpGet: " .. safeToString(result)
-        )
-    else
-        table.insert(
-            errors,
-            "game:HttpGet returned empty source"
-        )
     end
 
 
@@ -208,155 +192,185 @@ local function httpGet(url)
     -- Executor request
     --================================================
 
-    local requestFunctions = {
-        "request",
-        "http_request",
-        "syn_request"
-    }
+    if requestFn then
 
-    for _, name in ipairs(requestFunctions) do
-
-        local requestFn = nil
-
-        pcall(function()
-
-            requestFn = _G[name]
-
-        end)
-
-        if type(requestFn) ~= "function" then
-
+        local requestSuccess, response =
             pcall(function()
 
-                if type(getgenv) == "function" then
-
-                    local genv = getgenv()
-
-                    if type(genv) == "table" then
-                        requestFn = genv[name]
-                    end
-
-                end
+                return requestFn({
+                    Url = url,
+                    Method = "GET"
+                })
 
             end)
 
-        end
+
+        if requestSuccess and response then
+
+            local body =
+                response.Body
+                or response.body
 
 
-        if type(requestFn) == "function" then
-
-            local requestSuccess, response =
-                pcall(function()
-
-                    return requestFn({
-                        Url = url,
-                        Method = "GET"
-                    })
-
-                end)
-
-
-            if requestSuccess
-                and type(response) == "table"
+            if type(body) == "string"
+                and body ~= ""
             then
 
-                local status =
-                    response.StatusCode
-                    or response.Status
-                    or response.status
-
-
-                local body =
-                    response.Body
-                    or response.body
-
-
-                if type(body) == "string"
-                    and body ~= ""
-                then
-
-                    if status
-                        and tonumber(status)
-                        and tonumber(status) >= 400
-                    then
-
-                        table.insert(
-                            errors,
-                            name
-                                .. " HTTP status "
-                                .. safeToString(status)
-                        )
-
-                    else
-
-                        return body
-
-                    end
-
-                else
-
-                    table.insert(
-                        errors,
-                        name .. " returned empty body"
-                    )
-
-                end
-
-            elseif not requestSuccess then
-
-                table.insert(
-                    errors,
-                    name
-                        .. ": "
-                        .. safeToString(response)
-                )
-
+                return body
             end
         end
     end
 
 
     error(
-        "Unable to download Obsidian.\n\n"
-        .. "URL:\n"
-        .. url
-        .. "\n\n"
-        .. table.concat(errors, "\n")
+        "[Loader] HTTP request failed:\n"
+        .. tostring(url)
     )
 end
 
 
 --//==================================================
---// Compile external source
+--// Fetch
 --//==================================================
 
-local function compileSource(source, chunkName)
+function Loader:Fetch(path)
 
-    local loadFn, sourceName =
-        resolveLoadstring()
+    path = normalizePath(path)
+
+    local url =
+        getURL(path)
 
 
-    if type(loadFn) ~= "function" then
+    print("========================================")
+    print("[JustXDoors Loader] FETCH")
+    print("Path:", path)
+    print("URL:", url)
+    print("========================================")
+
+
+    local success, source =
+        pcall(function()
+
+            return httpGet(url)
+
+        end)
+
+
+    if not success then
 
         error(
-            "loadstring is unavailable.\n"
-            .. "Resolver: "
-            .. safeToString(sourceName)
+            "[Loader] Failed to fetch "
+            .. path
+            .. "\n"
+            .. tostring(source)
         )
-
     end
 
 
-    log(
-        "Using loadstring from:",
-        sourceName
+    if type(source) ~= "string"
+        or source == ""
+    then
+
+        error(
+            "[Loader] Empty source: "
+            .. path
+        )
+    end
+
+
+    print(
+        "[JustXDoors Loader] Fetched",
+        path,
+        "bytes:",
+        #source
     )
 
 
-    local success, fn, compileError =
+    --================================================
+    -- UI source diagnostics
+    --================================================
+
+    if path == "Core/UI.lua" then
+
+        print(
+            "========== CORE/UI SOURCE CHECK =========="
+        )
+
+
+        local firstLine =
+            source:match("^[^\r\n]*")
+
+
+        print(
+            "[JustXDoors Loader] UI first line:",
+            tostring(firstLine)
+        )
+
+
+        if source:find(
+            "2%.0%.0",
+            1,
+            false
+        ) then
+
+            print(
+                "[JustXDoors Loader] UI VERSION MARKER FOUND"
+            )
+
+        else
+
+            warn(
+                "[JustXDoors Loader] UI VERSION MARKER NOT FOUND"
+            )
+        end
+
+
+        if source:find(
+            "JUSTXDOORS UI CREATE CALLED",
+            1,
+            true
+        ) then
+
+            print(
+                "[JustXDoors Loader] NEW UI DIAGNOSTICS FOUND"
+            )
+
+        else
+
+            warn(
+                "[JustXDoors Loader] NEW UI DIAGNOSTICS NOT FOUND"
+            )
+        end
+
+
+        print(
+            "=========================================="
+        )
+    end
+
+
+    return source
+end
+
+
+--//==================================================
+--// Compile
+--//==================================================
+
+function Loader:Compile(source, chunkName)
+
+    if type(loadstringFn) ~= "function" then
+
+        error(
+            "[Loader] loadstring is unavailable."
+        )
+    end
+
+
+    local success, fn, err =
         pcall(function()
 
-            return loadFn(
+            return loadstringFn(
                 source,
                 chunkName
             )
@@ -367,20 +381,20 @@ local function compileSource(source, chunkName)
     if not success then
 
         error(
-            "loadstring call failed:\n"
-            .. safeToString(fn)
+            "[Loader] Compile error:\n"
+            .. tostring(fn)
         )
-
     end
 
 
     if type(fn) ~= "function" then
 
         error(
-            "Obsidian source compilation failed:\n"
-            .. safeToString(compileError)
+            "[Loader] Compile error in "
+            .. tostring(chunkName)
+            .. "\n"
+            .. tostring(err)
         )
-
     end
 
 
@@ -389,1298 +403,517 @@ end
 
 
 --//==================================================
---// Execute external library
+--// Module environment
 --//==================================================
 
-local function executeSource(source)
+local function createModuleEnvironment(path)
 
-    local chunk =
-        compileSource(
-            source,
-            "@JustXDoors/Obsidian"
-        )
+    local env = {}
 
 
-    local success, result =
-        xpcall(
-            function()
-                return chunk()
-            end,
-            function(err)
-                return traceError(err)
-            end
-        )
+    --================================================
+    -- Loader-specific values
+    --================================================
 
+    env.JustXLoader =
+        Loader
 
-    if not success then
 
-        error(
-            "Obsidian runtime error:\n"
-            .. safeToString(result)
-        )
+    env.script = {
 
-    end
+        Name =
+            path:match("([^/]+)%.lua$")
+            or path,
 
-
-    if result == nil then
-
-        error(
-            "Obsidian Library.lua executed successfully "
-            .. "but returned nil."
-        )
-
-    end
-
-
-    if type(result) ~= "table" then
-
-        error(
-            "Obsidian Library.lua returned "
-            .. type(result)
-            .. " instead of table."
-        )
-
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Load Obsidian
---//==================================================
-
-function UI:Load()
-
-    if self.Library then
-
-        log("Library already loaded.")
-
-        return self.Library
-    end
-
-
-    log("========================================")
-    log("Obsidian loading started")
-    log("URL:", self.LibraryURL)
-    log("========================================")
-
-
-    self.LoadError = nil
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                local source =
-                    httpGet(
-                        self.LibraryURL
-                    )
-
-
-                log(
-                    "Obsidian source downloaded.",
-                    "bytes:",
-                    #source
-                )
-
-
-                if #source < 100 then
-
-                    error(
-                        "Downloaded Obsidian source is suspiciously small."
-                    )
-
-                end
-
-
-                -- Detect common HTTP error pages
-                local firstPart =
-                    source:sub(1, 500):lower()
-
-
-                if firstPart:find("<html")
-                    or firstPart:find("404")
-                    or firstPart:find("not found")
-                then
-
-                    warnLog(
-                        "Downloaded source looks like an HTTP error page."
-                    )
-
-                end
-
-
-                local library =
-                    executeSource(
-                        source
-                    )
-
-
-                if type(library.CreateWindow) ~= "function" then
-
-                    error(
-                        "Obsidian Library loaded, "
-                        .. "but CreateWindow is missing."
-                    )
-
-                end
-
-
-                log(
-                    "Obsidian loaded successfully."
-                )
-
-                log(
-                    "CreateWindow:",
-                    type(library.CreateWindow)
-                )
-
-
-                return library
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        self.LoadError =
-            safeToString(result)
-
-
-        warnLog(
-            "FAILED TO LOAD OBSIDIAN"
-        )
-
-        warnLog(
-            self.LoadError
-        )
-
-
-        return nil
-    end
-
-
-    self.Library = result
-    self.Loaded = true
-
-
-    -- Pass library to notification system
-    if Notifications
-        and type(Notifications.SetLibrary) == "function"
-    then
-
-        pcall(function()
-
-            Notifications:SetLibrary(
-                self.Library
-            )
-
-        end)
-
-    end
-
-
-    return self.Library
-end
-
-
---//==================================================
---// Create window
---//==================================================
-
-function UI:Create()
-
-    log("Create() started.")
-
-
-    if self.Unloaded then
-
-        warnLog(
-            "Create() called after UI was unloaded."
-        )
-
-        return nil
-    end
-
-
-    local library =
-        self:Load()
-
-
-    if not library then
-
-        warnLog(
-            "Create(): Library is nil."
-        )
-
-        if self.LoadError then
-
-            warnLog(
-                "Actual load error:"
-            )
-
-            warnLog(
-                self.LoadError
-            )
-
-        end
-
-        return nil
-    end
-
-
-    log(
-        "Create(): Library acquired."
-    )
-
-
-    local config = {
-        Title = "JustXDoors",
-        Footer = "DOORS",
-
-        Center = true,
-        AutoShow = true,
-        Resizable = true,
-
-        MobileButtonsSide = "Right",
-
-        ShowCustomCursor = false,
-
-        NotifySide = "Right",
-
-        AlwaysOnTop = true,
-
-        Size = UDim2.fromOffset(
-            720,
-            520
-        )
+        Path = path
     }
 
 
     --================================================
-    -- Read settings
+    -- Roblox globals
     --================================================
 
-    if Settings
-        and type(Settings.Get) == "function"
+    env.game =
+        game
+
+    env.workspace =
+        workspace
+
+    env.Instance =
+        Instance
+
+    env.Enum =
+        Enum
+
+
+    env.CFrame =
+        CFrame
+
+    env.Vector2 =
+        Vector2
+
+    env.Vector3 =
+        Vector3
+
+    env.Color3 =
+        Color3
+
+
+    env.UDim =
+        UDim
+
+    env.UDim2 =
+        UDim2
+
+
+    env.Ray =
+        Ray
+
+
+    env.task =
+        task
+
+
+    env.math =
+        math
+
+    env.string =
+        string
+
+    env.table =
+        table
+
+    env.utf8 =
+        utf8
+
+    env.os =
+        os
+
+    env.coroutine =
+        coroutine
+
+    env.bit32 =
+        bit32
+
+
+    --================================================
+    -- Luau globals
+    --================================================
+
+    env.type =
+        type
+
+    env.typeof =
+        typeof
+
+
+    env.tostring =
+        tostring
+
+    env.tonumber =
+        tonumber
+
+
+    env.select =
+        select
+
+    env.next =
+        next
+
+
+    env.pairs =
+        pairs
+
+    env.ipairs =
+        ipairs
+
+
+    env.unpack =
+        unpack
+
+
+    env.error =
+        error
+
+    env.assert =
+        assert
+
+
+    env.pcall =
+        pcall
+
+    env.xpcall =
+        xpcall
+
+
+    env.print =
+        print
+
+    env.warn =
+        warn
+
+
+    env.rawget =
+        rawget
+
+    env.rawset =
+        rawset
+
+    env.rawequal =
+        rawequal
+
+    env.rawlen =
+        rawlen
+
+
+    env.getmetatable =
+        getmetatable
+
+    env.setmetatable =
+        setmetatable
+
+
+    --================================================
+    -- Shared globals
+    --================================================
+
+    env._G =
+        _G
+
+
+    --================================================
+    -- Executor globals
+    --================================================
+
+    if getgenvFn then
+
+        env.getgenv =
+            getgenvFn
+    end
+
+
+    if getfenvFn then
+
+        env.getfenv =
+            getfenvFn
+    end
+
+
+    if setfenvFn then
+
+        env.setfenv =
+            setfenvFn
+    end
+
+
+    if loadstringFn then
+
+        env.loadstring =
+            loadstringFn
+    end
+
+
+    --================================================
+    -- Base environment fallback
+    --================================================
+
+    setmetatable(env, {
+
+        __index =
+            GLOBAL_ENV
+    })
+
+
+    --================================================
+    -- Custom require
+    --================================================
+
+    env.require = function(module)
+
+        -- Already loaded table
+        if type(module) == "table" then
+
+            return module
+        end
+
+
+        -- Loader path
+        if type(module) == "string" then
+
+            return Loader:Load(module)
+        end
+
+
+        -- Roblox ModuleScript
+        if typeof(module) == "Instance" then
+
+            if module:IsA("ModuleScript") then
+
+                return require(module)
+            end
+        end
+
+
+        error(
+            "[Loader] Invalid require argument in "
+            .. tostring(path)
+        )
+    end
+
+
+    return env
+end
+
+
+--//==================================================
+--// Execute
+--//==================================================
+
+function Loader:Execute(path, source)
+
+    path =
+        normalizePath(path)
+
+
+    print(
+        "[JustXDoors Loader] Execute:",
+        path
+    )
+
+
+    local chunk =
+        self:Compile(
+            source,
+            "@" .. path
+        )
+
+
+    local env =
+        createModuleEnvironment(path)
+
+
+    --================================================
+    -- Apply module environment
+    --================================================
+
+    if type(setfenvFn) ~= "function" then
+
+        error(
+            "[Loader] setfenv is unavailable.\n"
+            .. "Cannot create isolated module environment for:\n"
+            .. path
+        )
+    end
+
+
+    local setSuccess, setError =
+        pcall(function()
+
+            setfenvFn(
+                chunk,
+                env
+            )
+
+        end)
+
+
+    if not setSuccess then
+
+        error(
+            "[Loader] Failed to assign module environment:\n"
+            .. path
+            .. "\n"
+            .. tostring(setError)
+        )
+    end
+
+
+    --================================================
+    -- Execute
+    --================================================
+
+    local success, result =
+        xpcall(
+
+            function()
+
+                return chunk()
+
+            end,
+
+            function(err)
+
+                local traceback
+
+                pcall(function()
+
+                    traceback =
+                        debug.traceback()
+
+                end)
+
+
+                return tostring(err)
+                    .. "\n"
+                    .. tostring(
+                        traceback or ""
+                    )
+            end
+        )
+
+
+    if not success then
+
+        error(
+            "[Loader] Runtime error in "
+            .. path
+            .. "\n"
+            .. tostring(result)
+        )
+    end
+
+
+    print(
+        "[JustXDoors Loader] Execute finished:",
+        path,
+        "return type:",
+        type(result)
+    )
+
+
+    return result
+end
+
+
+--//==================================================
+--// Load
+--//==================================================
+
+function Loader:Load(path, force)
+
+    path =
+        normalizePath(path)
+
+
+    if not force
+        and State.Loaded[path] ~= nil
     then
 
-        local success, result =
-            pcall(function()
+        print(
+            "[JustXDoors Loader] Cached:",
+            path
+        )
 
-                return Settings:Get(
-                    "UI"
-                )
-
-            end)
-
-
-        if success
-            and type(result) == "table"
-        then
-
-            local uiSettings = result
-
-
-            if type(uiSettings.Title) == "string" then
-                config.Title =
-                    uiSettings.Title
-            end
-
-
-            if type(uiSettings.Footer) == "string" then
-                config.Footer =
-                    uiSettings.Footer
-            end
-
-
-            if type(uiSettings.Center) == "boolean" then
-                config.Center =
-                    uiSettings.Center
-            end
-
-
-            if type(uiSettings.AutoShow) == "boolean" then
-                config.AutoShow =
-                    uiSettings.AutoShow
-            end
-
-
-            if type(uiSettings.Resizable) == "boolean" then
-                config.Resizable =
-                    uiSettings.Resizable
-            end
-
-
-            if type(uiSettings.AlwaysOnTop) == "boolean" then
-                config.AlwaysOnTop =
-                    uiSettings.AlwaysOnTop
-            end
-
-
-            if type(uiSettings.MobileButtonsSide) == "string" then
-                config.MobileButtonsSide =
-                    uiSettings.MobileButtonsSide
-            end
-
-
-            if type(uiSettings.NotifySide) == "string" then
-                config.NotifySide =
-                    uiSettings.NotifySide
-            end
-
-
-            if type(uiSettings.ShowCustomCursor) == "boolean" then
-                config.ShowCustomCursor =
-                    uiSettings.ShowCustomCursor
-            end
-
-
-            if type(uiSettings.Width) == "number"
-                and type(uiSettings.Height) == "number"
-            then
-
-                config.Size =
-                    UDim2.fromOffset(
-                        math.floor(uiSettings.Width),
-                        math.floor(uiSettings.Height)
-                    )
-
-            end
-
-
-            if uiSettings.Icon ~= nil then
-
-                config.Icon =
-                    uiSettings.Icon
-
-            end
-
-        end
+        return State.Loaded[path]
     end
 
 
-    log(
-        "Creating Obsidian window..."
-    )
+    if State.Loading[path] then
 
-
-    log(
-        "Title:",
-        config.Title
-    )
-
-
-    log(
-        "Size:",
-        config.Size
-    )
-
-
-    local success, window =
-        xpcall(
-            function()
-
-                return library:CreateWindow(
-                    config
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
+        error(
+            "[Loader] Circular dependency detected: "
+            .. path
         )
-
-
-    if not success then
-
-        warnLog(
-            "CreateWindow FAILED:"
-        )
-
-        warnLog(
-            safeToString(window)
-        )
-
-        return nil
     end
 
 
-    if not window then
-
-        warnLog(
-            "CreateWindow returned nil."
-        )
-
-        return nil
-    end
+    State.Loading[path] =
+        true
 
 
-    self.Window = window
-    self.Unloaded = false
-
-
-    log(
-        "Window created successfully."
+    print(
+        "[JustXDoors Loader] Loading:",
+        path
     )
-
-
-    return window
-end
-
-
---//==================================================
---// Tabs
---//==================================================
-
-function UI:AddTab(name, icon, description)
-
-    if not self.Window then
-        return nil
-    end
 
 
     local success, result =
         xpcall(
+
             function()
 
-                return self.Window:AddTab(
-                    name,
-                    icon,
-                    description
+                local source =
+                    self:Fetch(path)
+
+
+                return self:Execute(
+                    path,
+                    source
                 )
 
             end,
 
             function(err)
 
-                return traceError(err)
+                local traceback
 
+                pcall(function()
+
+                    traceback =
+                        debug.traceback()
+
+                end)
+
+
+                return tostring(err)
+                    .. "\n"
+                    .. tostring(
+                        traceback or ""
+                    )
             end
         )
 
 
+    State.Loading[path] =
+        nil
+
+
     if not success then
 
-        warnLog(
-            "AddTab failed:",
-            name
-        )
-
-        warnLog(
+        State.Failed[path] =
             result
-        )
 
-        return nil
+
+        error(result)
     end
+
+
+    State.Loaded[path] =
+        result
+
+
+    print(
+        "[JustXDoors Loader] Loaded:",
+        path,
+        "type:",
+        type(result)
+    )
 
 
     return result
 end
 
 
---//==================================================
---// Groupboxes
---//==================================================
-
-function UI:AddLeftGroupbox(tab, name, icon)
-
-    if not tab then
-        return nil
-    end
-
+function Loader:TryLoad(path, force)
 
     local success, result =
-        xpcall(
-            function()
-
-                return tab:AddLeftGroupbox(
-                    name,
-                    icon
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddLeftGroupbox failed:",
-            name
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
-function UI:AddRightGroupbox(tab, name, icon)
-
-    if not tab then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return tab:AddRightGroupbox(
-                    name,
-                    icon
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddRightGroupbox failed:",
-            name
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---==================================================
--- Generic groupbox
---==================================================
-
-function UI:AddGroupbox(tab, side, name, icon)
-
-    if not tab then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                if side == "Right"
-                    or side == "right"
-                then
-
-                    return tab:AddRightGroupbox(
-                        name,
-                        icon
-                    )
-
-                end
-
-
-                return tab:AddLeftGroupbox(
-                    name,
-                    icon
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddGroupbox failed:",
-            name
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Labels
---//==================================================
-
-function UI:AddLabel(groupbox, text)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddLabel(
-                    tostring(text or "")
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddLabel failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Divider
---//==================================================
-
-function UI:AddDivider(groupbox)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddDivider()
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddDivider failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Button
---//==================================================
-
-function UI:AddButton(groupbox, index, options)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                if type(index) == "table"
-                    and options == nil
-                then
-
-                    return groupbox:AddButton(
-                        index
-                    )
-
-                end
-
-
-                if type(options) == "table" then
-
-                    if type(index) == "string" then
-
-                        options.Text =
-                            options.Text
-                            or index
-
-                    end
-
-                    return groupbox:AddButton(
-                        options
-                    )
-
-                end
-
-
-                return groupbox:AddButton({
-                    Text = tostring(index or "Button")
-                })
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddButton failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Toggle
---//==================================================
-
-function UI:AddToggle(groupbox, index, options)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddToggle(
-                    index,
-                    options or {}
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddToggle failed:",
-            safeToString(index)
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Slider
---//==================================================
-
-function UI:AddSlider(groupbox, index, options)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddSlider(
-                    index,
-                    options or {}
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddSlider failed:",
-            safeToString(index)
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Dropdown
---//==================================================
-
-function UI:AddDropdown(groupbox, index, options)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddDropdown(
-                    index,
-                    options or {}
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddDropdown failed:",
-            safeToString(index)
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Input
---//==================================================
-
-function UI:AddInput(groupbox, index, options)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddInput(
-                    index,
-                    options or {}
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddInput failed:",
-            safeToString(index)
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Paragraph
---//==================================================
-
-function UI:AddParagraph(groupbox, title, description)
-
-    if not groupbox then
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return groupbox:AddLabel(
-                    {
-                        Text =
-                            tostring(title or "")
-                            .. "\n"
-                            .. tostring(description or ""),
-                        DoesWrap = true
-                    }
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddParagraph failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Key picker
---//==================================================
-
-function UI:AddKeyPicker(element, index, options)
-
-    if not element then
-        return nil
-    end
-
-
-    if type(element.AddKeyPicker) ~= "function" then
-
-        warnLog(
-            "AddKeyPicker is unavailable."
-        )
-
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                return element:AddKeyPicker(
-                    index,
-                    options or {}
-                )
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddKeyPicker failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Tabbox
---//==================================================
-
-function UI:AddLeftTabbox(tab, name)
-
-    if not tab then
-        return nil
-    end
-
-
-    if type(tab.AddLeftTabbox) ~= "function" then
-
-        warnLog(
-            "AddLeftTabbox is unavailable."
-        )
-
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                if name then
-                    return tab:AddLeftTabbox(name)
-                end
-
-                return tab:AddLeftTabbox()
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddLeftTabbox failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
-function UI:AddRightTabbox(tab, name)
-
-    if not tab then
-        return nil
-    end
-
-
-    if type(tab.AddRightTabbox) ~= "function" then
-
-        warnLog(
-            "AddRightTabbox is unavailable."
-        )
-
-        return nil
-    end
-
-
-    local success, result =
-        xpcall(
-            function()
-
-                if name then
-                    return tab:AddRightTabbox(name)
-                end
-
-                return tab:AddRightTabbox()
-
-            end,
-
-            function(err)
-
-                return traceError(err)
-
-            end
-        )
-
-
-    if not success then
-
-        warnLog(
-            "AddRightTabbox failed:"
-        )
-
-        warnLog(result)
-
-        return nil
-    end
-
-
-    return result
-end
-
-
---//==================================================
---// Unload callback
---//==================================================
-
-function UI:OnUnload(callback)
-
-    if not self.Library then
-        return false
-    end
-
-
-    if type(self.Library.OnUnload) ~= "function" then
-
-        warnLog(
-            "Library:OnUnload is unavailable."
-        )
-
-        return false
-    end
-
-
-    local success, err =
         pcall(function()
 
-            self.Library:OnUnload(
-                callback
+            return self:Load(
+                path,
+                force
             )
 
         end)
 
 
-    if not success then
+    if success then
 
-        warnLog(
-            "OnUnload failed:"
-        )
-
-        warnLog(err)
-
-        return false
+        return result
     end
 
 
-    return true
-end
-
-
---//==================================================
---// Toggle
---//==================================================
-
-function UI:Toggle(value)
-
-    if not self.Window then
-        return false
-    end
-
-
-    if type(self.Window.Toggle) ~= "function" then
-        return false
-    end
-
-
-    local success =
-        pcall(function()
-
-            self.Window:Toggle(
-                value
-            )
-
-        end)
-
-
-    return success
+    return nil, result
 end
 
 
@@ -1688,90 +921,846 @@ end
 --// Unload
 --//==================================================
 
-function UI:Unload()
+function Loader:Unload(path)
 
-    if self.Unloaded then
-        return
+    path =
+        normalizePath(path)
+
+
+    local module =
+        State.Loaded[path]
+
+
+    if type(module) == "table" then
+
+        if type(module.Destroy) == "function" then
+
+            pcall(function()
+
+                module:Destroy()
+
+            end)
+
+
+        elseif type(module.Unload) == "function" then
+
+            pcall(function()
+
+                module:Unload()
+
+            end)
+        end
     end
 
 
-    self.Unloaded = true
+    State.Loaded[path] =
+        nil
+
+    State.Failed[path] =
+        nil
+end
 
 
-    if self.Library then
+function Loader:UnloadAll()
 
-        local success, err =
+    for path in pairs(State.Loaded) do
+
+        self:Unload(path)
+
+    end
+
+
+    State.Core =
+        {}
+
+    State.Features =
+        {}
+
+    State.Game =
+        {}
+
+    State.Main =
+        nil
+
+    State.Finished =
+        false
+end
+
+
+--//==================================================
+--// Core
+--//==================================================
+
+local CORE_MODULES = {
+
+    {
+        Name = "Environment",
+        Path = "Core/Environment"
+    },
+
+    {
+        Name = "Services",
+        Path = "Core/Services"
+    },
+
+    {
+        Name = "Connections",
+        Path = "Core/Connections"
+    },
+
+    {
+        Name = "Config",
+        Path = "Core/Config"
+    },
+
+    {
+        Name = "Settings",
+        Path = "Core/Settings"
+    },
+
+    {
+        Name = "Notifications",
+        Path = "Core/Notifications"
+    },
+
+    {
+        Name = "UI",
+        Path = "Core/UI"
+    }
+}
+
+
+function Loader:LoadCore()
+
+    print(
+        "========== LOADING CORE =========="
+    )
+
+
+    for _, info in ipairs(CORE_MODULES) do
+
+        print(
+            "[JustXDoors Loader] Loading Core:",
+            info.Path
+        )
+
+
+        local success, module =
             pcall(function()
 
-                if type(self.Library.Unload) == "function" then
-
-                    self.Library:Unload()
-
-                end
+                return self:Load(
+                    info.Path,
+                    true
+                )
 
             end)
 
 
         if not success then
 
-            warnLog(
-                "Library unload failed:"
+            error(
+                "[Loader] Core module failed: "
+                .. info.Path
+                .. "\n"
+                .. tostring(module)
+            )
+        end
+
+
+        print(
+            "[JustXDoors Loader] Module returned:",
+            info.Name,
+            "type:",
+            type(module)
+        )
+
+
+        if module == nil then
+
+            error(
+                "[Loader] Core module returned nil: "
+                .. info.Path
+            )
+        end
+
+
+        State.Core[info.Name] =
+            module
+
+
+        print(
+            "[JustXDoors Loader] Core assigned:",
+            info.Name,
+            "=",
+            tostring(
+                State.Core[info.Name]
+            ),
+            "type:",
+            type(
+                State.Core[info.Name]
+            )
+        )
+    end
+
+
+    --================================================
+    -- Final Core verification
+    --================================================
+
+    print(
+        "----------------------------------------"
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.Environment:",
+        type(State.Core.Environment)
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.Services:",
+        type(State.Core.Services)
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.Connections:",
+        type(State.Core.Connections)
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.Config:",
+        type(State.Core.Config)
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.Settings:",
+        type(State.Core.Settings)
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.Notifications:",
+        type(State.Core.Notifications)
+    )
+
+
+    print(
+        "[JustXDoors Loader] Core.UI:",
+        type(State.Core.UI)
+    )
+
+
+    if type(State.Core.UI) ~= "table" then
+
+        error(
+            "[Loader] Core.UI was not loaded correctly."
+        )
+    end
+
+
+    print(
+        "========== CORE LOADED SUCCESSFULLY =========="
+    )
+
+
+    return State.Core
+end
+
+
+--//==================================================
+--// Features
+--//==================================================
+
+local FEATURE_MODULES = {
+
+    "Features/Configs",
+    "Features/Settings",
+    "Features/Debug"
+}
+
+
+function Loader:LoadFeatures()
+
+    for _, path in ipairs(FEATURE_MODULES) do
+
+        local module =
+            self:Load(path)
+
+
+        local name =
+            path:match(
+                "([^/]+)%.lua$"
             )
 
-            warnLog(err)
 
+        if name then
+
+            State.Features[name] =
+                module
         end
     end
 
 
-    self.Window = nil
-    self.Library = nil
-    self.Loaded = false
+    return State.Features
+end
+
+
+function Loader:InitFeatures()
+
+    local Core =
+        State.Core
+
+
+    for name, module in pairs(State.Features) do
+
+        if type(module) == "table"
+            and type(module.Init) == "function"
+        then
+
+            local success, err =
+                pcall(function()
+
+                    module:Init(Core)
+
+                end)
+
+
+            if not success then
+
+                warn(
+                    "[Loader] Feature Init failed: "
+                    .. name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+end
+
+
+function Loader:BuildFeatures()
+
+    for name, module in pairs(State.Features) do
+
+        if type(module) == "table"
+            and type(module.Build) == "function"
+        then
+
+            local success, err =
+                pcall(function()
+
+                    module:Build()
+
+                end)
+
+
+            if not success then
+
+                warn(
+                    "[Loader] Feature Build failed: "
+                    .. name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
 end
 
 
 --//==================================================
---// Destroy
+--// Root Main
 --//==================================================
 
-function UI:Destroy()
+function Loader:LoadMain()
 
-    self:Unload()
+    print(
+        "[JustXDoors Loader] Loading Root Main"
+    )
 
+
+    local Main =
+        self:Load("Main", true)
+
+
+    State.Main =
+        Main
+
+
+    print(
+        "[JustXDoors Loader] Root Main loaded:",
+        type(Main)
+    )
+
+
+    return Main
+end
+
+
+function Loader:InitMain()
+
+    local Main =
+        State.Main
+
+
+    if not Main then
+
+        error(
+            "[Loader] Root Main returned nil."
+        )
+    end
+
+
+    if type(Main.Init) == "function" then
+
+        local success, err =
+            pcall(function()
+
+                Main:Init(
+                    State.Core
+                )
+
+            end)
+
+
+        if not success then
+
+            error(
+                "[Loader] Main Init failed:\n"
+                .. tostring(err)
+            )
+        end
+    end
+
+
+    if type(Main.Build) == "function" then
+
+        local success, err =
+            pcall(function()
+
+                Main:Build()
+
+            end)
+
+
+        if not success then
+
+            error(
+                "[Loader] Main Build failed:\n"
+                .. tostring(err)
+            )
+        end
+    end
 end
 
 
 --//==================================================
---// Debug information
+--// Game modules
 --//==================================================
 
-function UI:GetInfo()
+local GAME_MODULES = {
 
-    return {
-        Version = self.Version,
+    {
+        Name = "Lobby",
+        Path = "Game/Lobby/Main"
+    },
 
-        LibraryLoaded =
-            self.Library ~= nil,
-
-        WindowCreated =
-            self.Window ~= nil,
-
-        Unloaded =
-            self.Unloaded,
-
-        LoadError =
-            self.LoadError,
-
-        LibraryURL =
-            self.LibraryURL
+    {
+        Name = "Main",
+        Path = "Game/Main/Main"
     }
+}
+
+
+function Loader:LoadGame()
+
+    for _, info in ipairs(GAME_MODULES) do
+
+        local module, err =
+            self:TryLoad(
+                info.Path
+            )
+
+
+        if module then
+
+            State.Game[info.Name] =
+                module
+
+        else
+
+            warn(
+                "[Loader] Game module failed: "
+                .. info.Path
+                .. "\n"
+                .. tostring(err)
+            )
+        end
+    end
+
+
+    return State.Game
 end
 
 
-print(
-    "[JustXDoors UI] UI module loaded. Version:",
-    UI.Version
-)
+function Loader:InitGame()
+
+    local Core =
+        State.Core
 
 
-return UI
+    --================================================
+    -- Ordered initialization
+    --================================================
+
+    for _, info in ipairs(GAME_MODULES) do
+
+        local module =
+            State.Game[info.Name]
+
+
+        if type(module) == "table"
+            and type(module.Init) == "function"
+        then
+
+            local success, err =
+                pcall(function()
+
+                    module:Init(
+                        Core,
+                        State.Main
+                    )
+
+                end)
+
+
+            if not success then
+
+                warn(
+                    "[Loader] Game Init failed: "
+                    .. info.Name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+end
+
+
+function Loader:BuildGame()
+
+    --================================================
+    -- Build
+    --================================================
+
+    for _, info in ipairs(GAME_MODULES) do
+
+        local module =
+            State.Game[info.Name]
+
+
+        if type(module) == "table"
+            and type(module.Build) == "function"
+        then
+
+            local success, err =
+                pcall(function()
+
+                    module:Build()
+
+                end)
+
+
+            if not success then
+
+                warn(
+                    "[Loader] Game Build failed: "
+                    .. info.Name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+
+
+    --================================================
+    -- Start
+    --================================================
+
+    for _, info in ipairs(GAME_MODULES) do
+
+        local module =
+            State.Game[info.Name]
+
+
+        if type(module) == "table"
+            and type(module.Start) == "function"
+        then
+
+            local success, err =
+                pcall(function()
+
+                    module:Start()
+
+                end)
+
+
+            if not success then
+
+                warn(
+                    "[Loader] Game Start failed: "
+                    .. info.Name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+end
+
+
+--//==================================================
+--// Global API
+--//==================================================
+
+function Loader:CreateGlobal()
+
+    local existing =
+        GLOBAL_ENV[GLOBAL_NAME]
+
+
+    if type(existing) == "table"
+        and existing.Loader
+    then
+
+        return existing
+    end
+
+
+    local global = {
+
+        Version =
+            self.Version,
+
+        Loader =
+            self,
+
+        Core =
+            State.Core,
+
+        Features =
+            State.Features,
+
+        Game =
+            State.Game,
+
+        Main =
+            State.Main,
+
+        State =
+            State,
+
+        Unload = function()
+
+            self:UnloadAll()
+
+        end
+    }
+
+
+    GLOBAL_ENV[GLOBAL_NAME] =
+        global
+
+
+    return global
+end
+
+
+--//==================================================
+--// Start
+--//==================================================
+
+function Loader:Start()
+
+    if State.Started then
+
+        return GLOBAL_ENV[GLOBAL_NAME]
+    end
+
+
+    State.Started =
+        true
+
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "       JUSTXDOORS LOADER "
+        .. self.Version
+    )
+
+    print(
+        "========================================"
+    )
+
+
+    --================================================
+    -- 1. Core
+    --================================================
+
+    self:LoadCore()
+
+
+    --================================================
+    -- 2. Root coordinator
+    --================================================
+
+    self:LoadMain()
+
+
+    --================================================
+    -- 3. Root UI
+    --================================================
+
+    self:InitMain()
+
+
+    --================================================
+    -- 4. Features
+    --================================================
+
+    self:LoadFeatures()
+
+    self:InitFeatures()
+
+    self:BuildFeatures()
+
+
+    --================================================
+    -- 5. Game
+    --================================================
+
+    self:LoadGame()
+
+    self:InitGame()
+
+    self:BuildGame()
+
+
+    --================================================
+    -- 6. Global API
+    --================================================
+
+    local global =
+        self:CreateGlobal()
+
+
+    State.Finished =
+        true
+
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "[JustXDoors Loader] Startup complete."
+    )
+
+    print(
+        "========================================"
+    )
+
+
+    return global
+end
+
+
+--//==================================================
+--// State API
+--//==================================================
+
+function Loader:IsLoaded(path)
+
+    return isLoaded(path)
+end
+
+
+function Loader:IsLoading(path)
+
+    path =
+        normalizePath(path)
+
+    return State.Loading[path] == true
+end
+
+
+function Loader:GetState()
+
+    return State
+end
+
+
+function Loader:Get(path)
+
+    return getLoaded(path)
+end
+
+
+--//==================================================
+--// Auto Start
+--//==================================================
+
+local success, result =
+    xpcall(
+
+        function()
+
+            return Loader:Start()
+
+        end,
+
+        function(err)
+
+            local traceback
+
+            pcall(function()
+
+                traceback =
+                    debug.traceback()
+
+            end)
+
+
+            return tostring(err)
+                .. "\n"
+                .. tostring(
+                    traceback or ""
+                )
+        end
+    )
+
+
+if not success then
+
+    warn(
+        "[JustXDoors Loader] Startup failed:\n"
+        .. tostring(result)
+    )
+
+else
+
+    return result
+end
+
+
+return Loader
