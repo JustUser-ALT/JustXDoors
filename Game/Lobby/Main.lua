@@ -774,21 +774,18 @@ function Lobby:Build()
         return false
     end
 
-    --------------------------------------------------
-    -- TAB
-    --------------------------------------------------
+Tab = Core
+    and Core.Main
+    and Core.Main.Tabs
+    and Core.Main.Tabs.Lobby
 
-    Tab =
-        UI:AddTab(
-            "Lobby",
-            "home",
-            "Lobby features"
-        )
+if not Tab then
+    warn(
+        "[JustXDoors Lobby] Lobby tab was not created by Main."
+    )
 
-    if not Tab then
-        return false
-    end
-
+    return false
+end
     --------------------------------------------------
     -- GROUPS
     --------------------------------------------------
