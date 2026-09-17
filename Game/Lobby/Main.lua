@@ -165,8 +165,17 @@ local function fireRemote(name, ...)
         return false
     end
 
+    -- Store varargs before entering the nested pcall.
+    local args = table.pack(...)
+
     local success = pcall(function()
-        remote:FireServer(...)
+        remote:FireServer(
+            table.unpack(
+                args,
+                1,
+                args.n
+            )
+        )
     end)
 
     return success
@@ -229,7 +238,8 @@ end
 ------------------------------------------------------
 
 local function getSelectedTarget()
-    local dropdown = Elements.AutoJoinElevatorTarget
+    local dropdown =
+        Elements.AutoJoinElevatorTarget
 
     if not dropdown then
         return nil
@@ -250,41 +260,52 @@ local function getSelectedTarget()
     end
 
     if type(value) == "string" then
-        return Services.Players:FindFirstChild(value)
+        return Services.Players:FindFirstChild(
+            value
+        )
     end
 
     return nil
 end
 
 local function checkElevators()
-    local toggle = Elements.AutoJoinElevator
+    local toggle =
+        Elements.AutoJoinElevator
 
-    if not toggle or toggle.Value ~= true then
+    if not toggle
+        or toggle.Value ~= true
+    then
         return
     end
 
-    local targetPlayer = getSelectedTarget()
+    local targetPlayer =
+        getSelectedTarget()
 
     if not targetPlayer then
         fireRemote("ElevatorExit")
         return
     end
 
-    local targetCharacter = targetPlayer.Character
+    local targetCharacter =
+        targetPlayer.Character
 
     if not targetCharacter then
         return
     end
 
     local lobby =
-        Services.Workspace:FindFirstChild("Lobby")
+        Services.Workspace:FindFirstChild(
+            "Lobby"
+        )
 
     if not lobby then
         return
     end
 
     local elevators =
-        lobby:FindFirstChild("LobbyElevators")
+        lobby:FindFirstChild(
+            "LobbyElevators"
+        )
 
     if not elevators then
         return
@@ -333,7 +354,8 @@ end
 local function getAchievementList()
     local result = {}
 
-    local list = getAchievementContainer()
+    local list =
+        getAchievementContainer()
 
     if not list then
         return result
@@ -386,7 +408,8 @@ local function setBadgeStar(
 end
 
 local function hideCurrentStars()
-    local list = getAchievementContainer()
+    local list =
+        getAchievementContainer()
 
     if not list then
         return
@@ -415,7 +438,8 @@ local function flexAchievement(
         return false
     end
 
-    local list = getAchievementContainer()
+    local list =
+        getAchievementContainer()
 
     if not list then
         return false
@@ -447,7 +471,9 @@ local function flexAchievement(
     --------------------------------------------------
 
     local selected =
-        list:FindFirstChild(badgeName)
+        list:FindFirstChild(
+            badgeName
+        )
 
     if selected then
         setBadgeStar(
@@ -1000,6 +1026,10 @@ function Lobby:Init(
 
     Notifications =
         Core.Notifications
+
+    if not Services then
+        return self
+    end
 
     LocalPlayer =
         Services.LocalPlayer
