@@ -40,19 +40,24 @@ function Main:CreateTabs()
     end
 
     --------------------------------------------------
-    -- MAIN
+    -- IMPORTANT:
+    -- This is the ONLY place where tabs are created.
+    -- Keep this order.
     --------------------------------------------------
+
+    self.Tabs.Lobby =
+        UI:AddTab(
+            "Lobby",
+            "home",
+            "Lobby features"
+        )
 
     self.Tabs.Main =
         UI:AddTab(
             "Main",
-            "home",
-            "Main features"
+            "user",
+            "Main character features"
         )
-
-    --------------------------------------------------
-    -- HOTEL
-    --------------------------------------------------
 
     self.Tabs.Hotel =
         UI:AddTab(
@@ -61,20 +66,12 @@ function Main:CreateTabs()
             "Hotel features"
         )
 
-    --------------------------------------------------
-    -- MINES
-    --------------------------------------------------
-
     self.Tabs.Mines =
         UI:AddTab(
             "Mines",
             "pickaxe",
             "Mines features"
         )
-
-    --------------------------------------------------
-    -- BACKDOORS
-    --------------------------------------------------
 
     self.Tabs.Backdoors =
         UI:AddTab(
@@ -83,20 +80,12 @@ function Main:CreateTabs()
             "Backdoor features"
         )
 
-    --------------------------------------------------
-    -- OUTDOORS
-    --------------------------------------------------
-
     self.Tabs.Outdoors =
         UI:AddTab(
             "Outdoors",
             "trees",
             "Outdoors features"
         )
-
-    --------------------------------------------------
-    -- ARCHIVES
-    --------------------------------------------------
 
     self.Tabs.Archives =
         UI:AddTab(
@@ -105,16 +94,38 @@ function Main:CreateTabs()
             "Archives features"
         )
 
-    --------------------------------------------------
-    -- STAIRWELL
-    --------------------------------------------------
-
     self.Tabs.Stairwell =
         UI:AddTab(
             "Stairwell",
             "stairs",
             "Stairwell features"
         )
+
+    --------------------------------------------------
+    -- VALIDATE
+    --------------------------------------------------
+
+    local required = {
+        "Lobby",
+        "Main",
+        "Hotel",
+        "Mines",
+        "Backdoors",
+        "Outdoors",
+        "Archives",
+        "Stairwell"
+    }
+
+    for _, name in ipairs(required) do
+        if not self.Tabs[name] then
+            warn(
+                "[JustXDoors Main] Failed to create tab: "
+                    .. name
+            )
+
+            return false
+        end
+    end
 
     return true
 end
@@ -199,18 +210,9 @@ end
 ------------------------------------------------------
 
 function Main:CreateFloorTabs()
-    --------------------------------------------------
-    -- These tabs intentionally remain empty for now.
-    --
-    -- Their actual features will be added by:
-    --
-    -- Floors/Hotel/
-    -- Floors/Mines/
-    -- Floors/Backdoors/
-    -- Floors/Outdoors/
-    -- Floors/Archives/
-    -- Floors/Stairwell/
-    --------------------------------------------------
+    -- Tabs are already created by CreateTabs().
+    -- Individual Game modules add their features
+    -- into these existing tabs.
 
     return true
 end
@@ -327,13 +329,13 @@ function Main:Init(core)
     end
 
     --------------------------------------------------
-    -- MAIN
+    -- MAKE MAIN CONTENT
     --------------------------------------------------
 
     self:CreateMainTab()
 
     --------------------------------------------------
-    -- FLOOR TABS
+    -- FLOOR PLACEHOLDERS
     --------------------------------------------------
 
     self:CreateFloorTabs()
