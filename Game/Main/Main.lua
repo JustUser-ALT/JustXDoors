@@ -36,8 +36,6 @@ local LiveModifiers
 local GameData
 local Floor
 
-local OriginalWalkSpeed = nil
-
 ------------------------------------------------------
 -- HELPERS
 ------------------------------------------------------
@@ -72,6 +70,7 @@ local function refreshCharacter()
     if not Character then
         Humanoid = nil
         RootPart = nil
+
         return false
     end
 
@@ -82,11 +81,11 @@ local function refreshCharacter()
         and RootPart ~= nil
 end
 
-local function getFloor()
-    if Floor ~= nil then
-        return Floor
-    end
+------------------------------------------------------
+-- FLOOR
+------------------------------------------------------
 
+local function getFloor()
     if not GameData then
         return nil
     end
@@ -98,13 +97,11 @@ local function getFloor()
         return nil
     end
 
-    Floor = floorValue.Value
-
-    return Floor
+    return floorValue.Value
 end
 
 ------------------------------------------------------
--- CHARACTER SPEED
+-- CROUCH
 ------------------------------------------------------
 
 local function isCrouching()
@@ -116,8 +113,7 @@ local function isCrouching()
         getFloor()
 
     --------------------------------------------------
-    -- Abyssal uses Character.Crouching for these
-    -- floors.
+    -- Fools / OldHotel
     --------------------------------------------------
 
     if currentFloor == "Fools"
@@ -129,8 +125,7 @@ local function isCrouching()
     end
 
     --------------------------------------------------
-    -- For normal DOORS floors we first try the
-    -- game's collision group.
+    -- CollisionPart
     --------------------------------------------------
 
     local collisionPart =
@@ -152,7 +147,7 @@ local function isCrouching()
     end
 
     --------------------------------------------------
-    -- Fallback used if CollisionPart isn't available.
+    -- Attribute fallback
     --------------------------------------------------
 
     return Character:GetAttribute(
@@ -160,14 +155,25 @@ local function isCrouching()
     ) == true
 end
 
+------------------------------------------------------
+-- INJURY SPEED
+------------------------------------------------------
+
 local function getInjuriesSpeed()
     if not Humanoid then
         return 0
     end
 
-    return 0.075
-        * (Humanoid.MaxHealth - Humanoid.Health)
+    return 0.075 *
+        (
+            Humanoid.MaxHealth
+            - Humanoid.Health
+        )
 end
+
+------------------------------------------------------
+-- BASE GAME SPEED
+------------------------------------------------------
 
 local function getCurrentSpeed()
     if not Character then
@@ -177,7 +183,7 @@ local function getCurrentSpeed()
     local speed = 15
 
     --------------------------------------------------
-    -- Character speed attributes
+    -- CHARACTER ATTRIBUTES
     --------------------------------------------------
 
     speed +=
@@ -196,7 +202,7 @@ local function getCurrentSpeed()
         ) or 0
 
     --------------------------------------------------
-    -- Party floor bonus
+    -- PARTY
     --------------------------------------------------
 
     if getFloor() == "Party" then
@@ -204,7 +210,7 @@ local function getCurrentSpeed()
     end
 
     --------------------------------------------------
-    -- Live modifiers
+    -- LIVE MODIFIERS
     --------------------------------------------------
 
     if LiveModifiers then
@@ -241,7 +247,7 @@ local function getCurrentSpeed()
     end
 
     --------------------------------------------------
-    -- Crouch penalty
+    -- CROUCH
     --------------------------------------------------
 
     if isCrouching() then
@@ -270,6 +276,10 @@ local function getCurrentSpeed()
     return speed
 end
 
+------------------------------------------------------
+-- SPEED BOOST VALUE
+------------------------------------------------------
+
 local function getSpeedBoost()
     local slider =
         Elements.SpeedBoost
@@ -288,6 +298,10 @@ local function getSpeedBoost()
     return value
 end
 
+------------------------------------------------------
+-- SPEED TOGGLE
+------------------------------------------------------
+
 local function isSpeedBoostEnabled()
     local toggle =
         Elements.SpeedBoostToggle
@@ -299,9 +313,13 @@ local function isSpeedBoostEnabled()
     return toggle.Value == true
 end
 
+------------------------------------------------------
+-- APPLY SPEED
+------------------------------------------------------
+
 local function applySpeed()
     if not Humanoid
-        or Humanoid.Parent == nil
+        or not Humanoid.Parent
     then
         return
     end
@@ -309,16 +327,29 @@ local function applySpeed()
     local baseSpeed =
         getCurrentSpeed()
 
+    local boost = 0
+
     if isSpeedBoostEnabled() then
+        boost = getSpeedBoost()
+    end
 
-        Humanoid.WalkSpeed =
-            baseSpeed
-            + getSpeedBoost()
+    local finalSpeed =
+        baseSpeed + boost
 
-    else
+    --------------------------------------------------
+    -- Safety
+    --------------------------------------------------
 
-        Humanoid.WalkSpeed =
-            baseSpeed
+    if finalSpeed < 0 then
+        finalSpeed = 0
+    end
+
+    --------------------------------------------------
+    -- Apply
+    --------------------------------------------------
+
+    if Humanoid.WalkSpeed ~= finalSpeed then
+        Humanoid.WalkSpeed = finalSpeed
     end
 end
 
@@ -330,6 +361,10 @@ local function buildCharacter()
     if not Tab then
         return false
     end
+
+    --------------------------------------------------
+    -- CHARACTER GROUP
+    --------------------------------------------------
 
     local group =
         UI:AddLeftGroupbox(
@@ -382,7 +417,7 @@ local function buildCharacter()
                 Default = false,
 
                 Tooltip =
-                    "Increases your WalkSpeed by the specified amount."
+                    "Adds the selected amount to the game's current movement speed."
             }
         )
 
@@ -390,10 +425,50 @@ local function buildCharacter()
 end
 
 ------------------------------------------------------
+-- CHARACTER ADDED
+------------------------------------------------------
+
+local function onCharacterAdded(character)
+    Character = character
+
+    Humanoid =
+        character:WaitForChild(
+            "Humanoid",
+            10
+        )
+
+    RootPart =
+        character:WaitForChild(
+            "HumanoidRootPart",
+            10
+        )
+
+    --------------------------------------------------
+    -- Wait for character systems
+    --------------------------------------------------
+
+    task.delay(0.25, function()
+
+        if not Character
+            or Character ~= character
+        then
+            return
+        end
+
+        refreshCharacter()
+
+        if Humanoid then
+            applySpeed()
+        end
+    end)
+end
+
+------------------------------------------------------
 -- CONNECTIONS
 ------------------------------------------------------
 
 function Main:Connect()
+
     if Connected then
         return
     end
@@ -407,7 +482,7 @@ function Main:Connect()
     Connected = true
 
     --------------------------------------------------
-    -- CHARACTER ADDED
+    -- PLAYER
     --------------------------------------------------
 
     local LocalPlayer =
@@ -418,33 +493,7 @@ function Main:Connect()
         Connections:Connect(
             LocalPlayer.CharacterAdded,
 
-            function(character)
-
-                Character = character
-
-                Humanoid =
-                    character:WaitForChild(
-                        "Humanoid",
-                        10
-                    )
-
-                RootPart =
-                    character:WaitForChild(
-                        "HumanoidRootPart",
-                        10
-                    )
-
-                OriginalWalkSpeed = nil
-
-                task.defer(function()
-
-                    if Humanoid then
-                        applySpeed()
-                    end
-
-                end)
-
-            end,
+            onCharacterAdded,
 
             "GameMain"
         )
@@ -501,20 +550,20 @@ function Main:Connect()
 
         function()
 
+            --------------------------------------------------
+            -- Character refresh
+            --------------------------------------------------
+
             if not Character
                 or not Character.Parent
             then
-
                 refreshCharacter()
-
             end
 
             if not Humanoid
                 or not Humanoid.Parent
             then
-
                 refreshCharacter()
-
             end
 
             if not Humanoid then
@@ -522,11 +571,7 @@ function Main:Connect()
             end
 
             --------------------------------------------------
-            -- Only continuously control WalkSpeed when
-            -- Speed Boost is enabled.
-            --
-            -- This follows Abyssal Continued's approach:
-            -- current DOORS speed + selected boost.
+            -- Speed
             --------------------------------------------------
 
             if isSpeedBoostEnabled() then
@@ -575,6 +620,10 @@ function Main:Init(CoreModules)
         or not Connections
         or not UI
     then
+        warn(
+            "[JustXDoors GameMain] Core modules missing."
+        )
+
         return self
     end
 
@@ -628,28 +677,51 @@ function Main:Build()
     end
 
     --------------------------------------------------
-    -- TAB
+    -- USE ROOT MAIN TAB
+    --
+    -- IMPORTANT:
+    -- Do NOT call UI:AddTab() here.
     --------------------------------------------------
 
-    Tab =
-        UI:AddTab(
-            "Main",
-            "user",
-            "Main character features"
-        )
+    if Core
+        and Core.Main
+        and Core.Main.Tabs
+    then
+
+        Tab =
+            Core.Main.Tabs.Main
+
+    end
+
+    --------------------------------------------------
+    -- Compatibility fallback
+    --------------------------------------------------
 
     if not Tab then
+
+        warn(
+            "[JustXDoors GameMain] "
+            .. "Core.Main.Tabs.Main is missing."
+        )
+
         return self
     end
 
     --------------------------------------------------
-    -- CHARACTER
+    -- CHARACTER UI
     --------------------------------------------------
 
-    buildCharacter()
+    if not buildCharacter() then
+        warn(
+            "[JustXDoors GameMain] "
+            .. "Failed to build Character section."
+        )
+
+        return self
+    end
 
     --------------------------------------------------
-    -- INITIAL CONNECTIONS
+    -- CONNECTIONS
     --------------------------------------------------
 
     self:Connect()
@@ -668,6 +740,10 @@ function Main:Build()
 
     end)
 
+    --------------------------------------------------
+    -- STATE
+    --------------------------------------------------
+
     Built = true
 
     return self
@@ -679,6 +755,10 @@ end
 
 function Main:Destroy()
 
+    --------------------------------------------------
+    -- Connections
+    --------------------------------------------------
+
     if Connections then
 
         Connections:DisconnectGroup(
@@ -686,6 +766,10 @@ function Main:Destroy()
         )
 
     end
+
+    --------------------------------------------------
+    -- State
+    --------------------------------------------------
 
     Groups = {}
     Elements = {}
@@ -700,11 +784,13 @@ function Main:Destroy()
     GameData = nil
     Floor = nil
 
-    OriginalWalkSpeed = nil
-
     Initialized = false
     Built = false
     Connected = false
+
+    --------------------------------------------------
+    -- Core
+    --------------------------------------------------
 
     Core = nil
     Services = nil
@@ -712,7 +798,10 @@ function Main:Destroy()
     Settings = nil
     Notifications = nil
     UI = nil
-
 end
+
+------------------------------------------------------
+-- RETURN
+------------------------------------------------------
 
 return Main
