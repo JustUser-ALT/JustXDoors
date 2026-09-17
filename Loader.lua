@@ -669,9 +669,7 @@ local CORE_MODULES = {
     "Core/Config",
     "Core/Settings",
     "Core/Notifications",
-    "Core/UI",
-    "Core/ESP",
-    "Core/Utils"
+    "Core/UI"
 }
 
 
