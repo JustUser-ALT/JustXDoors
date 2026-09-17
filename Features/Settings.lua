@@ -4,20 +4,46 @@ local Settings
 local Config
 local Notifications
 local UI
-local Connections
 
 local Elements = {}
+local Refreshing = false
+
+local function get(path, fallback)
+    local value = Settings:Get(path)
+
+    if value == nil then
+        return fallback
+    end
+
+    return value
+end
 
 local function notify(title, description, time)
-    Notifications:Info(title, description, time)
+    Notifications:Info(
+        title,
+        description,
+        time
+    )
 end
 
-local function getProvider()
-    return Settings:Get("Notifications.Provider") or "JustXDoors"
+local function setElementValue(element, value)
+    if not element or value == nil then
+        return
+    end
+
+    pcall(function()
+        element:SetValue(value)
+    end)
 end
 
-local function getNotifySide()
-    return Settings:Get("Notifications.Side") or "Right"
+local function safeCall(callback)
+    if Refreshing then
+        return
+    end
+
+    if callback then
+        callback()
+    end
 end
 
 function SettingsFeature:Init(Core)
@@ -25,232 +51,293 @@ function SettingsFeature:Init(Core)
     Config = Core.Config
     Notifications = Core.Notifications
     UI = Core.UI
-    Connections = Core.Connections
 
     Elements = {}
+    Refreshing = false
 end
 
 function SettingsFeature:Build()
     local Tab = UI:AddTab("Settings")
 
-    ----------------------------------------------------------------
+    ------------------------------------------------------------
     -- INTERFACE
-    ----------------------------------------------------------------
+    ------------------------------------------------------------
 
-    local InterfaceBox = UI:AddGroupbox(Tab, "Interface")
+    local InterfaceBox =
+        UI:AddGroupbox(
+            Tab,
+            "Interface"
+        )
 
-    InterfaceBox:AddToggle("SettingsAlwaysOnTop", {
-        Text = "Always On Top",
+    Elements.AlwaysOnTop =
+        InterfaceBox:AddToggle(
+            "SettingsAlwaysOnTop",
+            {
+                Text = "Always On Top",
 
-        Default = Settings:Get("UI.AlwaysOnTop"),
+                Default =
+                    get(
+                        "UI.AlwaysOnTop",
+                        true
+                    ),
 
-        Callback = function(value)
-            Settings:Set("UI.AlwaysOnTop", value)
-            UI:SetAlwaysOnTop(value)
-        end
-    })
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "UI.AlwaysOnTop",
+                            value
+                        )
 
-    InterfaceBox:AddToggle("SettingsCustomCursor", {
-        Text = "Custom Cursor",
-
-        Default = Settings:Get("UI.ShowCustomCursor"),
-
-        Callback = function(value)
-            Settings:Set("UI.ShowCustomCursor", value)
-
-            local Library = UI.Library
-
-            if Library then
-                Library.ShowCustomCursor = value
-            end
-        end
-    })
-
-    InterfaceBox:AddSlider("SettingsCornerRadius", {
-        Text = "Corner Radius",
-
-        Min = 0,
-        Max = 20,
-
-        Default = Settings:Get("UI.CornerRadius") or 8,
-
-        Rounding = 0,
-
-        Callback = function(value)
-            Settings:Set("UI.CornerRadius", value)
-            UI:SetCornerRadius(value)
-        end
-    })
-
-    ----------------------------------------------------------------
-    -- NOTIFICATIONS
-    ----------------------------------------------------------------
-
-    local NotificationsBox = UI:AddGroupbox(
-        Tab,
-        "Notifications"
-    )
-
-    Elements.Provider = NotificationsBox:AddDropdown(
-        "NotificationProvider",
-        {
-            Values = {
-                "JustXDoors",
-                "Obsidian"
-            },
-
-            Default = getProvider(),
-
-            Multi = false,
-
-            Text = "Provider",
-
-            Tooltip = "Choose the notification system",
-
-            Callback = function(value)
-                if value ~= "JustXDoors"
-                    and value ~= "Obsidian"
-                then
-                    return
+                        UI:SetAlwaysOnTop(value)
+                    end)
                 end
+            }
+        )
 
-                Settings:Set(
-                    "Notifications.Provider",
-                    value
-                )
+    Elements.CustomCursor =
+        InterfaceBox:AddToggle(
+            "SettingsCustomCursor",
+            {
+                Text = "Custom Cursor",
 
-                local success =
-                    Notifications:SetProvider(value)
+                Default =
+                    get(
+                        "UI.ShowCustomCursor",
+                        false
+                    ),
 
-                if not success then
-                    Settings:Set(
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "UI.ShowCustomCursor",
+                            value
+                        )
+
+                        if UI.Library then
+                            UI.Library.ShowCustomCursor =
+                                value
+                        end
+                    end)
+                end
+            }
+        )
+
+    Elements.CornerRadius =
+        InterfaceBox:AddSlider(
+            "SettingsCornerRadius",
+            {
+                Text = "Corner Radius",
+
+                Min = 0,
+                Max = 20,
+
+                Default =
+                    get(
+                        "UI.CornerRadius",
+                        8
+                    ),
+
+                Rounding = 0,
+
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "UI.CornerRadius",
+                            value
+                        )
+
+                        UI:SetCornerRadius(value)
+                    end)
+                end
+            }
+        )
+
+    ------------------------------------------------------------
+    -- NOTIFICATIONS
+    ------------------------------------------------------------
+
+    local NotificationsBox =
+        UI:AddGroupbox(
+            Tab,
+            "Notifications"
+        )
+
+    Elements.Provider =
+        NotificationsBox:AddDropdown(
+            "NotificationProvider",
+            {
+                Values = {
+                    "JustXDoors",
+                    "Obsidian"
+                },
+
+                Default =
+                    get(
                         "Notifications.Provider",
                         "JustXDoors"
-                    )
+                    ),
 
-                    if Elements.Provider then
-                        Elements.Provider:SetValue(
-                            "JustXDoors"
+                Multi = false,
+
+                Text = "Provider",
+
+                Tooltip =
+                    "Notification system",
+
+                Callback = function(value)
+                    safeCall(function()
+                        if value ~= "JustXDoors"
+                            and value ~= "Obsidian"
+                        then
+                            return
+                        end
+
+                        local success =
+                            Notifications:SetProvider(
+                                value
+                            )
+
+                        if not success then
+                            return
+                        end
+
+                        Settings:Set(
+                            "Notifications.Provider",
+                            value
                         )
-                    end
 
-                    Notifications:Warning(
-                        "Notifications",
-                        "Obsidian provider is unavailable."
-                    )
-
-                    return
+                        Notifications:Success(
+                            "Notifications",
+                            "Provider: " .. value
+                        )
+                    end)
                 end
+            }
+        )
 
-                Notifications:Success(
-                    "Notifications",
-                    "Provider switched to " .. value
-                )
-            end
-        }
-    )
+    Elements.NotifySide =
+        NotificationsBox:AddDropdown(
+            "NotificationSide",
+            {
+                Values = {
+                    "Left",
+                    "Right"
+                },
 
-    Elements.NotifySide = NotificationsBox:AddDropdown(
-        "NotificationSide",
-        {
-            Values = {
-                "Left",
-                "Right"
-            },
+                Default =
+                    get(
+                        "Notifications.Side",
+                        "Right"
+                    ),
 
-            Default = getNotifySide(),
+                Multi = false,
 
-            Multi = false,
+                Text = "Position",
 
-            Text = "Position",
+                Tooltip =
+                    "Notification position",
 
-            Tooltip = "Notification position on screen",
+                Callback = function(value)
+                    safeCall(function()
+                        if value ~= "Left"
+                            and value ~= "Right"
+                        then
+                            return
+                        end
 
-            Callback = function(value)
-                if value ~= "Left"
-                    and value ~= "Right"
-                then
-                    return
+                        Settings:Set(
+                            "Notifications.Side",
+                            value
+                        )
+
+                        Notifications:SetSide(
+                            value
+                        )
+                    end)
                 end
+            }
+        )
 
-                Settings:Set(
-                    "Notifications.Side",
-                    value
-                )
+    Elements.Duration =
+        NotificationsBox:AddSlider(
+            "NotificationDuration",
+            {
+                Text = "Duration",
 
-                Notifications:SetSide(value)
-            end
-        }
-    )
+                Min = 1,
+                Max = 15,
 
-    Elements.Duration = NotificationsBox:AddSlider(
-        "NotificationDuration",
-        {
-            Text = "Duration",
+                Default =
+                    get(
+                        "Notifications.DefaultDuration",
+                        4
+                    ),
 
-            Min = 1,
-            Max = 15,
+                Rounding = 1,
 
-            Default =
-                Settings:Get(
-                    "Notifications.DefaultDuration"
-                ) or 4,
+                Suffix = "s",
 
-            Rounding = 1,
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "Notifications.DefaultDuration",
+                            value
+                        )
+                    end)
+                end
+            }
+        )
 
-            Suffix = "s",
+    Elements.MaxVisible =
+        NotificationsBox:AddSlider(
+            "NotificationMaxVisible",
+            {
+                Text = "Max Visible",
 
-            Callback = function(value)
-                Settings:Set(
-                    "Notifications.DefaultDuration",
-                    value
-                )
-            end
-        }
-    )
+                Min = 1,
+                Max = 10,
 
-    Elements.MaxVisible = NotificationsBox:AddSlider(
-        "NotificationMaxVisible",
-        {
-            Text = "Max Visible",
+                Default =
+                    get(
+                        "Notifications.MaxVisible",
+                        5
+                    ),
 
-            Min = 1,
-            Max = 10,
+                Rounding = 0,
 
-            Default =
-                Settings:Get(
-                    "Notifications.MaxVisible"
-                ) or 5,
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "Notifications.MaxVisible",
+                            value
+                        )
+                    end)
+                end
+            }
+        )
 
-            Rounding = 0,
+    Elements.Sound =
+        NotificationsBox:AddToggle(
+            "NotificationSound",
+            {
+                Text = "Notification Sound",
 
-            Callback = function(value)
-                Settings:Set(
-                    "Notifications.MaxVisible",
-                    value
-                )
-            end
-        }
-    )
+                Default =
+                    get(
+                        "Notifications.SoundEnabled",
+                        false
+                    ),
 
-    NotificationsBox:AddToggle(
-        "NotificationSound",
-        {
-            Text = "Notification Sound",
-
-            Default =
-                Settings:Get(
-                    "Notifications.SoundEnabled"
-                ) or false,
-
-            Callback = function(value)
-                Settings:Set(
-                    "Notifications.SoundEnabled",
-                    value
-                )
-            end
-        }
-    )
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "Notifications.SoundEnabled",
+                            value
+                        )
+                    end)
+                end
+            }
+        )
 
     NotificationsBox:AddButton({
         Text = "Test Notification",
@@ -259,65 +346,78 @@ function SettingsFeature:Build()
             Notifications:Success(
                 "JustXDoors",
                 "Notification system is working!",
-                Settings:Get(
-                    "Notifications.DefaultDuration"
-                ) or 4
+                get(
+                    "Notifications.DefaultDuration",
+                    4
+                )
             )
         end
     })
 
-    ----------------------------------------------------------------
+    ------------------------------------------------------------
     -- CONFIG
-    ----------------------------------------------------------------
+    ------------------------------------------------------------
 
-    local ConfigBox = UI:AddGroupbox(
-        Tab,
-        "Config"
-    )
+    local ConfigBox =
+        UI:AddGroupbox(
+            Tab,
+            "Config"
+        )
 
-    local configNames = Config:List()
+    local configs = Config:List()
 
-    if #configNames == 0 then
-        configNames = {
+    if #configs == 0 then
+        configs = {
             "No configs"
         }
     end
 
-    Elements.ConfigDropdown = ConfigBox:AddDropdown(
-        "ConfigSelection",
-        {
-            Values = configNames,
+    Elements.ConfigDropdown =
+        ConfigBox:AddDropdown(
+            "ConfigSelection",
+            {
+                Values = configs,
 
-            Default = configNames[1],
+                Default = configs[1],
 
-            Multi = false,
+                Multi = false,
 
-            Text = "Config",
+                Text = "Config",
 
-            Tooltip = "Select a saved configuration"
-        }
-    )
+                Tooltip =
+                    "Select configuration"
+            }
+        )
 
-    Elements.ConfigName = ConfigBox:AddInput(
-        "ConfigName",
-        {
-            Text = "Config Name",
+    Elements.ConfigName =
+        ConfigBox:AddInput(
+            "ConfigName",
+            {
+                Text = "Config Name",
 
-            Default = "Default",
+                Default = "Default",
 
-            Placeholder = "Enter config name...",
+                Placeholder =
+                    "Enter config name...",
 
-            Finished = true
-        }
-    )
+                Finished = true
+            }
+        )
+
+    ------------------------------------------------------------
+    -- SAVE
+    ------------------------------------------------------------
 
     ConfigBox:AddButton({
         Text = "Save",
 
         Func = function()
-            local name = Elements.ConfigName.Value
+            local name =
+                Elements.ConfigName.Value
 
-            if not name or name == "" then
+            if not name
+                or name == ""
+            then
                 notify(
                     "Config",
                     "Enter a config name first."
@@ -326,26 +426,33 @@ function SettingsFeature:Build()
                 return
             end
 
-            local data = Settings:Export()
-
             local success, result =
-                Config:Save(name, data)
-
-            if success then
-                notify(
-                    "Config",
-                    "Saved: " .. name
+                Config:Save(
+                    name,
+                    Settings:Export()
                 )
 
-                self:RefreshConfigs()
-            else
+            if not success then
                 Notifications:Error(
                     "Config",
                     tostring(result)
                 )
+
+                return
             end
+
+            notify(
+                "Config",
+                "Saved: " .. name
+            )
+
+            self:RefreshConfigs()
         end
     })
+
+    ------------------------------------------------------------
+    -- LOAD
+    ------------------------------------------------------------
 
     ConfigBox:AddButton({
         Text = "Load",
@@ -390,12 +497,18 @@ function SettingsFeature:Build()
 
             self:ApplyRuntimeSettings()
 
+            self:RefreshUI()
+
             notify(
                 "Config",
                 "Loaded: " .. name
             )
         end
     })
+
+    ------------------------------------------------------------
+    -- DELETE
+    ------------------------------------------------------------
 
     ConfigBox:AddButton({
         Text = "Delete",
@@ -435,6 +548,10 @@ function SettingsFeature:Build()
             self:RefreshConfigs()
         end
     })
+
+    ------------------------------------------------------------
+    -- RENAME
+    ------------------------------------------------------------
 
     ConfigBox:AddButton({
         Text = "Rename",
@@ -489,8 +606,17 @@ function SettingsFeature:Build()
             )
 
             self:RefreshConfigs()
+
+            setElementValue(
+                Elements.ConfigDropdown,
+                newName
+            )
         end
     })
+
+    ------------------------------------------------------------
+    -- AUTOLOAD
+    ------------------------------------------------------------
 
     ConfigBox:AddButton({
         Text = "Set Autoload",
@@ -556,12 +682,18 @@ function SettingsFeature:Build()
 
             self:ApplyRuntimeSettings()
 
+            self:RefreshUI()
+
             notify(
                 "Config",
-                "Autoload config loaded."
+                "Autoload loaded."
             )
         end
     })
+
+    ------------------------------------------------------------
+    -- RESET
+    ------------------------------------------------------------
 
     ConfigBox:AddButton({
         Text = "Reset Settings",
@@ -571,6 +703,8 @@ function SettingsFeature:Build()
 
             self:ApplyRuntimeSettings()
 
+            self:RefreshUI()
+
             notify(
                 "Settings",
                 "Settings restored to defaults."
@@ -578,31 +712,38 @@ function SettingsFeature:Build()
         end
     })
 
-    ----------------------------------------------------------------
+    ------------------------------------------------------------
     -- DEBUG
-    ----------------------------------------------------------------
+    ------------------------------------------------------------
 
-    local DebugBox = UI:AddGroupbox(
-        Tab,
-        "Debug"
-    )
+    local DebugBox =
+        UI:AddGroupbox(
+            Tab,
+            "Debug"
+        )
 
-    DebugBox:AddToggle(
-        "DebugMode",
-        {
-            Text = "Debug Mode",
+    Elements.Debug =
+        DebugBox:AddToggle(
+            "DebugMode",
+            {
+                Text = "Debug Mode",
 
-            Default =
-                Settings:Get("General.Debug"),
+                Default =
+                    get(
+                        "General.Debug",
+                        false
+                    ),
 
-            Callback = function(value)
-                Settings:Set(
-                    "General.Debug",
-                    value
-                )
-            end
-        }
-    )
+                Callback = function(value)
+                    safeCall(function()
+                        Settings:Set(
+                            "General.Debug",
+                            value
+                        )
+                    end)
+                end
+            }
+        )
 
     DebugBox:AddButton({
         Text = "Test All Notifications",
@@ -636,11 +777,24 @@ function SettingsFeature:Build()
         end
     })
 
+    ------------------------------------------------------------
+    -- INITIAL SYNC
+    ------------------------------------------------------------
+
+    self:RefreshUI()
+
     return Tab
 end
 
+------------------------------------------------------------
+-- REFRESH CONFIG DROPDOWN
+------------------------------------------------------------
+
 function SettingsFeature:RefreshConfigs()
-    if not Elements.ConfigDropdown then
+    local dropdown =
+        Elements.ConfigDropdown
+
+    if not dropdown then
         return
     end
 
@@ -652,63 +806,175 @@ function SettingsFeature:RefreshConfigs()
         }
     end
 
-    Elements.ConfigDropdown:SetValues(configs)
-    Elements.ConfigDropdown:SetValue(configs[1])
+    Refreshing = true
+
+    pcall(function()
+        dropdown:SetValues(configs)
+        dropdown:SetValue(configs[1])
+    end)
+
+    Refreshing = false
 end
+
+------------------------------------------------------------
+-- APPLY RUNTIME SETTINGS
+------------------------------------------------------------
 
 function SettingsFeature:ApplyRuntimeSettings()
     local provider =
-        Settings:Get("Notifications.Provider")
-
-    if provider then
-        Notifications:SetProvider(provider)
-    end
+        get(
+            "Notifications.Provider",
+            "JustXDoors"
+        )
 
     local side =
-        Settings:Get("Notifications.Side")
-
-    if side then
-        Notifications:SetSide(side)
-    end
-
-    local alwaysOnTop =
-        Settings:Get("UI.AlwaysOnTop")
-
-    if alwaysOnTop ~= nil then
-        UI:SetAlwaysOnTop(alwaysOnTop)
-    end
-
-    local radius =
-        Settings:Get("UI.CornerRadius")
-
-    if radius then
-        UI:SetCornerRadius(radius)
-    end
-
-    local cursor =
-        Settings:Get("UI.ShowCustomCursor")
-
-    if cursor ~= nil
-        and UI.Library
-    then
-        UI.Library.ShowCustomCursor = cursor
-    end
-
-    if Elements.Provider then
-        Elements.Provider:SetValue(
-            provider or "JustXDoors"
+        get(
+            "Notifications.Side",
+            "Right"
         )
-    end
 
-    if Elements.NotifySide then
-        Elements.NotifySide:SetValue(
-            side or "Right"
+    Notifications:SetProvider(
+        provider
+    )
+
+    Notifications:SetSide(
+        side
+    )
+
+    UI:SetAlwaysOnTop(
+        get(
+            "UI.AlwaysOnTop",
+            true
         )
+    )
+
+    UI:SetCornerRadius(
+        get(
+            "UI.CornerRadius",
+            8
+        )
+    )
+
+    if UI.Library then
+        UI.Library.ShowCustomCursor =
+            get(
+                "UI.ShowCustomCursor",
+                false
+            )
     end
 end
 
+------------------------------------------------------------
+-- REFRESH ALL UI VALUES
+------------------------------------------------------------
+
+function SettingsFeature:RefreshUI()
+    if not next(Elements) then
+        return
+    end
+
+    Refreshing = true
+
+    --------------------------------------------------------
+    -- INTERFACE
+    --------------------------------------------------------
+
+    setElementValue(
+        Elements.AlwaysOnTop,
+        get(
+            "UI.AlwaysOnTop",
+            true
+        )
+    )
+
+    setElementValue(
+        Elements.CustomCursor,
+        get(
+            "UI.ShowCustomCursor",
+            false
+        )
+    )
+
+    setElementValue(
+        Elements.CornerRadius,
+        get(
+            "UI.CornerRadius",
+            8
+        )
+    )
+
+    --------------------------------------------------------
+    -- NOTIFICATIONS
+    --------------------------------------------------------
+
+    setElementValue(
+        Elements.Provider,
+        get(
+            "Notifications.Provider",
+            "JustXDoors"
+        )
+    )
+
+    setElementValue(
+        Elements.NotifySide,
+        get(
+            "Notifications.Side",
+            "Right"
+        )
+    )
+
+    setElementValue(
+        Elements.Duration,
+        get(
+            "Notifications.DefaultDuration",
+            4
+        )
+    )
+
+    setElementValue(
+        Elements.MaxVisible,
+        get(
+            "Notifications.MaxVisible",
+            5
+        )
+    )
+
+    setElementValue(
+        Elements.Sound,
+        get(
+            "Notifications.SoundEnabled",
+            false
+        )
+    )
+
+    --------------------------------------------------------
+    -- DEBUG
+    --------------------------------------------------------
+
+    setElementValue(
+        Elements.Debug,
+        get(
+            "General.Debug",
+            false
+        )
+    )
+
+    --------------------------------------------------------
+    -- FINISH
+    --------------------------------------------------------
+
+    Refreshing = false
+
+    self:ApplyRuntimeSettings()
+end
+
+------------------------------------------------------------
+-- DESTROY
+------------------------------------------------------------
+
 function SettingsFeature:Destroy()
     Elements = {}
+    Refreshing = false
 end
 
 return SettingsFeature
