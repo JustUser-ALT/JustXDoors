@@ -1,53 +1,35 @@
 local Environment = {}
 
+--==================================================
+-- Safe helpers
+--==================================================
+
 local function safeCall(fn, ...)
     if type(fn) ~= "function" then
         return nil
     end
 
-    local success, result = pcall(fn, ...)
+    local success, a, b, c = pcall(fn, ...)
+
     if success then
-        return result
-    end
-
-    return nil
-end
-
-local function getGlobal(name)
-    -- 1. Executor global environment
-    local getgenvFn = rawget(_G, "getgenv")
-
-    if type(getgenvFn) == "function" then
-        local env = safeCall(getgenvFn)
-
-        if type(env) == "table" and env[name] ~= nil then
-            return env[name]
-        end
-    end
-
-    -- 2. Current environment
-    local getfenvFn = rawget(_G, "getfenv")
-
-    if type(getfenvFn) == "function" then
-        local env = safeCall(getfenvFn, 0)
-
-        if type(env) == "table" and env[name] ~= nil then
-            return env[name]
-        end
-    end
-
-    -- 3. _G fallback
-    local global = rawget(_G, name)
-
-    if global ~= nil then
-        return global
+        return a, b, c
     end
 
     return nil
 end
 
 local function getFunction(name)
-    local value = getGlobal(name)
+    -- Direct global lookup.
+    -- The Loader provides the executor environment
+    -- through the module environment.
+    local value = _G and _G[name]
+
+    if type(value) == "function" then
+        return value
+    end
+
+    -- Fallback to the current environment.
+    value = _ENV and _ENV[name]
 
     if type(value) == "function" then
         return value
@@ -56,42 +38,56 @@ local function getFunction(name)
     return nil
 end
 
-local function has(name)
-    return getFunction(name) ~= nil
-end
-
 
 --==================================================
 -- Executor
 --==================================================
 
-local identifyexecutor = getFunction("identifyexecutor")
-local getexecutorname = getFunction("getexecutorname")
-local getexecutorversion = getFunction("getexecutorversion")
+local executorName = "Unknown"
+local executorVersion = "Unknown"
 
-local executorName
-local executorVersion
+local identifyexecutor = getFunction("identifyexecutor")
 
 if identifyexecutor then
-    local success, name, version = pcall(identifyexecutor)
+    local name, version = safeCall(identifyexecutor)
 
-    if success then
-        executorName = name
-        executorVersion = version
+    if name ~= nil then
+        executorName = tostring(name)
+    end
+
+    if version ~= nil then
+        executorVersion = tostring(version)
     end
 end
 
-if not executorName and getexecutorname then
-    executorName = safeCall(getexecutorname)
+if executorName == "Unknown" then
+    local getexecutorname = getFunction("getexecutorname")
+
+    if getexecutorname then
+        local name = safeCall(getexecutorname)
+
+        if name ~= nil then
+            executorName = tostring(name)
+        end
+    end
 end
 
-if not executorVersion and getexecutorversion then
-    executorVersion = safeCall(getexecutorversion)
+if executorVersion == "Unknown" then
+    local getexecutorversion = getFunction("getexecutorversion")
+
+    if getexecutorversion then
+        local version = safeCall(getexecutorversion)
+
+        if version ~= nil then
+            executorVersion = tostring(version)
+        end
+    end
 end
+
 
 Environment.Executor = {
-    Name = executorName or "Unknown",
-    Version = executorVersion or "Unknown"
+    Name = executorName,
+    Version = executorVersion
 }
 
 
@@ -99,65 +95,69 @@ Environment.Executor = {
 -- Capabilities
 --==================================================
 
+local function hasFunction(name)
+    return getFunction(name) ~= nil
+end
+
 Environment.Capabilities = {
 
     -- Environment
-    GetGenv = has("getgenv"),
-    GetRenv = has("getrenv"),
-    GetFenv = has("getfenv"),
+    GetGenv = hasFunction("getgenv"),
+    GetRenv = hasFunction("getrenv"),
+    GetFenv = hasFunction("getfenv"),
 
     -- Loading
-    Loadstring = has("loadstring"),
+    Loadstring = hasFunction("loadstring"),
 
     -- HTTP
     Request =
-        has("request")
-        or has("http_request")
-        or has("syn_request")
-        or has("http"),
+        hasFunction("request")
+        or hasFunction("http_request")
+        or hasFunction("syn_request")
+        or hasFunction("http"),
 
     -- File system
-    IsFile = has("isfile"),
-    ReadFile = has("readfile"),
-    WriteFile = has("writefile"),
-    AppendFile = has("appendfile"),
-    MakeFolder = has("makefolder"),
-    IsFolder = has("isfolder"),
-    ListFiles = has("listfiles"),
-    DeleteFile = has("delfile"),
+    IsFile = hasFunction("isfile"),
+    ReadFile = hasFunction("readfile"),
+    WriteFile = hasFunction("writefile"),
+    AppendFile = hasFunction("appendfile"),
+    MakeFolder = hasFunction("makefolder"),
+    IsFolder = hasFunction("isfolder"),
+    ListFiles = hasFunction("listfiles"),
+    DeleteFile = hasFunction("delfile"),
 
     -- Hooks
-    HookFunction = has("hookfunction"),
-    HookMetamethod = has("hookmetamethod"),
-    NewCClosure = has("newcclosure"),
-    CheckCaller = has("checkcaller"),
+    HookFunction = hasFunction("hookfunction"),
+    HookMetamethod = hasFunction("hookmetamethod"),
+    NewCClosure = hasFunction("newcclosure"),
+    CheckCaller = hasFunction("checkcaller"),
 
     -- Debug
-    GetConstants = has("getconstants"),
-    GetConstant = has("getconstant"),
-    GetUpvalues = has("getupvalues"),
-    GetUpvalue = has("getupvalue"),
-    GetProtos = has("getprotos"),
-    GetProto = has("getproto"),
-    GetInfo = has("getinfo"),
+    GetConstants = hasFunction("getconstants"),
+    GetConstant = hasFunction("getconstant"),
+    GetUpvalues = hasFunction("getupvalues"),
+    GetUpvalue = hasFunction("getupvalue"),
+    GetProtos = hasFunction("getprotos"),
+    GetProto = hasFunction("getproto"),
+    GetInfo = hasFunction("getinfo"),
 
     -- Drawing
-    Drawing = has("Drawing"),
+    Drawing = hasFunction("Drawing"),
 
     -- Clipboard
     SetClipboard =
-        has("setclipboard")
-        or has("toclipboard"),
+        hasFunction("setclipboard")
+        or hasFunction("toclipboard"),
 
     -- Input
-    Mouse1Click = has("mouse1click"),
-    Mouse1Press = has("mouse1press"),
-    Mouse1Release = has("mouse1release"),
+    Mouse1Click = hasFunction("mouse1click"),
+    Mouse1Press = hasFunction("mouse1press"),
+    Mouse1Release = hasFunction("mouse1release"),
 
     -- Misc
-    QueueOnTeleport = has("queue_on_teleport"),
-    SetIdentity = has("setidentity"),
-    GetIdentity = has("getidentity"),
+    QueueOnTeleport = hasFunction("queue_on_teleport"),
+    SetIdentity = hasFunction("setidentity"),
+    GetIdentity = hasFunction("getidentity"),
 }
 
 
@@ -220,7 +220,7 @@ end
 
 
 --==================================================
--- Methods
+-- Public API
 --==================================================
 
 function Environment:Has(capability)
@@ -252,7 +252,7 @@ function Environment:GetInfo()
     return {
         Name = self.Executor.Name,
         Version = self.Executor.Version,
-        Capabilities = self.Capabilities,
+        Capabilities = self.Capabilities
     }
 end
 
