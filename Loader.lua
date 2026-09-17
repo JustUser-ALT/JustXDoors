@@ -306,6 +306,11 @@ Core.Notifications =
         "Core/Notifications"
     )
 
+Core.SettingsFeature =
+    ModuleLoader:Load(
+        "Features/Settings"
+    )
+
 Core.UI =
     ModuleLoader:Load(
         "Core/UI"
