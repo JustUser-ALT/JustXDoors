@@ -1,18 +1,11 @@
 local Lobby = {}
 
-------------------------------------------------------
--- CORE
-------------------------------------------------------
-
 local Core
 local Services
 local Connections
 local UI
 local Notifications
 
-------------------------------------------------------
--- STATE
-------------------------------------------------------
 
 local Tab
 local Groups = {}
@@ -69,6 +62,11 @@ local QUICK_PLAY = {
     },
 
     {
+        Text = "Daily Run",
+        Destination = "Daily"
+    },
+
+    {
         Text = "Retro Mode",
         Destination = "Retro"
     },
@@ -81,6 +79,11 @@ local QUICK_PLAY = {
     {
         Text = "Halloween",
         Destination = "Halloween25"
+    },
+
+    {
+        Text = "Cringles Workshop",
+        Destination = "CringlesWorkshop"
     },
 
     {
