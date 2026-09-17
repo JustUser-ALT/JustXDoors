@@ -3,12 +3,12 @@
     Loader.lua
     Modular loader
 
-    Version: 1.3.2
+    Version: 1.4.0
 ]]
 
 local Loader = {}
 
-Loader.Version = "1.3.2"
+Loader.Version = "1.4.0"
 
 --//==================================================
 --// Configuration
@@ -169,13 +169,15 @@ end
 
 local function httpGet(url)
 
-    --================================================
+    --------------------------------------------------
     -- Roblox HttpGet
-    --================================================
+    --------------------------------------------------
 
     local success, result =
         pcall(function()
+
             return game:HttpGet(url)
+
         end)
 
 
@@ -188,9 +190,9 @@ local function httpGet(url)
     end
 
 
-    --================================================
+    --------------------------------------------------
     -- Executor request
-    --================================================
+    --------------------------------------------------
 
     if requestFn then
 
@@ -205,7 +207,9 @@ local function httpGet(url)
             end)
 
 
-        if requestSuccess and response then
+        if requestSuccess
+            and response
+        then
 
             local body =
                 response.Body
@@ -235,7 +239,9 @@ end
 
 function Loader:Fetch(path)
 
-    path = normalizePath(path)
+    path =
+        normalizePath(path)
+
 
     local url =
         getURL(path)
@@ -286,9 +292,9 @@ function Loader:Fetch(path)
     )
 
 
-    --================================================
-    -- UI source diagnostics
-    --================================================
+    --------------------------------------------------
+    -- UI diagnostics
+    --------------------------------------------------
 
     if path == "Core/UI.lua" then
 
@@ -403,7 +409,7 @@ end
 
 
 --//==================================================
---// Module environment
+--// Module Environment
 --//==================================================
 
 local function createModuleEnvironment(path)
@@ -411,9 +417,9 @@ local function createModuleEnvironment(path)
     local env = {}
 
 
-    --================================================
-    -- Loader-specific values
-    --================================================
+    --------------------------------------------------
+    -- Loader
+    --------------------------------------------------
 
     env.JustXLoader =
         Loader
@@ -422,16 +428,18 @@ local function createModuleEnvironment(path)
     env.script = {
 
         Name =
-            path:match("([^/]+)%.lua$")
+            path:match(
+                "([^/]+)%.lua$"
+            )
             or path,
 
         Path = path
     }
 
 
-    --================================================
+    --------------------------------------------------
     -- Roblox globals
-    --================================================
+    --------------------------------------------------
 
     env.game =
         game
@@ -496,9 +504,9 @@ local function createModuleEnvironment(path)
         bit32
 
 
-    --================================================
+    --------------------------------------------------
     -- Luau globals
-    --================================================
+    --------------------------------------------------
 
     env.type =
         type
@@ -506,13 +514,11 @@ local function createModuleEnvironment(path)
     env.typeof =
         typeof
 
-
     env.tostring =
         tostring
 
     env.tonumber =
         tonumber
-
 
     env.select =
         select
@@ -520,17 +526,14 @@ local function createModuleEnvironment(path)
     env.next =
         next
 
-
     env.pairs =
         pairs
 
     env.ipairs =
         ipairs
 
-
     env.unpack =
         unpack
-
 
     env.error =
         error
@@ -538,20 +541,17 @@ local function createModuleEnvironment(path)
     env.assert =
         assert
 
-
     env.pcall =
         pcall
 
     env.xpcall =
         xpcall
 
-
     env.print =
         print
 
     env.warn =
         warn
-
 
     env.rawget =
         rawget
@@ -565,7 +565,6 @@ local function createModuleEnvironment(path)
     env.rawlen =
         rawlen
 
-
     env.getmetatable =
         getmetatable
 
@@ -573,84 +572,71 @@ local function createModuleEnvironment(path)
         setmetatable
 
 
-    --================================================
+    --------------------------------------------------
     -- Shared globals
-    --================================================
+    --------------------------------------------------
 
     env._G =
         _G
 
 
-    --================================================
+    --------------------------------------------------
     -- Executor globals
-    --================================================
+    --------------------------------------------------
 
     if getgenvFn then
-
-        env.getgenv =
-            getgenvFn
+        env.getgenv = getgenvFn
     end
-
 
     if getfenvFn then
-
-        env.getfenv =
-            getfenvFn
+        env.getfenv = getfenvFn
     end
-
 
     if setfenvFn then
-
-        env.setfenv =
-            setfenvFn
+        env.setfenv = setfenvFn
     end
-
 
     if loadstringFn then
-
-        env.loadstring =
-            loadstringFn
+        env.loadstring = loadstringFn
     end
 
 
-    --================================================
-    -- Base environment fallback
-    --================================================
+    --------------------------------------------------
+    -- Global fallback
+    --------------------------------------------------
 
     setmetatable(env, {
 
         __index =
             GLOBAL_ENV
+
     })
 
 
-    --================================================
+    --------------------------------------------------
     -- Custom require
-    --================================================
+    --------------------------------------------------
 
     env.require = function(module)
 
-        -- Already loaded table
         if type(module) == "table" then
-
             return module
         end
 
 
-        -- Loader path
         if type(module) == "string" then
 
             return Loader:Load(module)
+
         end
 
 
-        -- Roblox ModuleScript
         if typeof(module) == "Instance" then
 
             if module:IsA("ModuleScript") then
-
                 return require(module)
             end
+
         end
 
 
@@ -692,9 +678,9 @@ function Loader:Execute(path, source)
         createModuleEnvironment(path)
 
 
-    --================================================
-    -- Apply module environment
-    --================================================
+    --------------------------------------------------
+    -- Module environment
+    --------------------------------------------------
 
     if type(setfenvFn) ~= "function" then
 
@@ -728,9 +714,9 @@ function Loader:Execute(path, source)
     end
 
 
-    --================================================
+    --------------------------------------------------
     -- Execute
-    --================================================
+    --------------------------------------------------
 
     local success, result =
         xpcall(
@@ -835,7 +821,6 @@ function Loader:Load(path, force)
                 local source =
                     self:Fetch(path)
 
-
                 return self:Execute(
                     path,
                     source
@@ -873,7 +858,6 @@ function Loader:Load(path, force)
         State.Failed[path] =
             result
 
-
         error(result)
     end
 
@@ -908,7 +892,6 @@ function Loader:TryLoad(path, force)
 
 
     if success then
-
         return result
     end
 
@@ -936,19 +919,15 @@ function Loader:Unload(path)
         if type(module.Destroy) == "function" then
 
             pcall(function()
-
                 module:Destroy()
-
             end)
-
 
         elseif type(module.Unload) == "function" then
 
             pcall(function()
-
                 module:Unload()
-
             end)
+
         end
     end
 
@@ -964,9 +943,7 @@ end
 function Loader:UnloadAll()
 
     for path in pairs(State.Loaded) do
-
         self:Unload(path)
-
     end
 
 
@@ -982,13 +959,14 @@ function Loader:UnloadAll()
     State.Main =
         nil
 
+
     State.Finished =
         false
 end
 
 
 --//==================================================
---// Core
+--// CORE MODULES
 --//==================================================
 
 local CORE_MODULES = {
@@ -1039,12 +1017,6 @@ function Loader:LoadCore()
 
     for _, info in ipairs(CORE_MODULES) do
 
-        print(
-            "[JustXDoors Loader] Loading Core:",
-            info.Path
-        )
-
-
         local success, module =
             pcall(function()
 
@@ -1067,14 +1039,6 @@ function Loader:LoadCore()
         end
 
 
-        print(
-            "[JustXDoors Loader] Module returned:",
-            info.Name,
-            "type:",
-            type(module)
-        )
-
-
         if module == nil then
 
             error(
@@ -1089,69 +1053,12 @@ function Loader:LoadCore()
 
 
         print(
-            "[JustXDoors Loader] Core assigned:",
+            "[JustXDoors Loader] Core:",
             info.Name,
-            "=",
-            tostring(
-                State.Core[info.Name]
-            ),
             "type:",
-            type(
-                State.Core[info.Name]
-            )
+            type(module)
         )
     end
-
-
-    --================================================
-    -- Final Core verification
-    --================================================
-
-    print(
-        "----------------------------------------"
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.Environment:",
-        type(State.Core.Environment)
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.Services:",
-        type(State.Core.Services)
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.Connections:",
-        type(State.Core.Connections)
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.Config:",
-        type(State.Core.Config)
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.Settings:",
-        type(State.Core.Settings)
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.Notifications:",
-        type(State.Core.Notifications)
-    )
-
-
-    print(
-        "[JustXDoors Loader] Core.UI:",
-        type(State.Core.UI)
-    )
 
 
     if type(State.Core.UI) ~= "table" then
@@ -1163,7 +1070,7 @@ function Loader:LoadCore()
 
 
     print(
-        "========== CORE LOADED SUCCESSFULLY =========="
+        "========== CORE LOADED =========="
     )
 
 
@@ -1172,7 +1079,7 @@ end
 
 
 --//==================================================
---// Features
+--// FEATURES
 --//==================================================
 
 local FEATURE_MODULES = {
@@ -1187,20 +1094,31 @@ function Loader:LoadFeatures()
 
     for _, path in ipairs(FEATURE_MODULES) do
 
-        local module =
-            self:Load(path)
+        local module, err =
+            self:TryLoad(path)
 
 
-        local name =
-            path:match(
-                "([^/]+)%.lua$"
+        if module then
+
+            local name =
+                path:match(
+                    "([^/]+)%.lua$"
+                )
+
+
+            if name then
+                State.Features[name] =
+                    module
+            end
+
+        else
+
+            warn(
+                "[Loader] Feature load failed: "
+                .. path
+                .. "\n"
+                .. tostring(err)
             )
-
-
-        if name then
-
-            State.Features[name] =
-                module
         end
     end
 
@@ -1274,7 +1192,7 @@ end
 
 
 --//==================================================
---// Root Main
+--// ROOT MAIN
 --//==================================================
 
 function Loader:LoadMain()
@@ -1285,16 +1203,42 @@ function Loader:LoadMain()
 
 
     local Main =
-        self:Load("Main", true)
+        self:Load(
+            "Main",
+            true
+        )
+
+
+    if type(Main) ~= "table" then
+
+        error(
+            "[Loader] Root Main returned invalid value."
+        )
+    end
 
 
     State.Main =
         Main
 
 
+    --------------------------------------------------
+    -- IMPORTANT
+    --
+    -- Make root Main available through Core
+    -- BEFORE game modules are initialized.
+    --------------------------------------------------
+
+    State.Core.Main =
+        Main
+
+
     print(
-        "[JustXDoors Loader] Root Main loaded:",
-        type(Main)
+        "[JustXDoors Loader] Core.Main registered."
+    )
+
+
+    print(
+        "[JustXDoors Loader] Root Main loaded."
     )
 
 
@@ -1315,6 +1259,10 @@ function Loader:InitMain()
         )
     end
 
+
+    --------------------------------------------------
+    -- Init
+    --------------------------------------------------
 
     if type(Main.Init) == "function" then
 
@@ -1338,6 +1286,10 @@ function Loader:InitMain()
     end
 
 
+    --------------------------------------------------
+    -- Build
+    --------------------------------------------------
+
     if type(Main.Build) == "function" then
 
         local success, err =
@@ -1356,11 +1308,58 @@ function Loader:InitMain()
             )
         end
     end
+
+
+    --------------------------------------------------
+    -- Verify tabs
+    --------------------------------------------------
+
+    if Main.Tabs then
+
+        local requiredTabs = {
+
+            "Lobby",
+            "Main",
+            "Hotel",
+            "Mines",
+            "Backdoors",
+            "Outdoors",
+            "Archives",
+            "Stairwell"
+        }
+
+
+        for _, tabName in ipairs(requiredTabs) do
+
+            if Main.Tabs[tabName] then
+
+                print(
+                    "[JustXDoors Loader] Tab OK:",
+                    tabName
+                )
+
+            else
+
+                warn(
+                    "[JustXDoors Loader] "
+                    .. "Missing tab: "
+                    .. tabName
+                )
+            end
+        end
+
+    else
+
+        warn(
+            "[JustXDoors Loader] "
+            .. "Root Main.Tabs is missing."
+        )
+    end
 end
 
 
 --//==================================================
---// Game modules
+--// GAME MODULES
 --//==================================================
 
 local GAME_MODULES = {
@@ -1373,13 +1372,58 @@ local GAME_MODULES = {
     {
         Name = "Main",
         Path = "Game/Main/Main"
+    },
+
+    {
+        Name = "Hotel",
+        Path = "Game/Hotel/Main"
+    },
+
+    {
+        Name = "Mines",
+        Path = "Game/Mines/Main"
+    },
+
+    {
+        Name = "Backdoors",
+        Path = "Game/Backdoors/Main"
+    },
+
+    {
+        Name = "Outdoors",
+        Path = "Game/Outdoors/Main"
+    },
+
+    {
+        Name = "Archives",
+        Path = "Game/Archives/Main"
+    },
+
+    {
+        Name = "Stairwell",
+        Path = "Game/Stairwell/Main"
     }
 }
 
 
+--//==================================================
+--// LOAD GAME
+--//==================================================
+
 function Loader:LoadGame()
 
+    print(
+        "========== LOADING GAME =========="
+    )
+
+
     for _, info in ipairs(GAME_MODULES) do
+
+        print(
+            "[JustXDoors Loader] Game:",
+            info.Name
+        )
+
 
         local module, err =
             self:TryLoad(
@@ -1392,10 +1436,17 @@ function Loader:LoadGame()
             State.Game[info.Name] =
                 module
 
+
+            print(
+                "[JustXDoors Loader] Game loaded:",
+                info.Name
+            )
+
         else
 
             warn(
-                "[Loader] Game module failed: "
+                "[JustXDoors Loader] "
+                .. "Game module failed: "
                 .. info.Path
                 .. "\n"
                 .. tostring(err)
@@ -1408,15 +1459,39 @@ function Loader:LoadGame()
 end
 
 
+--//==================================================
+--// INIT GAME
+--//==================================================
+
 function Loader:InitGame()
 
     local Core =
         State.Core
 
 
-    --================================================
+    --------------------------------------------------
+    -- Verify root Main
+    --------------------------------------------------
+
+    if not Core.Main then
+
+        error(
+            "[Loader] Core.Main is missing before Game Init."
+        )
+    end
+
+
+    if not Core.Main.Tabs then
+
+        error(
+            "[Loader] Core.Main.Tabs is missing before Game Init."
+        )
+    end
+
+
+    --------------------------------------------------
     -- Ordered initialization
-    --================================================
+    --------------------------------------------------
 
     for _, info in ipairs(GAME_MODULES) do
 
@@ -1428,12 +1503,17 @@ function Loader:InitGame()
             and type(module.Init) == "function"
         then
 
+            print(
+                "[JustXDoors Loader] Init Game:",
+                info.Name
+            )
+
+
             local success, err =
                 pcall(function()
 
                     module:Init(
-                        Core,
-                        State.Main
+                        Core
                     )
 
                 end)
@@ -1453,11 +1533,15 @@ function Loader:InitGame()
 end
 
 
+--//==================================================
+--// BUILD GAME
+--//==================================================
+
 function Loader:BuildGame()
 
-    --================================================
+    --------------------------------------------------
     -- Build
-    --================================================
+    --------------------------------------------------
 
     for _, info in ipairs(GAME_MODULES) do
 
@@ -1468,6 +1552,12 @@ function Loader:BuildGame()
         if type(module) == "table"
             and type(module.Build) == "function"
         then
+
+            print(
+                "[JustXDoors Loader] Build Game:",
+                info.Name
+            )
+
 
             local success, err =
                 pcall(function()
@@ -1490,9 +1580,9 @@ function Loader:BuildGame()
     end
 
 
-    --================================================
+    --------------------------------------------------
     -- Start
-    --================================================
+    --------------------------------------------------
 
     for _, info in ipairs(GAME_MODULES) do
 
@@ -1503,6 +1593,12 @@ function Loader:BuildGame()
         if type(module) == "table"
             and type(module.Start) == "function"
         then
+
+            print(
+                "[JustXDoors Loader] Start Game:",
+                info.Name
+            )
+
 
             local success, err =
                 pcall(function()
@@ -1527,7 +1623,7 @@ end
 
 
 --//==================================================
---// Global API
+--// GLOBAL API
 --//==================================================
 
 function Loader:CreateGlobal()
@@ -1584,7 +1680,7 @@ end
 
 
 --//==================================================
---// Start
+--// START
 --//==================================================
 
 function Loader:Start()
@@ -1613,30 +1709,27 @@ function Loader:Start()
     )
 
 
-    --================================================
-    -- 1. Core
-    --================================================
+    --------------------------------------------------
+    -- 1. CORE
+    --------------------------------------------------
 
     self:LoadCore()
 
 
-    --================================================
-    -- 2. Root coordinator
-    --================================================
+    --------------------------------------------------
+    -- 2. ROOT MAIN
+    --
+    -- Creates the UI and ALL tabs.
+    --------------------------------------------------
 
     self:LoadMain()
-
-
-    --================================================
-    -- 3. Root UI
-    --================================================
 
     self:InitMain()
 
 
-    --================================================
-    -- 4. Features
-    --================================================
+    --------------------------------------------------
+    -- 3. FEATURES
+    --------------------------------------------------
 
     self:LoadFeatures()
 
@@ -1645,9 +1738,9 @@ function Loader:Start()
     self:BuildFeatures()
 
 
-    --================================================
-    -- 5. Game
-    --================================================
+    --------------------------------------------------
+    -- 4. GAME
+    --------------------------------------------------
 
     self:LoadGame()
 
@@ -1656,9 +1749,9 @@ function Loader:Start()
     self:BuildGame()
 
 
-    --================================================
-    -- 6. Global API
-    --================================================
+    --------------------------------------------------
+    -- 5. GLOBAL
+    --------------------------------------------------
 
     local global =
         self:CreateGlobal()
@@ -1677,6 +1770,11 @@ function Loader:Start()
     )
 
     print(
+        "[JustXDoors Loader] Version:",
+        self.Version
+    )
+
+    print(
         "========================================"
     )
 
@@ -1686,7 +1784,7 @@ end
 
 
 --//==================================================
---// State API
+--// PUBLIC API
 --//==================================================
 
 function Loader:IsLoaded(path)
@@ -1717,7 +1815,7 @@ end
 
 
 --//==================================================
---// Auto Start
+--// AUTO START
 --//==================================================
 
 local success, result =
