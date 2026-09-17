@@ -1,10 +1,18 @@
 local Lobby = {}
 
+------------------------------------------------------
+-- CORE
+------------------------------------------------------
+
 local Core
 local Services
 local Connections
 local UI
 local Notifications
+
+------------------------------------------------------
+-- STATE
+------------------------------------------------------
 
 local Tab
 local Groups = {}
@@ -12,6 +20,7 @@ local Elements = {}
 
 local Initialized = false
 local Built = false
+local Connected = false
 
 local RemotesFolder
 local LocalPlayer
@@ -120,28 +129,99 @@ local CODES = {
 }
 
 ------------------------------------------------------
--- NOTIFY
+-- NOTIFICATIONS
 ------------------------------------------------------
 
-local function notify(
-    title,
-    description,
-    duration
-)
-
+local function notify(title, description, duration)
     if not Notifications then
         return
     end
 
     pcall(function()
-
         Notifications:Info(
             title,
             description,
             duration or 5
         )
-
     end)
+end
+
+------------------------------------------------------
+-- REMOTE HELPERS
+------------------------------------------------------
+
+local function getRemote(name)
+    if not RemotesFolder then
+        return nil
+    end
+
+    return RemotesFolder:FindFirstChild(name)
+end
+
+local function fireRemote(name, ...)
+    local remote = getRemote(name)
+
+    if not remote then
+        return false
+    end
+
+    local success = pcall(function()
+        remote:FireServer(...)
+    end)
+
+    return success
+end
+
+------------------------------------------------------
+-- PLAYER / GUI HELPERS
+------------------------------------------------------
+
+local function getPlayerGui()
+    if not LocalPlayer then
+        return nil
+    end
+
+    return LocalPlayer:FindFirstChild("PlayerGui")
+end
+
+local function getMainUI()
+    local playerGui = getPlayerGui()
+
+    if not playerGui then
+        return nil
+    end
+
+    return playerGui:FindFirstChild("MainUI")
+end
+
+local function getLobbyFrame()
+    local mainUI = getMainUI()
+
+    if not mainUI then
+        return nil
+    end
+
+    return mainUI:FindFirstChild("LobbyFrame")
+end
+
+local function getAchievements()
+    local lobbyFrame = getLobbyFrame()
+
+    if not lobbyFrame then
+        return nil
+    end
+
+    return lobbyFrame:FindFirstChild("Achievements")
+end
+
+local function getAchievementContainer()
+    local achievements = getAchievements()
+
+    if not achievements then
+        return nil
+    end
+
+    return achievements:FindFirstChild("List")
 end
 
 ------------------------------------------------------
@@ -149,84 +229,62 @@ end
 ------------------------------------------------------
 
 local function getSelectedTarget()
-
-    local dropdown =
-        Elements.AutoJoinElevatorTarget
+    local dropdown = Elements.AutoJoinElevatorTarget
 
     if not dropdown then
         return nil
     end
 
-    local value =
-        dropdown.Value
+    local value = dropdown.Value
 
     if not value then
         return nil
     end
 
     if typeof(value) == "Instance" then
+        if value:IsA("Player") then
+            return value
+        end
 
-        return value
-
+        return nil
     end
 
     if type(value) == "string" then
-
-        return Services.Players:
-            FindFirstChild(value)
-
+        return Services.Players:FindFirstChild(value)
     end
 
     return nil
 end
 
 local function checkElevators()
+    local toggle = Elements.AutoJoinElevator
 
-    local toggle =
-        Elements.AutoJoinElevator
-
-    if not toggle
-        or toggle.Value ~= true
-    then
-
+    if not toggle or toggle.Value ~= true then
         return
     end
 
-    local targetPlayer =
-        getSelectedTarget()
+    local targetPlayer = getSelectedTarget()
 
     if not targetPlayer then
-
-        pcall(function()
-
-            RemotesFolder
-                .ElevatorExit
-                :FireServer()
-
-        end)
-
+        fireRemote("ElevatorExit")
         return
     end
 
-    local targetCharacter =
-        targetPlayer.Character
+    local targetCharacter = targetPlayer.Character
 
     if not targetCharacter then
         return
     end
 
     local lobby =
-        Services.Workspace:
-            FindFirstChild("Lobby")
+        Services.Workspace:FindFirstChild("Lobby")
 
     if not lobby then
         return
     end
 
     local elevators =
-        lobby:FindFirstChild(
-            "LobbyElevators"
-        )
+        lobby:FindFirstChild("LobbyElevators")
 
     if not elevators then
         return
@@ -237,45 +295,34 @@ local function checkElevators()
             "InGameElevator"
         )
 
+    if not targetElevatorId then
+        fireRemote("ElevatorExit")
+        return
+    end
+
     local found = false
 
-    if targetElevatorId then
+    for _, elevator in ipairs(
+        elevators:GetChildren()
+    ) do
 
-        for _, elevator in ipairs(
-            elevators:GetChildren()
-        ) do
+        if elevator:GetAttribute("ID")
+            == targetElevatorId
+        then
 
-            if elevator:GetAttribute("ID")
-                == targetElevatorId
-            then
+            found = true
 
-                found = true
+            fireRemote(
+                "ElevatorJoin",
+                elevator
+            )
 
-                pcall(function()
-
-                    RemotesFolder
-                        .ElevatorJoin
-                        :FireServer(
-                            elevator
-                        )
-
-                end)
-
-                break
-            end
+            break
         end
     end
 
     if not found then
-
-        pcall(function()
-
-            RemotesFolder
-                .ElevatorExit
-                :FireServer()
-
-        end)
-
+        fireRemote("ElevatorExit")
     end
 end
 
@@ -284,49 +331,9 @@ end
 ------------------------------------------------------
 
 local function getAchievementList()
-
     local result = {}
 
-    local playerGui =
-        LocalPlayer:FindFirstChild(
-            "PlayerGui"
-        )
-
-    if not playerGui then
-        return result
-    end
-
-    local mainUI =
-        playerGui:FindFirstChild(
-            "MainUI"
-        )
-
-    if not mainUI then
-        return result
-    end
-
-    local lobbyFrame =
-        mainUI:FindFirstChild(
-            "LobbyFrame"
-        )
-
-    if not lobbyFrame then
-        return result
-    end
-
-    local achievements =
-        lobbyFrame:FindFirstChild(
-            "Achievements"
-        )
-
-    if not achievements then
-        return result
-    end
-
-    local list =
-        achievements:FindFirstChild(
-            "List"
-        )
+    local list = getAchievementContainer()
 
     if not list then
         return result
@@ -344,7 +351,6 @@ local function getAchievementList()
                 result,
                 frame.Name
             )
-
         end
     end
 
@@ -352,67 +358,39 @@ local function getAchievementList()
 end
 
 local function updateAchievements()
-
     UnlockedBadges =
         getAchievementList()
 end
 
-local function flexAchievement(
-    badgeName
+local function setBadgeStar(
+    frame,
+    visible
 )
-
-    if not badgeName then
-        return false
+    if not frame then
+        return
     end
 
-    local playerGui =
-        LocalPlayer:FindFirstChild(
-            "PlayerGui"
-        )
+    local icons =
+        frame:FindFirstChild("Icons")
 
-    if not playerGui then
-        return false
+    if not icons then
+        return
     end
 
-    local mainUI =
-        playerGui:FindFirstChild(
-            "MainUI"
-        )
+    local star =
+        icons:FindFirstChild("Star")
 
-    if not mainUI then
-        return false
+    if star then
+        star.Visible = visible
     end
+end
 
-    local lobbyFrame =
-        mainUI:FindFirstChild(
-            "LobbyFrame"
-        )
-
-    if not lobbyFrame then
-        return false
-    end
-
-    local achievements =
-        lobbyFrame:FindFirstChild(
-            "Achievements"
-        )
-
-    if not achievements then
-        return false
-    end
-
-    local list =
-        achievements:FindFirstChild(
-            "List"
-        )
+local function hideCurrentStars()
+    local list = getAchievementContainer()
 
     if not list then
-        return false
+        return
     end
-
-    --------------------------------------------------
-    -- HIDE CURRENT STARS
-    --------------------------------------------------
 
     for _, frame in ipairs(
         list:GetChildren()
@@ -422,46 +400,46 @@ local function flexAchievement(
             and frame.ImageTransparency == 0
         then
 
-            local icons =
-                frame:FindFirstChild(
-                    "Icons"
-                )
-
-            if icons then
-
-                local star =
-                    icons:FindFirstChild(
-                        "Star"
-                    )
-
-                if star then
-                    star.Visible = false
-                end
-
-            end
+            setBadgeStar(
+                frame,
+                false
+            )
         end
     end
+end
+
+local function flexAchievement(
+    badgeName
+)
+    if not badgeName then
+        return false
+    end
+
+    local list = getAchievementContainer()
+
+    if not list then
+        return false
+    end
+
+    --------------------------------------------------
+    -- HIDE CURRENT STARS
+    --------------------------------------------------
+
+    hideCurrentStars()
 
     --------------------------------------------------
     -- REMOTE
     --------------------------------------------------
 
     local remote =
-        RemotesFolder:
-            FindFirstChild(
-                "FlexAchievement"
-            )
+        getRemote("FlexAchievement")
 
     if remote then
-
         pcall(function()
-
             remote:FireServer(
                 badgeName
             )
-
         end)
-
     end
 
     --------------------------------------------------
@@ -469,29 +447,13 @@ local function flexAchievement(
     --------------------------------------------------
 
     local selected =
-        list:FindFirstChild(
-            badgeName
-        )
+        list:FindFirstChild(badgeName)
 
     if selected then
-
-        local icons =
-            selected:FindFirstChild(
-                "Icons"
-            )
-
-        if icons then
-
-            local star =
-                icons:FindFirstChild(
-                    "Star"
-                )
-
-            if star then
-                star.Visible = true
-            end
-
-        end
+        setBadgeStar(
+            selected,
+            true
+        )
     end
 
     PreviousBadge =
@@ -505,19 +467,14 @@ end
 ------------------------------------------------------
 
 local function redeemAllCodes()
-
     if RedeemingCodes then
         return
     end
 
     local remote =
-        RemotesFolder:
-            FindFirstChild(
-                "ShopCode"
-            )
+        getRemote("ShopCode")
 
     if not remote then
-
         notify(
             "Lobby",
             "ShopCode remote was not found."
@@ -536,19 +493,15 @@ local function redeemAllCodes()
     )
 
     task.spawn(function()
-
         for _, code in ipairs(CODES) do
 
             pcall(function()
-
                 remote:FireServer(
                     code
                 )
-
             end)
 
             task.wait(5.1)
-
         end
 
         RedeemingCodes = false
@@ -557,7 +510,6 @@ local function redeemAllCodes()
             "Redeeming Codes",
             "Finished redeeming codes."
         )
-
     end)
 end
 
@@ -569,15 +521,10 @@ local function createElevator(
     destination,
     mods
 )
-
     local remote =
-        RemotesFolder:
-            FindFirstChild(
-                "CreateElevator"
-            )
+        getRemote("CreateElevator")
 
     if not remote then
-
         notify(
             "Lobby",
             "CreateElevator remote was not found."
@@ -596,22 +543,19 @@ local function createElevator(
 
     local success =
         pcall(function()
-
             remote:FireServer(
                 data
             )
-
         end)
 
     return success
 end
 
 ------------------------------------------------------
--- BUILD QUICK PLAY
+-- QUICK PLAY UI
 ------------------------------------------------------
 
 local function buildQuickPlay()
-
     local group =
         UI:AddRightGroupbox(
             Tab,
@@ -634,36 +578,25 @@ local function buildQuickPlay()
             group,
             entry.Text,
             function()
-
                 createElevator(
                     entry.Destination
                 )
-
             end
         )
-
     end
 
-    UI:AddDivider(
-        group
-    )
-
-    --------------------------------------------------
-    -- FREE / NO PROGRESS
-    --------------------------------------------------
+    UI:AddDivider(group)
 
     UI:AddButton(
         group,
         "The Rooms [Free, No Progress]",
         function()
-
             createElevator(
                 "Rooms",
                 {
                     "AdminPanel"
                 }
             )
-
         end
     )
 
@@ -671,24 +604,21 @@ local function buildQuickPlay()
         group,
         "The Outdoors [Free, No Progress]",
         function()
-
             createElevator(
                 "Garden",
                 {
                     "AdminPanel"
                 }
             )
-
         end
     )
 end
 
 ------------------------------------------------------
--- BUILD SELF
+-- SELF UI
 ------------------------------------------------------
 
 local function buildSelf()
-
     local group =
         UI:AddLeftGroupbox(
             Tab,
@@ -708,8 +638,7 @@ local function buildSelf()
             group,
             "AutoJoinElevator",
             {
-                Text =
-                    "Auto Join Elevator",
+                Text = "Auto Join Elevator",
 
                 Default = false,
 
@@ -735,11 +664,10 @@ local function buildSelf()
 end
 
 ------------------------------------------------------
--- BUILD AUTOMATION
+-- AUTOMATION UI
 ------------------------------------------------------
 
 local function buildAutomation()
-
     local group =
         UI:AddLeftGroupbox(
             Tab,
@@ -789,17 +717,13 @@ local function buildAutomation()
             }
         )
 
-    UI:AddDivider(
-        group
-    )
+    UI:AddDivider(group)
 
     UI:AddButton(
         group,
         "Redeem All Codes",
         function()
-
             redeemAllCodes()
-
         end
     )
 end
@@ -809,9 +733,12 @@ end
 ------------------------------------------------------
 
 function Lobby:Build()
-
     if Built then
         return true
+    end
+
+    if not Initialized then
+        return false
     end
 
     if not UI then
@@ -847,10 +774,6 @@ function Lobby:Build()
 
     updateAchievements()
 
-    --------------------------------------------------
-    -- STATE
-    --------------------------------------------------
-
     LastBadgeChange =
         os.clock()
 
@@ -867,31 +790,45 @@ end
 ------------------------------------------------------
 
 function Lobby:Connect()
-
-    if not Connections then
+    if Connected then
         return
     end
 
+    if not Connections
+        or not Services
+        or not LocalPlayer
+    then
+        return
+    end
+
+    Connected = true
+
     --------------------------------------------------
-    -- ACHIEVEMENT ADDED
+    -- ACHIEVEMENT LIST
     --------------------------------------------------
 
-    Connections:Connect(
-        LocalPlayer
-            .PlayerGui
-            .MainUI
-            .LobbyFrame
-            .Achievements
-            .List
-            .ChildAdded,
+    local list =
+        getAchievementContainer()
 
-        function(frame)
+    if list then
 
-            task.defer(function()
+        Connections:Connect(
+            list.ChildAdded,
 
-                if frame:IsA("ImageButton")
-                    and frame.ImageTransparency == 0
-                then
+            function(frame)
+                task.defer(function()
+
+                    if not frame:IsA(
+                        "ImageButton"
+                    ) then
+                        return
+                    end
+
+                    if frame.ImageTransparency
+                        ~= 0
+                    then
+                        return
+                    end
 
                     if not table.find(
                         UnlockedBadges,
@@ -902,16 +839,13 @@ function Lobby:Connect()
                             UnlockedBadges,
                             frame.Name
                         )
-
                     end
-                end
+                end)
+            end,
 
-            end)
-
-        end,
-
-        "Lobby"
-    )
+            "Lobby"
+        )
+    end
 
     --------------------------------------------------
     -- HEARTBEAT
@@ -921,7 +855,6 @@ function Lobby:Connect()
         Services.RunService.Heartbeat,
 
         function()
-
             local now =
                 os.clock()
 
@@ -937,7 +870,6 @@ function Lobby:Connect()
 
                 LastElevatorCheck =
                     now
-
             end
 
             --------------------------------------------------
@@ -953,7 +885,6 @@ function Lobby:Connect()
             if not cycle
                 or not delaySlider
             then
-
                 return
             end
 
@@ -964,12 +895,11 @@ function Lobby:Connect()
             if now - LastBadgeChange
                 <= delaySlider.Value
             then
-
                 return
             end
 
             --------------------------------------------------
-            -- EMPTY LIST
+            -- REFRESH BADGES
             --------------------------------------------------
 
             if #UnlockedBadges == 0 then
@@ -1023,15 +953,17 @@ function Lobby:Connect()
                 end
             end
 
+            --------------------------------------------------
+            -- FLEX
+            --------------------------------------------------
+
             if flexAchievement(
                 badge
             ) then
 
                 LastBadgeChange =
                     now
-
             end
-
         end,
 
         "Lobby"
@@ -1042,8 +974,10 @@ end
 -- INIT
 ------------------------------------------------------
 
-function Lobby:Init(core)
-
+function Lobby:Init(
+    core,
+    Main
+)
     if Initialized then
         return self
     end
@@ -1081,33 +1015,47 @@ function Lobby:Init(core)
     local replicatedStorage =
         Services.ReplicatedStorage
 
+    if not replicatedStorage then
+        return self
+    end
+
     RemotesFolder =
-        replicatedStorage:
-            WaitForChild(
-                "RemotesFolder"
-            )
+        replicatedStorage:WaitForChild(
+            "RemotesFolder"
+        )
 
     --------------------------------------------------
-    -- BUILD
+    -- INIT COMPLETE
     --------------------------------------------------
 
-    self:Build()
+    Initialized = true
 
-    --------------------------------------------------
-    -- CONNECTIONS
-    --------------------------------------------------
+    return self
+end
+
+------------------------------------------------------
+-- START
+------------------------------------------------------
+
+function Lobby:Start()
+    if not Initialized then
+        return false
+    end
+
+    if not Built then
+        if not self:Build() then
+            return false
+        end
+    end
 
     self:Connect()
-
-    Initialized =
-        true
 
     notify(
         "Lobby",
         "Lobby features loaded."
     )
 
-    return self
+    return true
 end
 
 ------------------------------------------------------
@@ -1115,13 +1063,10 @@ end
 ------------------------------------------------------
 
 function Lobby:Destroy()
-
     if Connections then
-
         Connections:DisconnectGroup(
             "Lobby"
         )
-
     end
 
     Groups = {}
@@ -1130,9 +1075,25 @@ function Lobby:Destroy()
 
     Tab = nil
 
+    RemotesFolder = nil
+    LocalPlayer = nil
+
+    PreviousBadge = nil
+
+    RedeemingCodes = false
+
+    LastBadgeChange = 0
+    LastElevatorCheck = 0
+
     Initialized = false
     Built = false
+    Connected = false
 
+    Core = nil
+    Services = nil
+    Connections = nil
+    UI = nil
+    Notifications = nil
 end
 
 return Lobby
