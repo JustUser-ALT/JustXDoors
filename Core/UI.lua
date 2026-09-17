@@ -2,95 +2,448 @@
     JustXDoors
     Core/UI.lua
 
-    UI adapter for Obsidian
-    Version: 2.1.0
+    Obsidian UI adapter
+    Version: 3.0.0
+
+    This module is intentionally independent from Environment.lua
+    for loading external UI libraries.
 ]]
 
 local UI = {}
 
---//==================================================
---// Dependencies
---//==================================================
-
-local Environment =
-    require("Core/Environment")
-
-local Settings =
-    require("Core/Settings")
-
-local Notifications =
-    require("Core/Notifications")
-
-
---//==================================================
---// Loadstring
---//==================================================
-
-local loadstringFn =
-    Environment:Get("loadstring")
-
--- Loader injects loadstring into the module environment.
-if type(loadstringFn) ~= "function" then
-    pcall(function()
-        loadstringFn = loadstring
-    end)
-end
-
-
---//==================================================
---// State
---//==================================================
-
-local Library = nil
-local Window = nil
+UI.Version = "3.0.0"
+UI.LibraryURL =
+    "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua"
 
 UI.Library = nil
 UI.Window = nil
+UI.Loaded = false
+UI.Unloaded = false
+UI.LoadError = nil
 
-UI.Tabs = {}
-UI.Groups = {}
-UI.Elements = {}
-
-
---//==================================================
---// Obsidian
---//==================================================
-
-local OBSIDIAN_URL =
-    "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua"
+local Environment
+local Settings
+local Notifications
 
 
 --//==================================================
---// Logging
+--// Safe utilities
 --//==================================================
+
+local function safeToString(value)
+    local success, result = pcall(function()
+        return tostring(value)
+    end)
+
+    if success then
+        return result
+    end
+
+    return "<tostring failed>"
+end
+
+
+local function traceError(err)
+    local message = safeToString(err)
+
+    pcall(function()
+        if debug and debug.traceback then
+            message = message .. "\n" .. debug.traceback()
+        end
+    end)
+
+    return message
+end
+
 
 local function log(...)
-    print(
-        "[JustXDoors UI]",
-        ...
-    )
+    print("[JustXDoors UI]", ...)
 end
 
 
 local function warnLog(...)
-    warn(
-        "[JustXDoors UI]",
-        ...
+    warn("[JustXDoors UI]", ...)
+end
+
+
+--//==================================================
+--// Load core references
+--//==================================================
+
+function UI:Init(core)
+
+    core = core or {}
+
+    Environment = core.Environment
+    Settings = core.Settings
+    Notifications = core.Notifications
+
+    log("Init()")
+    log("Environment:", typeof(Environment))
+    log("Settings:", typeof(Settings))
+    log("Notifications:", typeof(Notifications))
+
+    return self
+end
+
+
+--//==================================================
+--// Resolve loadstring
+--//==================================================
+
+local function resolveLoadstring()
+
+    -- 1. Current environment
+    local fn = nil
+
+    pcall(function()
+        fn = loadstring
+    end)
+
+    if type(fn) == "function" then
+        return fn, "module environment"
+    end
+
+
+    -- 2. getgenv()
+    pcall(function()
+
+        if type(getgenv) == "function" then
+
+            local genv = getgenv()
+
+            if type(genv) == "table"
+                and type(genv.loadstring) == "function"
+            then
+                fn = genv.loadstring
+            end
+        end
+
+    end)
+
+    if type(fn) == "function" then
+        return fn, "getgenv"
+    end
+
+
+    -- 3. _G
+    pcall(function()
+
+        if type(_G) == "table"
+            and type(_G.loadstring) == "function"
+        then
+            fn = _G.loadstring
+        end
+
+    end)
+
+    if type(fn) == "function" then
+        return fn, "_G"
+    end
+
+
+    -- 4. Environment module
+    if Environment
+        and type(Environment.Get) == "function"
+    then
+
+        pcall(function()
+
+            fn = Environment:Get("loadstring")
+
+        end)
+
+        if type(fn) == "function" then
+            return fn, "Environment:Get"
+        end
+    end
+
+
+    return nil, "loadstring not found"
+end
+
+
+--//==================================================
+--// HTTP
+--//==================================================
+
+local function httpGet(url)
+
+    local errors = {}
+
+
+    --================================================
+    -- Roblox HttpGet
+    --================================================
+
+    local success, result = pcall(function()
+
+        return game:HttpGet(url)
+
+    end)
+
+    if success
+        and type(result) == "string"
+        and result ~= ""
+    then
+
+        return result
+
+    end
+
+    if not success then
+        table.insert(
+            errors,
+            "game:HttpGet: " .. safeToString(result)
+        )
+    else
+        table.insert(
+            errors,
+            "game:HttpGet returned empty source"
+        )
+    end
+
+
+    --================================================
+    -- Executor request
+    --================================================
+
+    local requestFunctions = {
+        "request",
+        "http_request",
+        "syn_request"
+    }
+
+    for _, name in ipairs(requestFunctions) do
+
+        local requestFn = nil
+
+        pcall(function()
+
+            requestFn = _G[name]
+
+        end)
+
+        if type(requestFn) ~= "function" then
+
+            pcall(function()
+
+                if type(getgenv) == "function" then
+
+                    local genv = getgenv()
+
+                    if type(genv) == "table" then
+                        requestFn = genv[name]
+                    end
+
+                end
+
+            end)
+
+        end
+
+
+        if type(requestFn) == "function" then
+
+            local requestSuccess, response =
+                pcall(function()
+
+                    return requestFn({
+                        Url = url,
+                        Method = "GET"
+                    })
+
+                end)
+
+
+            if requestSuccess
+                and type(response) == "table"
+            then
+
+                local status =
+                    response.StatusCode
+                    or response.Status
+                    or response.status
+
+
+                local body =
+                    response.Body
+                    or response.body
+
+
+                if type(body) == "string"
+                    and body ~= ""
+                then
+
+                    if status
+                        and tonumber(status)
+                        and tonumber(status) >= 400
+                    then
+
+                        table.insert(
+                            errors,
+                            name
+                                .. " HTTP status "
+                                .. safeToString(status)
+                        )
+
+                    else
+
+                        return body
+
+                    end
+
+                else
+
+                    table.insert(
+                        errors,
+                        name .. " returned empty body"
+                    )
+
+                end
+
+            elseif not requestSuccess then
+
+                table.insert(
+                    errors,
+                    name
+                        .. ": "
+                        .. safeToString(response)
+                )
+
+            end
+        end
+    end
+
+
+    error(
+        "Unable to download Obsidian.\n\n"
+        .. "URL:\n"
+        .. url
+        .. "\n\n"
+        .. table.concat(errors, "\n")
     )
 end
 
 
 --//==================================================
---// Safe notification
+--// Compile external source
 --//==================================================
 
-local function notifyError(title, text)
-    pcall(function()
-        Notifications:Error(
-            title,
-            text
+local function compileSource(source, chunkName)
+
+    local loadFn, sourceName =
+        resolveLoadstring()
+
+
+    if type(loadFn) ~= "function" then
+
+        error(
+            "loadstring is unavailable.\n"
+            .. "Resolver: "
+            .. safeToString(sourceName)
         )
-    end)
+
+    end
+
+
+    log(
+        "Using loadstring from:",
+        sourceName
+    )
+
+
+    local success, fn, compileError =
+        pcall(function()
+
+            return loadFn(
+                source,
+                chunkName
+            )
+
+        end)
+
+
+    if not success then
+
+        error(
+            "loadstring call failed:\n"
+            .. safeToString(fn)
+        )
+
+    end
+
+
+    if type(fn) ~= "function" then
+
+        error(
+            "Obsidian source compilation failed:\n"
+            .. safeToString(compileError)
+        )
+
+    end
+
+
+    return fn
+end
+
+
+--//==================================================
+--// Execute external library
+--//==================================================
+
+local function executeSource(source)
+
+    local chunk =
+        compileSource(
+            source,
+            "@JustXDoors/Obsidian"
+        )
+
+
+    local success, result =
+        xpcall(
+            function()
+                return chunk()
+            end,
+            function(err)
+                return traceError(err)
+            end
+        )
+
+
+    if not success then
+
+        error(
+            "Obsidian runtime error:\n"
+            .. safeToString(result)
+        )
+
+    end
+
+
+    if result == nil then
+
+        error(
+            "Obsidian Library.lua executed successfully "
+            .. "but returned nil."
+        )
+
+    end
+
+
+    if type(result) ~= "table" then
+
+        error(
+            "Obsidian Library.lua returned "
+            .. type(result)
+            .. " instead of table."
+        )
+
+    end
+
+
+    return result
 end
 
 
@@ -98,299 +451,118 @@ end
 --// Load Obsidian
 --//==================================================
 
-local function loadLibrary()
-
-    log("===== OBSIDIAN LOAD START =====")
-
-    --================================================
-    -- loadstring
-    --================================================
-
-    log(
-        "loadstring type:",
-        type(loadstringFn)
-    )
-
-    if type(loadstringFn) ~= "function" then
-
-        return nil,
-            "loadstring is unavailable"
-
-    end
-
-
-    --================================================
-    -- HTTP
-    --================================================
-
-    log(
-        "Downloading Obsidian:",
-        OBSIDIAN_URL
-    )
-
-    local httpSuccess
-    local source
-
-    httpSuccess, source =
-        pcall(function()
-
-            return game:HttpGet(
-                OBSIDIAN_URL
-            )
-
-        end)
-
-
-    if not httpSuccess then
-
-        return nil,
-            "game:HttpGet failed:\n"
-            .. tostring(source)
-
-    end
-
-
-    if type(source) ~= "string" then
-
-        return nil,
-            "Obsidian HTTP response is not a string.\n"
-            .. "Type: "
-            .. tostring(type(source))
-
-    end
-
-
-    if source == "" then
-
-        return nil,
-            "Obsidian returned an empty source."
-
-    end
-
-
-    log(
-        "Obsidian downloaded:",
-        #source,
-        "bytes"
-    )
-
-
-    --================================================
-    -- Compile
-    --================================================
-
-    log(
-        "Compiling Obsidian..."
-    )
-
-    local compileSuccess
-    local chunk
-    local compileError
-
-    compileSuccess,
-    chunk,
-    compileError =
-        pcall(function()
-
-            return loadstringFn(
-                source,
-                "@JustXDoors/Obsidian/Library.lua"
-            )
-
-        end)
-
-
-    if not compileSuccess then
-
-        return nil,
-            "Obsidian loadstring crashed:\n"
-            .. tostring(chunk)
-
-    end
-
-
-    if type(chunk) ~= "function" then
-
-        return nil,
-            "Obsidian compilation failed:\n"
-            .. tostring(compileError)
-
-    end
-
-
-    log(
-        "Obsidian compiled successfully."
-    )
-
-
-    --================================================
-    -- Execute
-    --================================================
-
-    log(
-        "Executing Obsidian..."
-    )
-
-    local executeSuccess
-    local library
-
-    executeSuccess,
-    library =
-        pcall(function()
-
-            return chunk()
-
-        end)
-
-
-    if not executeSuccess then
-
-        return nil,
-            "Obsidian execution failed:\n"
-            .. tostring(library)
-
-    end
-
-
-    if library == nil then
-
-        return nil,
-            "Obsidian returned nil."
-
-    end
-
-
-    if type(library) ~= "table" then
-
-        return nil,
-            "Obsidian returned invalid type: "
-            .. tostring(type(library))
-
-    end
-
-
-    log(
-        "Obsidian Library created successfully."
-    )
-
-    log(
-        "===== OBSIDIAN LOAD SUCCESS ====="
-    )
-
-
-    return library
-end
-
-
---//==================================================
---// Load UI library
---//==================================================
-
 function UI:Load()
 
-    if Library then
-        return Library
+    if self.Library then
+
+        log("Library already loaded.")
+
+        return self.Library
     end
 
 
-    log(
-        "===== UI LOAD START ====="
-    )
+    log("========================================")
+    log("Obsidian loading started")
+    log("URL:", self.LibraryURL)
+    log("========================================")
 
 
-    --================================================
-    -- IMPORTANT:
-    -- pcall may return:
-    --
-    -- success, library
-    --
-    -- OR
-    --
-    -- success, nil, errorMessage
-    --
-    -- We MUST capture all results.
-    --================================================
-
-    local success
-    local result
-    local loadError
-
-    success,
-    result,
-    loadError =
-        pcall(function()
-
-            return loadLibrary()
-
-        end)
+    self.LoadError = nil
 
 
-    log(
-        "loadLibrary pcall:",
-        success
-    )
+    local success, result =
+        xpcall(
+            function()
 
-    log(
-        "Library result type:",
-        type(result)
-    )
-
-    log(
-        "Library error:",
-        tostring(loadError)
-    )
+                local source =
+                    httpGet(
+                        self.LibraryURL
+                    )
 
 
-    --================================================
-    -- Hard crash
-    --================================================
+                log(
+                    "Obsidian source downloaded.",
+                    "bytes:",
+                    #source
+                )
+
+
+                if #source < 100 then
+
+                    error(
+                        "Downloaded Obsidian source is suspiciously small."
+                    )
+
+                end
+
+
+                -- Detect common HTTP error pages
+                local firstPart =
+                    source:sub(1, 500):lower()
+
+
+                if firstPart:find("<html")
+                    or firstPart:find("404")
+                    or firstPart:find("not found")
+                then
+
+                    warnLog(
+                        "Downloaded source looks like an HTTP error page."
+                    )
+
+                end
+
+
+                local library =
+                    executeSource(
+                        source
+                    )
+
+
+                if type(library.CreateWindow) ~= "function" then
+
+                    error(
+                        "Obsidian Library loaded, "
+                        .. "but CreateWindow is missing."
+                    )
+
+                end
+
+
+                log(
+                    "Obsidian loaded successfully."
+                )
+
+                log(
+                    "CreateWindow:",
+                    type(library.CreateWindow)
+                )
+
+
+                return library
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
 
     if not success then
 
-        warnLog(
-            "loadLibrary crashed:"
-        )
-
-        warnLog(
-            tostring(result)
-        )
-
-        notifyError(
-            "JustXDoors",
-            "Obsidian crashed while loading.\n"
-            .. tostring(result)
-        )
-
-        return nil
-    end
-
-
-    --================================================
-    -- Normal failure
-    --================================================
-
-    if not result then
-
-        local reason =
-            tostring(
-                loadError
-                or "Unknown Obsidian loading error"
-            )
+        self.LoadError =
+            safeToString(result)
 
 
         warnLog(
-            "Obsidian failed to load:"
+            "FAILED TO LOAD OBSIDIAN"
         )
 
         warnLog(
-            reason
-        )
-
-
-        notifyError(
-            "JustXDoors",
-            "Failed to load Obsidian.\n"
-            .. reason
+            self.LoadError
         )
 
 
@@ -398,132 +570,48 @@ function UI:Load()
     end
 
 
-    --================================================
-    -- Validate
-    --================================================
+    self.Library = result
+    self.Loaded = true
 
-    if type(result) ~= "table" then
 
-        warnLog(
-            "Obsidian returned invalid type:",
-            type(result)
-        )
+    -- Pass library to notification system
+    if Notifications
+        and type(Notifications.SetLibrary) == "function"
+    then
 
-        notifyError(
-            "JustXDoors",
-            "Obsidian returned invalid library type."
-        )
+        pcall(function()
 
-        return nil
+            Notifications:SetLibrary(
+                self.Library
+            )
+
+        end)
+
     end
 
 
-    --================================================
-    -- Save
-    --================================================
-
-    Library =
-        result
-
-    self.Library =
-        Library
-
-
-    --================================================
-    -- Notifications
-    --================================================
-
-    pcall(function()
-
-        Notifications:SetLibrary(
-            Library
-        )
-
-    end)
-
-
-    --================================================
-    -- Obsidian settings
-    --================================================
-
-    pcall(function()
-
-        Library.ForceCheckbox =
-            false
-
-    end)
-
-
-    pcall(function()
-
-        Library.ShowToggleFrameInKeybinds =
-            true
-
-    end)
-
-
-    pcall(function()
-
-        Library.ShowCustomCursor =
-            Settings:Get(
-                "UI.ShowCustomCursor"
-            )
-
-    end)
-
-
-    pcall(function()
-
-        Library.NotifyOnError =
-            true
-
-    end)
-
-
-    pcall(function()
-
-        Library:SetNotifySide(
-            Settings:Get(
-                "Notifications.Side"
-            )
-        )
-
-    end)
-
-
-    log(
-        "===== UI LOAD SUCCESS ====="
-    )
-
-
-    return Library
+    return self.Library
 end
 
 
 --//==================================================
---// Create Window
+--// Create window
 --//==================================================
 
 function UI:Create()
 
-    log(
-        "Create() started"
-    )
+    log("Create() started.")
 
 
-    if Window then
+    if self.Unloaded then
 
-        log(
-            "Existing Window returned"
+        warnLog(
+            "Create() called after UI was unloaded."
         )
 
-        return Window
+        return nil
     end
 
-
-    --================================================
-    -- Load library
-    --================================================
 
     local library =
         self:Load()
@@ -532,225 +620,217 @@ function UI:Create()
     if not library then
 
         warnLog(
-            "Create(): library is nil"
+            "Create(): Library is nil."
         )
+
+        if self.LoadError then
+
+            warnLog(
+                "Actual load error:"
+            )
+
+            warnLog(
+                self.LoadError
+            )
+
+        end
 
         return nil
     end
 
 
-    --================================================
-    -- Config
-    --================================================
-
-    local config =
-        Settings.Data.UI
+    log(
+        "Create(): Library acquired."
+    )
 
 
-    if type(config) ~= "table" then
+    local config = {
+        Title = "JustXDoors",
+        Footer = "DOORS",
 
-        warnLog(
-            "Settings.Data.UI is invalid"
+        Center = true,
+        AutoShow = true,
+        Resizable = true,
+
+        MobileButtonsSide = "Right",
+
+        ShowCustomCursor = false,
+
+        NotifySide = "Right",
+
+        AlwaysOnTop = true,
+
+        Size = UDim2.fromOffset(
+            720,
+            520
         )
-
-        config = {}
-    end
-
-
-    local title =
-        config.Title
-        or "JustXDoors"
-
-    local footer =
-        config.Footer
-        or "DOORS"
-
-    local width =
-        tonumber(config.Width)
-        or 720
-
-    local height =
-        tonumber(config.Height)
-        or 520
-
-    local center =
-        config.Center ~= false
-
-    local autoShow =
-        config.AutoShow ~= false
-
-    local resizable =
-        config.Resizable ~= false
-
-    local mobileButtonsSide =
-        config.MobileButtonsSide
-        or "Right"
-
-    local notifySide =
-        config.NotifySide
-        or "Right"
-
-    local alwaysOnTop =
-        config.AlwaysOnTop ~= false
-
-    local showCursor =
-        config.ShowCustomCursor == true
-
-
-    --================================================
-    -- Window configuration
-    --================================================
-
-    log(
-        "Creating window..."
-    )
-
-    log(
-        "Title:",
-        title
-    )
-
-    log(
-        "Size:",
-        width,
-        "x",
-        height
-    )
-
-
-    local windowConfig = {
-
-        Title = title,
-
-        Footer = footer,
-
-        Icon =
-            config.Icon,
-
-        Center =
-            center,
-
-        AutoShow =
-            autoShow,
-
-        Resizable =
-            resizable,
-
-        MobileButtonsSide =
-            mobileButtonsSide,
-
-        NotifySide =
-            notifySide,
-
-        ShowCustomCursor =
-            showCursor,
-
-        AlwaysOnTop =
-            alwaysOnTop,
-
-        Size =
-            UDim2.fromOffset(
-                width,
-                height
-            )
     }
 
 
     --================================================
-    -- Create
+    -- Read settings
     --================================================
 
-    local success
-    local result
+    if Settings
+        and type(Settings.Get) == "function"
+    then
 
-    success,
-    result =
-        pcall(function()
+        local success, result =
+            pcall(function()
 
-            return library:CreateWindow(
-                windowConfig
-            )
+                return Settings:Get(
+                    "UI"
+                )
 
-        end)
+            end)
+
+
+        if success
+            and type(result) == "table"
+        then
+
+            local uiSettings = result
+
+
+            if type(uiSettings.Title) == "string" then
+                config.Title =
+                    uiSettings.Title
+            end
+
+
+            if type(uiSettings.Footer) == "string" then
+                config.Footer =
+                    uiSettings.Footer
+            end
+
+
+            if type(uiSettings.Center) == "boolean" then
+                config.Center =
+                    uiSettings.Center
+            end
+
+
+            if type(uiSettings.AutoShow) == "boolean" then
+                config.AutoShow =
+                    uiSettings.AutoShow
+            end
+
+
+            if type(uiSettings.Resizable) == "boolean" then
+                config.Resizable =
+                    uiSettings.Resizable
+            end
+
+
+            if type(uiSettings.AlwaysOnTop) == "boolean" then
+                config.AlwaysOnTop =
+                    uiSettings.AlwaysOnTop
+            end
+
+
+            if type(uiSettings.MobileButtonsSide) == "string" then
+                config.MobileButtonsSide =
+                    uiSettings.MobileButtonsSide
+            end
+
+
+            if type(uiSettings.NotifySide) == "string" then
+                config.NotifySide =
+                    uiSettings.NotifySide
+            end
+
+
+            if type(uiSettings.ShowCustomCursor) == "boolean" then
+                config.ShowCustomCursor =
+                    uiSettings.ShowCustomCursor
+            end
+
+
+            if type(uiSettings.Width) == "number"
+                and type(uiSettings.Height) == "number"
+            then
+
+                config.Size =
+                    UDim2.fromOffset(
+                        math.floor(uiSettings.Width),
+                        math.floor(uiSettings.Height)
+                    )
+
+            end
+
+
+            if uiSettings.Icon ~= nil then
+
+                config.Icon =
+                    uiSettings.Icon
+
+            end
+
+        end
+    end
+
+
+    log(
+        "Creating Obsidian window..."
+    )
+
+
+    log(
+        "Title:",
+        config.Title
+    )
+
+
+    log(
+        "Size:",
+        config.Size
+    )
+
+
+    local success, window =
+        xpcall(
+            function()
+
+                return library:CreateWindow(
+                    config
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
 
 
     if not success then
 
         warnLog(
-            "CreateWindow failed:"
+            "CreateWindow FAILED:"
         )
 
         warnLog(
-            tostring(result)
-        )
-
-        notifyError(
-            "JustXDoors",
-            "UI window failed to create.\n"
-            .. tostring(result)
+            safeToString(window)
         )
 
         return nil
     end
 
 
-    if not result then
+    if not window then
 
         warnLog(
-            "CreateWindow returned nil"
-        )
-
-        notifyError(
-            "JustXDoors",
-            "UI window returned nil."
+            "CreateWindow returned nil."
         )
 
         return nil
     end
 
 
-    --================================================
-    -- Save Window
-    --================================================
-
-    Window =
-        result
-
-    self.Window =
-        Window
-
-
-    --================================================
-    -- Optional configuration
-    --================================================
-
-    pcall(function()
-
-        Window:SetCornerRadius(
-            tonumber(
-                config.CornerRadius
-            ) or 8
-        )
-
-    end)
-
-
-    pcall(function()
-
-        Window:SetAlwaysOnTop(
-            alwaysOnTop
-        )
-
-    end)
-
-
-    pcall(function()
-
-        library:SetNotifySide(
-            notifySide
-        )
-
-    end)
+    self.Window = window
+    self.Unloaded = false
 
 
     log(
@@ -758,7 +838,7 @@ function UI:Create()
     )
 
 
-    return Window
+    return window
 end
 
 
@@ -766,755 +846,243 @@ end
 --// Tabs
 --//==================================================
 
-function UI:AddTab(
-    name,
-    icon,
-    description
-)
+function UI:AddTab(name, icon, description)
 
-    if not Window then
-        self:Create()
-    end
-
-
-    if not Window then
+    if not self.Window then
         return nil
     end
 
 
-    local tabName =
-        tostring(name)
+    local success, result =
+        xpcall(
+            function()
+
+                return self.Window:AddTab(
+                    name,
+                    icon,
+                    description
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
 
 
-    local tab
+    if not success then
+
+        warnLog(
+            "AddTab failed:",
+            name
+        )
+
+        warnLog(
+            result
+        )
+
+        return nil
+    end
 
 
-    local success
-    local errorMessage
+    return result
+end
 
 
-    success,
-    errorMessage =
-        pcall(function()
+--//==================================================
+--// Groupboxes
+--//==================================================
 
-            if description then
+function UI:AddLeftGroupbox(tab, name, icon)
 
-                tab =
-                    Window:AddTab({
+    if not tab then
+        return nil
+    end
 
-                        Name =
-                            tabName,
 
-                        Icon =
-                            icon,
+    local success, result =
+        xpcall(
+            function()
 
-                        Description =
-                            description
-                    })
+                return tab:AddLeftGroupbox(
+                    name,
+                    icon
+                )
 
-            else
+            end,
 
-                tab =
-                    Window:AddTab(
-                        tabName,
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddLeftGroupbox failed:",
+            name
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+function UI:AddRightGroupbox(tab, name, icon)
+
+    if not tab then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                return tab:AddRightGroupbox(
+                    name,
+                    icon
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddRightGroupbox failed:",
+            name
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--==================================================
+-- Generic groupbox
+--==================================================
+
+function UI:AddGroupbox(tab, side, name, icon)
+
+    if not tab then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                if side == "Right"
+                    or side == "right"
+                then
+
+                    return tab:AddRightGroupbox(
+                        name,
                         icon
                     )
 
-            end
-
-        end)
+                end
 
 
-    if not success then
-
-        warnLog(
-            "Failed to create tab:",
-            tabName
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    if not tab then
-
-        warnLog(
-            "Tab returned nil:",
-            tabName
-        )
-
-        return nil
-    end
-
-
-    self.Tabs[tabName] =
-        tab
-
-
-    log(
-        "Tab created:",
-        tabName
-    )
-
-
-    return tab
-end
-
-
-function UI:GetTab(name)
-
-    return self.Tabs[name]
-end
-
-
---//==================================================
---// Groupbox
---//==================================================
-
-function UI:AddGroupbox(
-    tab,
-    name,
-    side,
-    icon,
-    description
-)
-
-    if not tab then
-        return nil
-    end
-
-
-    local group
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            group =
-                tab:AddGroupbox({
-
-                    Side =
-                        side or "Left",
-
-                    Name =
-                        name,
-
-                    IconName =
-                        icon,
-
-                    Description =
-                        description
-                })
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Failed to create groupbox:",
-            name
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    if not group then
-        return nil
-    end
-
-
-    self.Groups[name] =
-        group
-
-
-    return group
-end
-
-
-function UI:AddLeftGroupbox(
-    tab,
-    name,
-    icon,
-    description
-)
-
-    if not tab then
-        return nil
-    end
-
-
-    local group
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            group =
-                tab:AddLeftGroupbox(
+                return tab:AddLeftGroupbox(
                     name,
                     icon
                 )
 
+            end,
 
-            if description
-                and group
-            then
+            function(err)
 
-                pcall(function()
-
-                    group:SetDescription(
-                        description
-                    )
-
-                end)
+                return traceError(err)
 
             end
-
-        end)
+        )
 
 
     if not success then
 
         warnLog(
-            "Failed to create left groupbox:",
+            "AddGroupbox failed:",
             name
         )
 
-        warnLog(
-            tostring(errorMessage)
-        )
+        warnLog(result)
 
         return nil
     end
 
 
-    if group then
-
-        self.Groups[name] =
-            group
-
-    end
-
-
-    return group
+    return result
 end
 
 
-function UI:AddRightGroupbox(
-    tab,
-    name,
-    icon,
-    description
-)
+--//==================================================
+--// Labels
+--//==================================================
 
-    if not tab then
+function UI:AddLabel(groupbox, text)
+
+    if not groupbox then
         return nil
     end
 
 
-    local group
+    local success, result =
+        xpcall(
+            function()
 
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            group =
-                tab:AddRightGroupbox(
-                    name,
-                    icon
+                return groupbox:AddLabel(
+                    tostring(text or "")
                 )
 
+            end,
 
-            if description
-                and group
-            then
+            function(err)
 
-                pcall(function()
-
-                    group:SetDescription(
-                        description
-                    )
-
-                end)
+                return traceError(err)
 
             end
-
-        end)
+        )
 
 
     if not success then
 
         warnLog(
-            "Failed to create right groupbox:",
-            name
+            "AddLabel failed:"
         )
 
-        warnLog(
-            tostring(errorMessage)
-        )
+        warnLog(result)
 
         return nil
     end
 
 
-    if group then
-
-        self.Groups[name] =
-            group
-
-    end
-
-
-    return group
-end
-
-
---//==================================================
---// Toggle
---//==================================================
-
-function UI:AddToggle(
-    group,
-    id,
-    options
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            element =
-                group:AddToggle(
-                    id,
-                    options or {}
-                )
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Toggle failed:",
-            id
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    self.Elements[id] =
-        element
-
-
-    return element
-end
-
-
---//==================================================
---// Checkbox
---//==================================================
-
-function UI:AddCheckbox(
-    group,
-    id,
-    options
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            element =
-                group:AddCheckbox(
-                    id,
-                    options or {}
-                )
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Checkbox failed:",
-            id
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    self.Elements[id] =
-        element
-
-
-    return element
-end
-
-
---//==================================================
---// Button
---//==================================================
-
-function UI:AddButton(
-    group,
-    id,
-    callback
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            element =
-                group:AddButton({
-
-                    Text =
-                        tostring(id),
-
-                    Func =
-                        type(callback)
-                        == "function"
-                        and callback
-                        or function()
-                        end
-                })
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Button failed:",
-            id
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    self.Elements[id] =
-        element
-
-
-    return element
-end
-
-
---//==================================================
---// Input
---//==================================================
-
-function UI:AddInput(
-    group,
-    id,
-    options
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            element =
-                group:AddInput(
-                    id,
-                    options or {}
-                )
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Input failed:",
-            id
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    self.Elements[id] =
-        element
-
-
-    return element
-end
-
-
---//==================================================
---// Slider
---//==================================================
-
-function UI:AddSlider(
-    group,
-    id,
-    options
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            element =
-                group:AddSlider(
-                    id,
-                    options or {}
-                )
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Slider failed:",
-            id
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    self.Elements[id] =
-        element
-
-
-    return element
-end
-
-
---//==================================================
---// Dropdown
---//==================================================
-
-function UI:AddDropdown(
-    group,
-    id,
-    options
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            element =
-                group:AddDropdown(
-                    id,
-                    options or {}
-                )
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Dropdown failed:",
-            id
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    self.Elements[id] =
-        element
-
-
-    return element
-end
-
-
---//==================================================
---// Label
---//==================================================
-
-function UI:AddLabel(
-    group,
-    text,
-    options
-)
-
-    if not group then
-        return nil
-    end
-
-
-    local element
-
-
-    local success
-    local errorMessage
-
-
-    success,
-    errorMessage =
-        pcall(function()
-
-            if type(options) == "table" then
-
-                options.Text =
-                    text
-
-                element =
-                    group:AddLabel(
-                        options
-                    )
-
-            else
-
-                element =
-                    group:AddLabel(
-                        text,
-                        options
-                    )
-
-            end
-
-        end)
-
-
-    if not success then
-
-        warnLog(
-            "Label failed:",
-            tostring(text)
-        )
-
-        warnLog(
-            tostring(errorMessage)
-        )
-
-        return nil
-    end
-
-
-    return element
+    return result
 end
 
 
@@ -1522,45 +1090,410 @@ end
 --// Divider
 --//==================================================
 
-function UI:AddDivider(group)
+function UI:AddDivider(groupbox)
 
-    if not group then
+    if not groupbox then
         return nil
     end
 
 
-    local element
+    local success, result =
+        xpcall(
+            function()
 
+                return groupbox:AddDivider()
 
-    local success
-    local errorMessage
+            end,
 
+            function(err)
 
-    success,
-    errorMessage =
-        pcall(function()
+                return traceError(err)
 
-            element =
-                group:AddDivider()
-
-        end)
+            end
+        )
 
 
     if not success then
 
         warnLog(
-            "Divider failed:"
+            "AddDivider failed:"
         )
 
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Button
+--//==================================================
+
+function UI:AddButton(groupbox, index, options)
+
+    if not groupbox then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                if type(index) == "table"
+                    and options == nil
+                then
+
+                    return groupbox:AddButton(
+                        index
+                    )
+
+                end
+
+
+                if type(options) == "table" then
+
+                    if type(index) == "string" then
+
+                        options.Text =
+                            options.Text
+                            or index
+
+                    end
+
+                    return groupbox:AddButton(
+                        options
+                    )
+
+                end
+
+
+                return groupbox:AddButton({
+                    Text = tostring(index or "Button")
+                })
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
         warnLog(
-            tostring(errorMessage)
+            "AddButton failed:"
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Toggle
+--//==================================================
+
+function UI:AddToggle(groupbox, index, options)
+
+    if not groupbox then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                return groupbox:AddToggle(
+                    index,
+                    options or {}
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddToggle failed:",
+            safeToString(index)
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Slider
+--//==================================================
+
+function UI:AddSlider(groupbox, index, options)
+
+    if not groupbox then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                return groupbox:AddSlider(
+                    index,
+                    options or {}
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddSlider failed:",
+            safeToString(index)
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Dropdown
+--//==================================================
+
+function UI:AddDropdown(groupbox, index, options)
+
+    if not groupbox then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                return groupbox:AddDropdown(
+                    index,
+                    options or {}
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddDropdown failed:",
+            safeToString(index)
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Input
+--//==================================================
+
+function UI:AddInput(groupbox, index, options)
+
+    if not groupbox then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                return groupbox:AddInput(
+                    index,
+                    options or {}
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddInput failed:",
+            safeToString(index)
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Paragraph
+--//==================================================
+
+function UI:AddParagraph(groupbox, title, description)
+
+    if not groupbox then
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                return groupbox:AddLabel(
+                    {
+                        Text =
+                            tostring(title or "")
+                            .. "\n"
+                            .. tostring(description or ""),
+                        DoesWrap = true
+                    }
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddParagraph failed:"
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Key picker
+--//==================================================
+
+function UI:AddKeyPicker(element, index, options)
+
+    if not element then
+        return nil
+    end
+
+
+    if type(element.AddKeyPicker) ~= "function" then
+
+        warnLog(
+            "AddKeyPicker is unavailable."
         )
 
         return nil
     end
 
 
-    return element
+    local success, result =
+        xpcall(
+            function()
+
+                return element:AddKeyPicker(
+                    index,
+                    options or {}
+                )
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddKeyPicker failed:"
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
 end
 
 
@@ -1568,48 +1501,139 @@ end
 --// Tabbox
 --//==================================================
 
-function UI:AddTabbox(
-    tab,
-    side,
-    name
-)
+function UI:AddLeftTabbox(tab, name)
 
     if not tab then
         return nil
     end
 
 
-    local tabbox
+    if type(tab.AddLeftTabbox) ~= "function" then
+
+        warnLog(
+            "AddLeftTabbox is unavailable."
+        )
+
+        return nil
+    end
 
 
-    local success
-    local errorMessage
+    local success, result =
+        xpcall(
+            function()
 
+                if name then
+                    return tab:AddLeftTabbox(name)
+                end
 
-    success,
-    errorMessage =
-        pcall(function()
+                return tab:AddLeftTabbox()
 
-            if string.lower(
-                tostring(
-                    side or "Left"
-                )
-            ) == "right"
-            then
+            end,
 
-                tabbox =
-                    tab:AddRightTabbox(
-                        name
-                    )
+            function(err)
 
-            else
-
-                tabbox =
-                    tab:AddLeftTabbox(
-                        name
-                    )
+                return traceError(err)
 
             end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddLeftTabbox failed:"
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+function UI:AddRightTabbox(tab, name)
+
+    if not tab then
+        return nil
+    end
+
+
+    if type(tab.AddRightTabbox) ~= "function" then
+
+        warnLog(
+            "AddRightTabbox is unavailable."
+        )
+
+        return nil
+    end
+
+
+    local success, result =
+        xpcall(
+            function()
+
+                if name then
+                    return tab:AddRightTabbox(name)
+                end
+
+                return tab:AddRightTabbox()
+
+            end,
+
+            function(err)
+
+                return traceError(err)
+
+            end
+        )
+
+
+    if not success then
+
+        warnLog(
+            "AddRightTabbox failed:"
+        )
+
+        warnLog(result)
+
+        return nil
+    end
+
+
+    return result
+end
+
+
+--//==================================================
+--// Unload callback
+--//==================================================
+
+function UI:OnUnload(callback)
+
+    if not self.Library then
+        return false
+    end
+
+
+    if type(self.Library.OnUnload) ~= "function" then
+
+        warnLog(
+            "Library:OnUnload is unavailable."
+        )
+
+        return false
+    end
+
+
+    local success, err =
+        pcall(function()
+
+            self.Library:OnUnload(
+                callback
+            )
 
         end)
 
@@ -1617,224 +1641,46 @@ function UI:AddTabbox(
     if not success then
 
         warnLog(
-            "Tabbox failed:"
+            "OnUnload failed:"
         )
 
-        warnLog(
-            tostring(errorMessage)
-        )
+        warnLog(err)
 
-        return nil
-    end
-
-
-    return tabbox
-end
-
-
---//==================================================
---// Notifications
---//==================================================
-
-function UI:Notify(options)
-
-    return Notifications:Notify(
-        options
-    )
-end
-
-
---//==================================================
---// Visibility
---//==================================================
-
-function UI:SetVisible(value)
-
-    if not Window then
-        return
-    end
-
-
-    pcall(function()
-
-        Window:Toggle(
-            value == true
-        )
-
-    end)
-end
-
-
-function UI:Toggle()
-
-    if not Window then
-        return
-    end
-
-
-    pcall(function()
-
-        Window:Toggle()
-
-    end)
-end
-
-
-function UI:IsVisible()
-
-    if not Library then
         return false
     end
 
 
-    return Library.Toggled == true
+    return true
 end
 
 
 --//==================================================
---// Window settings
+--// Toggle
 --//==================================================
 
-function UI:SetCornerRadius(value)
+function UI:Toggle(value)
 
-    if not Window then
-        return
+    if not self.Window then
+        return false
     end
 
 
-    value =
-        tonumber(value)
-
-
-    if not value then
-        return
+    if type(self.Window.Toggle) ~= "function" then
+        return false
     end
 
 
-    Settings:Set(
-        "UI.CornerRadius",
-        value
-    )
+    local success =
+        pcall(function()
 
-
-    pcall(function()
-
-        Window:SetCornerRadius(
-            value
-        )
-
-    end)
-end
-
-
-function UI:SetAlwaysOnTop(value)
-
-    if not Window then
-        return
-    end
-
-
-    value =
-        value == true
-
-
-    Settings:Set(
-        "UI.AlwaysOnTop",
-        value
-    )
-
-
-    pcall(function()
-
-        Window:SetAlwaysOnTop(
-            value
-        )
-
-    end)
-end
-
-
-function UI:SetNotifySide(side)
-
-    side =
-        tostring(side or "Right")
-
-
-    Settings:Set(
-        "UI.NotifySide",
-        side
-    )
-
-
-    Settings:Set(
-        "Notifications.Side",
-        side
-    )
-
-
-    pcall(function()
-
-        Notifications:SetSide(
-            side
-        )
-
-    end)
-
-
-    pcall(function()
-
-        if Library then
-
-            Library:SetNotifySide(
-                side
+            self.Window:Toggle(
+                value
             )
 
-        end
-
-    end)
-end
+        end)
 
 
-function UI:SetSidebarWidth(width)
-
-    if not Window then
-        return
-    end
-
-
-    width =
-        tonumber(width)
-
-
-    if not width then
-        return
-    end
-
-
-    pcall(function()
-
-        Window:SetSidebarWidth(
-            width
-        )
-
-    end)
-end
-
-
-function UI:SetCompact(value)
-
-    if not Window then
-        return
-    end
-
-
-    pcall(function()
-
-        Window:SetCompact(
-            value == true
-        )
-
-    end)
+    return success
 end
 
 
@@ -1842,87 +1688,56 @@ end
 --// Unload
 --//==================================================
 
-function UI:OnUnload(callback)
+function UI:Unload()
 
-    if not Library then
+    if self.Unloaded then
         return
     end
 
 
-    if type(callback)
-        ~= "function"
-    then
+    self.Unloaded = true
 
-        return
+
+    if self.Library then
+
+        local success, err =
+            pcall(function()
+
+                if type(self.Library.Unload) == "function" then
+
+                    self.Library:Unload()
+
+                end
+
+            end)
+
+
+        if not success then
+
+            warnLog(
+                "Library unload failed:"
+            )
+
+            warnLog(err)
+
+        end
     end
 
 
-    pcall(function()
-
-        Library:OnUnload(
-            callback
-        )
-
-    end)
+    self.Window = nil
+    self.Library = nil
+    self.Loaded = false
 end
 
 
-function UI:Unload()
+--//==================================================
+--// Destroy
+--//==================================================
 
-    if not Library then
+function UI:Destroy()
 
-        self.Library =
-            nil
+    self:Unload()
 
-        self.Window =
-            nil
-
-        return
-    end
-
-
-    log(
-        "Unloading UI..."
-    )
-
-
-    pcall(function()
-
-        Library:Unload()
-
-    end)
-
-
-    Library =
-        nil
-
-    Window =
-        nil
-
-
-    self.Library =
-        nil
-
-    self.Window =
-        nil
-
-
-    table.clear(
-        self.Tabs
-    )
-
-    table.clear(
-        self.Groups
-    )
-
-    table.clear(
-        self.Elements
-    )
-
-
-    log(
-        "UI unloaded"
-    )
 end
 
 
@@ -1930,55 +1745,32 @@ end
 --// Debug information
 --//==================================================
 
-function UI:GetLibrary()
-
-    return Library
-end
-
-
-function UI:GetWindow()
-
-    return Window
-end
-
-
-function UI:IsLoaded()
-
-    return Library ~= nil
-end
-
-
-function UI:IsCreated()
-
-    return Window ~= nil
-end
-
-
-function UI:GetState()
+function UI:GetInfo()
 
     return {
+        Version = self.Version,
 
-        Loaded =
-            Library ~= nil,
+        LibraryLoaded =
+            self.Library ~= nil,
 
-        Created =
-            Window ~= nil,
+        WindowCreated =
+            self.Window ~= nil,
 
-        LibraryType =
-            type(Library),
+        Unloaded =
+            self.Unloaded,
 
-        WindowType =
-            type(Window)
+        LoadError =
+            self.LoadError,
+
+        LibraryURL =
+            self.LibraryURL
     }
 end
 
 
---//==================================================
---// Return
---//==================================================
-
-log(
-    "UI module loaded. Version: 2.1.0"
+print(
+    "[JustXDoors UI] UI module loaded. Version:",
+    UI.Version
 )
 
 
