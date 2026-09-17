@@ -1,114 +1,111 @@
+--[[
+    JustXDoors
+    Loader.lua
+    Modular loader
+
+    Structure:
+
+    JustXDoors/
+    ├── Loader.lua
+    ├── Main.lua
+    ├── Core/
+    │   ├── Environment.lua
+    │   ├── Services.lua
+    │   ├── Connections.lua
+    │   ├── Config.lua
+    │   ├── Settings.lua
+    │   ├── Notifications.lua
+    │   ├── UI.lua
+    │   ├── ESP.lua
+    │   └── Utils.lua
+    │
+    ├── Features/
+    │   ├── Configs.lua
+    │   ├── Settings.lua
+    │   └── Debug.lua
+    │
+    └── Game/
+        ├── Lobby/
+        │   └── Main.lua
+        ├── Main/
+        │   └── Main.lua
+        ├── Hotel/
+        │   └── Main.lua
+        ├── Mines/
+        │   └── Main.lua
+        ├── Backdoors/
+        │   └── Main.lua
+        ├── Outdoors/
+        │   └── Main.lua
+        ├── Archives/
+        │   └── Main.lua
+        └── Stairwell/
+            └── Main.lua
+]]
+
 local Loader = {}
 
-Loader.Version = "1.1.0"
+Loader.Version = "1.2.0"
+
+--//==================================================
+--// Configuration
+--//==================================================
 
 local REPOSITORY =
-    "https://raw.githubusercontent.com/JustUser-ALT/JustXDoors/main/"
+    "https://raw.githubusercontent.com/JustUser-ALT/JustXDoors/refs/heads/main/"
 
-------------------------------------------------------
--- EXECUTOR FUNCTIONS
-------------------------------------------------------
+local GLOBAL_NAME = "JustXDoors"
 
-local getgenvFunction =
-    rawget(_G, "getgenv")
+local GLOBAL_ENV =
+    (getgenv and getgenv())
+    or (_G)
 
-local getfenvFunction =
-    rawget(_G, "getfenv")
+--//==================================================
+--// Executor APIs
+--//==================================================
 
-local setfenvFunction =
-    rawget(_G, "setfenv")
+local getgenvFn = getgenv
+local getfenvFn = getfenv
+local setfenvFn = setfenv
+local loadstringFn = loadstring
 
-local loadstringFunction =
-    rawget(_G, "loadstring")
+local requestFn =
+    (syn and syn.request)
+    or (http and http.request)
+    or (http_request)
+    or (request)
 
-local requestFunction =
-    rawget(_G, "request")
-        or rawget(_G, "http_request")
+--//==================================================
+--// State
+--//==================================================
 
-------------------------------------------------------
--- GLOBAL ENVIRONMENT
-------------------------------------------------------
-
-local GlobalEnv
-
-if type(getgenvFunction) == "function" then
-    local success, result =
-        pcall(
-            getgenvFunction
-        )
-
-    if success
-        and type(result) == "table"
-    then
-        GlobalEnv = result
-    end
-end
-
-if not GlobalEnv then
-    GlobalEnv = _G
-end
-
-------------------------------------------------------
--- STATE
-------------------------------------------------------
-
-local LoaderState = {
-    Version = Loader.Version,
-
-    Loaded = {},
-    Loading = {},
-    Failed = {},
-
+local State = {
     Started = false,
     Finished = false,
 
-    Features = {}
+    Loading = {},
+    Loaded = {},
+    Failed = {},
+
+    Core = {},
+    Features = {},
+    Game = {},
+
+    Main = nil
 }
 
-------------------------------------------------------
--- LOGGING
-------------------------------------------------------
+Loader.State = State
 
-local function log(...)
-    print(
-        "[JustXDoors Loader]",
-        ...
-    )
-end
-
-local function warnLog(...)
-    warn(
-        "[JustXDoors Loader]",
-        ...
-    )
-end
-
-------------------------------------------------------
--- PATH
-------------------------------------------------------
+--//==================================================
+--// Helpers
+--//==================================================
 
 local function normalizePath(path)
     path = tostring(path or "")
 
-    path = path:gsub(
-        "\\",
-        "/"
-    )
-
-    path = path:gsub(
-        "^/+",
-        ""
-    )
-
-    path = path:gsub(
-        "/+$",
-        ""
-    )
-
-    path = path:gsub(
-        "^%./+",
-        ""
-    )
+    path = path:gsub("\\", "/")
+    path = path:gsub("^/+", "")
+    path = path:gsub("/+$", "")
 
     if path:sub(-4) ~= ".lua" then
         path = path .. ".lua"
@@ -117,1186 +114,737 @@ local function normalizePath(path)
     return path
 end
 
-------------------------------------------------------
--- URL
-------------------------------------------------------
-
 local function getURL(path)
-    return REPOSITORY
-        .. normalizePath(path)
+    return REPOSITORY .. normalizePath(path)
 end
 
-------------------------------------------------------
--- HTTP
-------------------------------------------------------
+local function isLoaded(path)
+    path = normalizePath(path)
+
+    return State.Loaded[path] ~= nil
+end
+
+local function getLoaded(path)
+    path = normalizePath(path)
+
+    return State.Loaded[path]
+end
+
+--//==================================================
+--// HTTP
+--//==================================================
 
 local function httpGet(url)
+    if game.HttpGet then
+        local success, result = pcall(function()
+            return game:HttpGet(url)
+        end)
 
-    --------------------------------------------------
-    -- game:HttpGet
-    --------------------------------------------------
-
-    if type(game.HttpGet) == "function" then
-
-        local success, result =
-            pcall(
-                function()
-                    return game:HttpGet(url)
-                end
-            )
-
-        if success
-            and type(result) == "string"
-            and result ~= ""
-        then
-            return true, result
+        if success and type(result) == "string" then
+            return result
         end
     end
 
-    --------------------------------------------------
-    -- request()
-    --------------------------------------------------
+    if requestFn then
+        local success, response = pcall(function()
+            return requestFn({
+                Url = url,
+                Method = "GET"
+            })
+        end)
 
-    if type(requestFunction) == "function" then
+        if success and response then
+            local body = response.Body or response.body
 
-        local success, response =
-            pcall(
-                requestFunction,
-                {
-                    Url = url,
-                    Method = "GET"
-                }
-            )
-
-        if success
-            and type(response) == "table"
-        then
-
-            local body =
-                response.Body
-                    or response.body
-
-            local status =
-                response.StatusCode
-                    or response.Status
-
-            if type(body) == "string"
-                and body ~= ""
-            then
-
-                if not status
-                    or tonumber(status) == 200
-                then
-                    return true, body
-                end
+            if type(body) == "string" then
+                return body
             end
         end
     end
 
-    return false,
-        "HTTP request failed: "
-            .. tostring(url)
+    error("HTTP request failed: " .. tostring(url))
 end
 
-------------------------------------------------------
--- FETCH
-------------------------------------------------------
+--//==================================================
+--// Fetch
+--//==================================================
 
-local function fetch(path)
+function Loader:Fetch(path)
+    path = normalizePath(path)
 
-    path =
-        normalizePath(path)
+    local url = getURL(path)
 
-    local url =
-        getURL(path)
-
-    local success, source =
-        httpGet(url)
+    local success, source = pcall(function()
+        return httpGet(url)
+    end)
 
     if not success then
-        return false, source
-    end
-
-    if type(source) ~= "string"
-        or source == ""
-    then
-        return false,
-            "Empty module source: "
-                .. path
-    end
-
-    return true, source
-end
-
-------------------------------------------------------
--- COMPILE
-------------------------------------------------------
-
-local function compile(
-    source,
-    path
-)
-
-    if type(loadstringFunction)
-        ~= "function"
-    then
-
-        return false,
-            "loadstring is unavailable."
-    end
-
-    local chunkName =
-        "@JustXDoors/"
-            .. normalizePath(path)
-
-    local success,
-        chunk,
-        errorMessage =
-        pcall(
-            loadstringFunction,
-            source,
-            chunkName
+        error(
+            "[Loader] Failed to fetch "
+            .. path
+            .. "\n"
+            .. tostring(source)
         )
-
-    if not success then
-        return false,
-            tostring(chunk)
     end
 
-    if type(chunk)
-        ~= "function"
-    then
-
-        return false,
-            tostring(errorMessage)
+    if type(source) ~= "string" or source == "" then
+        error("[Loader] Empty source: " .. path)
     end
 
-    return true, chunk
+    return source
 end
 
-------------------------------------------------------
--- MODULE ENVIRONMENT
-------------------------------------------------------
+--//==================================================
+--// Compile
+--//==================================================
 
-local function createModuleEnvironment(
-    path
-)
+function Loader:Compile(source, chunkName)
+    if not loadstringFn then
+        error(
+            "[Loader] loadstring is unavailable.\n"
+            .. "Your executor does not expose loadstring."
+        )
+    end
 
-    local moduleEnvironment = {}
+    local success, fn, err = pcall(function()
+        return loadstringFn(source, chunkName)
+    end)
 
-    --------------------------------------------------
-    -- SCRIPT
-    --------------------------------------------------
+    if not success then
+        error(
+            "[Loader] Compile error: "
+            .. tostring(fn)
+        )
+    end
 
-    moduleEnvironment.script = {
-        Name = path,
+    if not fn then
+        error(
+            "[Loader] Compile error in "
+            .. tostring(chunkName)
+            .. "\n"
+            .. tostring(err)
+        )
+    end
 
-        GetFullName = function()
-            return "JustXDoors/"
-                .. normalizePath(path)
+    return fn
+end
+
+--//==================================================
+--// Module environment
+--//==================================================
+
+local function createModuleEnvironment(path)
+    local env = {}
+
+    --// Standard globals
+    env.game = game
+    env.workspace = workspace
+
+    env.task = task
+    env.math = math
+    env.string = string
+    env.table = table
+    env.utf8 = utf8
+    env.os = os
+    env.debug = debug
+    env.coroutine = coroutine
+    env.bit32 = bit32
+
+    env.Instance = Instance
+    env.Enum = Enum
+    env.CFrame = CFrame
+    env.Vector2 = Vector2
+    env.Vector3 = Vector3
+    env.Color3 = Color3
+    env.UDim = UDim
+    env.UDim2 = UDim2
+    env.Ray = Ray
+
+    env.typeof = typeof
+    env.tostring = tostring
+    env.tonumber = tonumber
+    env.select = select
+    env.next = next
+    env.pairs = pairs
+    env.ipairs = ipairs
+    env.unpack = unpack
+    env.error = error
+    env.assert = assert
+    env.pcall = pcall
+    env.xpcall = xpcall
+    env.warn = warn
+    env.print = print
+    env.require = require
+
+    --// Shared globals
+    env._G = _G
+
+    if getgenvFn then
+        local success, genv = pcall(getgenvFn)
+
+        if success then
+            env.getgenv = getgenvFn
+            env.getgenv = getgenvFn
+            env.JustXDoors = genv and genv.JustXDoors
         end
+    end
+
+    --// Executor functions
+    env.getfenv = getfenvFn
+    env.setfenv = setfenvFn
+    env.loadstring = loadstringFn
+
+    --// Custom loader reference
+    env.JustXLoader = Loader
+
+    --// Fake script object
+    env.script = {
+        Name = path:match("([^/]+)%.lua$") or path,
+        Path = path
     }
 
-    --------------------------------------------------
-    -- CUSTOM REQUIRE
-    --------------------------------------------------
+    --//==================================================
+    --// Custom require
+    --//==================================================
 
-    moduleEnvironment.require =
-        function(modulePath)
-
-            if type(modulePath) == "table"
-                and modulePath.__JustXModule
-            then
-
-                modulePath =
-                    modulePath.Path
-            end
-
-            return Loader:Load(
-                modulePath
-            )
+    env.require = function(module)
+        -- Already-loaded module object
+        if type(module) == "table" then
+            return module
         end
 
-    --------------------------------------------------
-    -- LOADER
-    --------------------------------------------------
-
-    moduleEnvironment.JustXLoader =
-        Loader
-
-    --------------------------------------------------
-    -- FALLBACK GLOBALS
-    --------------------------------------------------
-
-    local fallback
-
-    if type(getfenvFunction)
-        == "function"
-    then
-
-        local success,
-            environment =
-            pcall(
-                getfenvFunction,
-                2
-            )
-
-        if success
-            and type(environment)
-                == "table"
-        then
-            fallback = environment
+        -- String path
+        if type(module) == "string" then
+            return Loader:Load(module)
         end
+
+        -- Normal Roblox ModuleScript require
+        if typeof(module) == "Instance" then
+            return require(module)
+        end
+
+        error(
+            "[Loader] Invalid require argument in "
+            .. path
+        )
     end
 
-    if not fallback then
-        fallback = _G
-    end
-
-    setmetatable(
-        moduleEnvironment,
-        {
-            __index = fallback
-        }
-    )
-
-    return moduleEnvironment
+    return env
 end
 
-------------------------------------------------------
--- EXECUTE MODULE
-------------------------------------------------------
+--//==================================================
+--// Execute
+--//==================================================
 
-local function execute(
-    chunk,
-    path
-)
+function Loader:Execute(path, source)
+    path = normalizePath(path)
 
-    local environment =
-        createModuleEnvironment(
-            path
-        )
-
-    --------------------------------------------------
-    -- APPLY ENVIRONMENT
-    --------------------------------------------------
-
-    if type(setfenvFunction)
-        == "function"
-    then
-
-        local success,
-            errorMessage =
-            pcall(
-                setfenvFunction,
-                chunk,
-                environment
-            )
-
-        if not success then
-
-            warnLog(
-                "setfenv failed for "
-                    .. path
-                    .. ": "
-                    .. tostring(
-                        errorMessage
-                    )
-            )
-        end
-    end
-
-    --------------------------------------------------
-    -- RUN
-    --------------------------------------------------
-
-    local success, result =
-        xpcall(
-            function()
-                return chunk()
-            end,
-
-            function(errorMessage)
-
-                if debug
-                    and debug.traceback
-                then
-
-                    return debug.traceback(
-                        tostring(
-                            errorMessage
-                        )
-                    )
-                end
-
-                return tostring(
-                    errorMessage
-                )
-            end
-        )
-
-    if not success then
-        return false, result
-    end
-
-    return true, result
-end
-
-------------------------------------------------------
--- LOAD MODULE
-------------------------------------------------------
-
-function Loader:Load(path)
-
-    path =
-        normalizePath(path)
-
-    --------------------------------------------------
-    -- CACHE
-    --------------------------------------------------
-
-    if LoaderState.Loaded[path]
-        ~= nil
-    then
-
-        return LoaderState.Loaded[path]
-    end
-
-    --------------------------------------------------
-    -- CIRCULAR DEPENDENCY
-    --------------------------------------------------
-
-    if LoaderState.Loading[path] then
-
-        error(
-            "Circular dependency detected: "
-                .. path
-        )
-    end
-
-    --------------------------------------------------
-    -- MARK LOADING
-    --------------------------------------------------
-
-    LoaderState.Loading[path] = true
-
-    --------------------------------------------------
-    -- FETCH
-    --------------------------------------------------
-
-    local success, source =
-        fetch(path)
-
-    if not success then
-
-        LoaderState.Loading[path] = nil
-
-        LoaderState.Failed[path] =
-            source
-
-        error(
-            "Failed to fetch module '"
-                .. path
-                .. "': "
-                .. tostring(source)
-        )
-    end
-
-    --------------------------------------------------
-    -- COMPILE
-    --------------------------------------------------
-
-    local compiled, chunk =
-        compile(
-            source,
-            path
-        )
-
-    if not compiled then
-
-        LoaderState.Loading[path] = nil
-
-        LoaderState.Failed[path] =
-            chunk
-
-        error(
-            "Failed to compile module '"
-                .. path
-                .. "': "
-                .. tostring(chunk)
-        )
-    end
-
-    --------------------------------------------------
-    -- EXECUTE
-    --------------------------------------------------
-
-    local executed, result =
-        execute(
-            chunk,
-            path
-        )
-
-    if not executed then
-
-        LoaderState.Loading[path] = nil
-
-        LoaderState.Failed[path] =
-            result
-
-        error(
-            "Failed to execute module '"
-                .. path
-                .. "': "
-                .. tostring(result)
-        )
-    end
-
-    --------------------------------------------------
-    -- CACHE
-    --------------------------------------------------
-
-    LoaderState.Loading[path] = nil
-
-    LoaderState.Loaded[path] =
-        result
-
-    log(
-        "Loaded:",
-        path
+    local chunk = self:Compile(
+        source,
+        "@" .. path
     )
+
+    local env = createModuleEnvironment(path)
+
+    -- Prefer setfenv when the executor exposes it.
+    if setfenvFn then
+        pcall(function()
+            setfenvFn(chunk, env)
+        end)
+    end
+
+    local success, result = xpcall(
+        function()
+            return chunk()
+        end,
+        function(err)
+            return tostring(err)
+                .. "\n"
+                .. debug.traceback()
+        end
+    )
+
+    if not success then
+        error(
+            "[Loader] Runtime error in "
+            .. path
+            .. "\n"
+            .. tostring(result)
+        )
+    end
 
     return result
 end
 
-------------------------------------------------------
--- OPTIONAL LOAD
-------------------------------------------------------
+--//==================================================
+--// Load
+--//==================================================
 
-function Loader:TryLoad(path)
+function Loader:Load(path, force)
+    path = normalizePath(path)
 
-    local success, result =
-        pcall(
-            function()
-                return self:Load(path)
-            end
-        )
-
-    if success then
-
-        return true,
-            result
+    if not force and State.Loaded[path] ~= nil then
+        return State.Loaded[path]
     end
 
-    warnLog(
-        tostring(result)
+    if State.Loading[path] then
+        error(
+            "[Loader] Circular dependency detected: "
+            .. path
+        )
+    end
+
+    State.Loading[path] = true
+
+    local success, result = xpcall(
+        function()
+            local source = self:Fetch(path)
+
+            return self:Execute(
+                path,
+                source
+            )
+        end,
+        function(err)
+            return tostring(err)
+                .. "\n"
+                .. debug.traceback()
+        end
     )
 
-    return false,
-        result
+    State.Loading[path] = nil
+
+    if not success then
+        State.Failed[path] = result
+
+        error(result)
+    end
+
+    State.Loaded[path] = result
+
+    return result
 end
 
-------------------------------------------------------
--- UNLOAD CACHE
-------------------------------------------------------
+function Loader:TryLoad(path, force)
+    local success, result = pcall(function()
+        return self:Load(path, force)
+    end)
+
+    if success then
+        return result
+    end
+
+    return nil, result
+end
+
+--//==================================================
+--// Unload
+--//==================================================
 
 function Loader:Unload(path)
+    path = normalizePath(path)
 
-    path =
-        normalizePath(path)
+    local module = State.Loaded[path]
 
-    LoaderState.Loaded[path] = nil
-    LoaderState.Failed[path] = nil
+    if type(module) == "table" then
+        if type(module.Destroy) == "function" then
+            pcall(function()
+                module:Destroy()
+            end)
+        elseif type(module.Unload) == "function" then
+            pcall(function()
+                module:Unload()
+            end)
+        end
+    end
 
-    return true
+    State.Loaded[path] = nil
+    State.Failed[path] = nil
 end
 
-------------------------------------------------------
--- CHECK
-------------------------------------------------------
+function Loader:UnloadAll()
+    for path in pairs(State.Loaded) do
+        self:Unload(path)
+    end
 
-function Loader:IsLoaded(path)
+    State.Core = {}
+    State.Features = {}
+    State.Game = {}
 
-    path =
-        normalizePath(path)
-
-    return LoaderState.Loaded[path]
-        ~= nil
+    State.Main = nil
 end
 
-function Loader:IsLoading(path)
+--//==================================================
+--// Core
+--//==================================================
 
-    path =
-        normalizePath(path)
+local CORE_MODULES = {
+    "Core/Environment",
+    "Core/Services",
+    "Core/Connections",
+    "Core/Config",
+    "Core/Settings",
+    "Core/Notifications",
+    "Core/UI",
+    "Core/ESP",
+    "Core/Utils"
+}
 
-    return LoaderState.Loading[path]
-        == true
+function Loader:LoadCore()
+    for _, path in ipairs(CORE_MODULES) do
+        local module = self:Load(path)
+
+        local name = path:match("([^/]+)%.lua$")
+
+        if name then
+            State.Core[name] = module
+        end
+    end
+
+    return State.Core
 end
 
-------------------------------------------------------
--- GET STATE
-------------------------------------------------------
-
-function Loader:GetState()
-    return LoaderState
-end
-
-------------------------------------------------------
--- LOAD CORE
-------------------------------------------------------
-
-local function loadCore()
-
-    local Core = {}
-
-    --------------------------------------------------
-    -- FOUNDATION
-    --------------------------------------------------
-
-    Core.Environment =
-        Loader:Load(
-            "Core/Environment"
-        )
-
-    Core.Services =
-        Loader:Load(
-            "Core/Services"
-        )
-
-    Core.Connections =
-        Loader:Load(
-            "Core/Connections"
-        )
-
-    --------------------------------------------------
-    -- SETTINGS
-    --------------------------------------------------
-
-    Core.Config =
-        Loader:Load(
-            "Core/Config"
-        )
-
-    Core.Settings =
-        Loader:Load(
-            "Core/Settings"
-        )
-
-    --------------------------------------------------
-    -- SYSTEMS
-    --------------------------------------------------
-
-    Core.Notifications =
-        Loader:Load(
-            "Core/Notifications"
-        )
-
-    Core.UI =
-        Loader:Load(
-            "Core/UI"
-        )
-
-    --------------------------------------------------
-    -- OPTIONAL CORE
-    --------------------------------------------------
-
-    local espSuccess,
-        ESP =
-        Loader:TryLoad(
-            "Core/ESP"
-        )
-
-    if espSuccess then
-        Core.ESP = ESP
-    end
-
-    local utilsSuccess,
-        Utils =
-        Loader:TryLoad(
-            "Core/Utils"
-        )
-
-    if utilsSuccess then
-        Core.Utils = Utils
-    end
-
-    return Core
-end
-
-------------------------------------------------------
--- INITIALIZE MODULE
-------------------------------------------------------
-
-local function initializeModule(
-    module,
-    Core,
-    name
-)
-
-    if type(module) ~= "table" then
-        return true
-    end
-
-    if type(module.Init)
-        ~= "function"
-    then
-
-        return true
-    end
-
-    local success,
-        errorMessage =
-        pcall(
-            function()
-                return module:Init(
-                    Core
-                )
-            end
-        )
-
-    if not success then
-
-        warnLog(
-            name
-                .. " initialization failed:",
-            errorMessage
-        )
-
-        return false,
-            errorMessage
-    end
-
-    return true
-end
-
-------------------------------------------------------
--- BUILD MODULE
-------------------------------------------------------
-
-local function buildModule(
-    module,
-    Core,
-    name
-)
-
-    if type(module) ~= "table" then
-        return true
-    end
-
-    if type(module.Build)
-        ~= "function"
-    then
-
-        return true
-    end
-
-    local success,
-        errorMessage =
-        pcall(
-            function()
-                return module:Build(
-                    Core
-                )
-            end
-        )
-
-    if not success then
-
-        warnLog(
-            name
-                .. " build failed:",
-            errorMessage
-        )
-
-        return false,
-            errorMessage
-    end
-
-    return true
-end
-
-------------------------------------------------------
--- FEATURE REGISTRY
-------------------------------------------------------
+--//==================================================
+--// Features
+--//==================================================
 
 local FEATURE_MODULES = {
+    "Features/Configs",
+    "Features/Settings",
+    "Features/Debug"
+}
 
-    --------------------------------------------------
-    -- GENERAL
-    --------------------------------------------------
+function Loader:LoadFeatures()
+    for _, path in ipairs(FEATURE_MODULES) do
+        local module = self:Load(path)
 
+        local name = path:match("([^/]+)%.lua$")
+
+        if name then
+            State.Features[name] = module
+        end
+    end
+
+    return State.Features
+end
+
+function Loader:InitFeatures()
+    local Core = State.Core
+
+    for name, module in pairs(State.Features) do
+        if type(module) == "table"
+            and type(module.Init) == "function"
+        then
+            local success, err = pcall(function()
+                module:Init(Core)
+            end)
+
+            if not success then
+                warn(
+                    "[Loader] Feature Init failed: "
+                    .. name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+end
+
+function Loader:BuildFeatures()
+    for name, module in pairs(State.Features) do
+        if type(module) == "table"
+            and type(module.Build) == "function"
+        then
+            local success, err = pcall(function()
+                module:Build()
+            end)
+
+            if not success then
+                warn(
+                    "[Loader] Feature Build failed: "
+                    .. name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+end
+
+--//==================================================
+--// Root Main
+--//==================================================
+
+function Loader:LoadMain()
+    local Main = self:Load("Main")
+
+    State.Main = Main
+
+    return Main
+end
+
+function Loader:InitMain()
+    local Main = State.Main
+
+    if not Main then
+        return
+    end
+
+    if type(Main.Init) == "function" then
+        local success, err = pcall(function()
+            Main:Init(State.Core)
+        end)
+
+        if not success then
+            error(
+                "[Loader] Main Init failed:\n"
+                .. tostring(err)
+            )
+        end
+    end
+
+    if type(Main.Build) == "function" then
+        local success, err = pcall(function()
+            Main:Build()
+        end)
+
+        if not success then
+            error(
+                "[Loader] Main Build failed:\n"
+                .. tostring(err)
+            )
+        end
+    end
+end
+
+--//==================================================
+--// Game modules
+--//==================================================
+
+local GAME_MODULES = {
     {
-        Name = "Configs",
-        Path = "Features/Configs",
-        Key = "Configs",
-
-        Init = true,
-        Build = false,
-
-        Required = true
+        Name = "Lobby",
+        Path = "Game/Lobby/Main"
     },
 
     {
-        Name = "Settings",
-        Path = "Features/Settings",
-        Key = "SettingsFeature",
-
-        Init = true,
-        Build = true,
-
-        Required = true
+        Name = "Main",
+        Path = "Game/Main/Main"
     },
 
     {
-        Name = "Debug",
-        Path = "Features/Debug",
-        Key = "Debug",
-
-        Init = true,
-        Build = true,
-
-        Required = false
-    },
-
-    --------------------------------------------------
-    -- GAMEPLAY
-    --------------------------------------------------
-
-    {
-        Name = "Character",
-        Path = "Features/Character",
-        Key = "Character",
-
-        Init = true,
-        Build = true,
-
-        Required = false
+        Name = "Hotel",
+        Path = "Game/Hotel/Main"
     },
 
     {
-        Name = "Visual",
-        Path = "Features/Visual",
-        Key = "Visual",
-
-        Init = true,
-        Build = true,
-
-        Required = false
+        Name = "Mines",
+        Path = "Game/Mines/Main"
     },
 
     {
-        Name = "Game",
-        Path = "Features/Game",
-        Key = "Game",
-
-        Init = true,
-        Build = true,
-
-        Required = false
+        Name = "Backdoors",
+        Path = "Game/Backdoors/Main"
     },
 
     {
-        Name = "Misc",
-        Path = "Features/Misc",
-        Key = "Misc",
+        Name = "Outdoors",
+        Path = "Game/Outdoors/Main"
+    },
 
-        Init = true,
-        Build = true,
+    {
+        Name = "Archives",
+        Path = "Game/Archives/Main"
+    },
 
-        Required = false
+    {
+        Name = "Stairwell",
+        Path = "Game/Stairwell/Main"
     }
 }
 
-------------------------------------------------------
--- LOAD FEATURES
-------------------------------------------------------
+function Loader:LoadGame()
+    for _, info in ipairs(GAME_MODULES) do
+        local module, err = self:TryLoad(info.Path)
 
-local function loadFeatures(Core)
-
-    for _, definition in ipairs(
-        FEATURE_MODULES
-    ) do
-
-        local success,
-            module =
-            Loader:TryLoad(
-                definition.Path
-            )
-
-        if success then
-
-            Core[
-                definition.Key
-            ] = module
-
-            LoaderState.Features[
-                definition.Name
-            ] = {
-                Path = definition.Path,
-                Module = module,
-                Loaded = true
-            }
-
-            --------------------------------------------------
-            -- INIT
-            --------------------------------------------------
-
-            if definition.Init then
-
-                initializeModule(
-                    module,
-                    Core,
-                    definition.Name
-                )
-            end
-
+        if module then
+            State.Game[info.Name] = module
         else
-
-            LoaderState.Features[
-                definition.Name
-            ] = {
-                Path = definition.Path,
-                Loaded = false
-            }
-
-            if definition.Required then
-
-                error(
-                    "Required feature failed to load: "
-                        .. definition.Name
-                )
-            end
-        end
-    end
-
-    return Core
-end
-
-------------------------------------------------------
--- BUILD FEATURES
-------------------------------------------------------
-
-local function buildFeatures(Core)
-
-    for _, definition in ipairs(
-        FEATURE_MODULES
-    ) do
-
-        if definition.Build then
-
-            local module =
-                Core[
-                    definition.Key
-                ]
-
-            if module then
-
-                buildModule(
-                    module,
-                    Core,
-                    definition.Name
-                )
-            end
-        end
-    end
-end
-
-------------------------------------------------------
--- LOAD MAIN
-------------------------------------------------------
-
-local function loadMain(Core)
-
-    local success,
-        Main =
-        Loader:TryLoad(
-            "Main"
-        )
-
-    if not success then
-
-        return false,
-            Main
-    end
-
-    Core.Main =
-        Main
-
-    if type(Main.Init)
-        == "function"
-    then
-
-        local initialized,
-            errorMessage =
-            pcall(
-                function()
-                    return Main:Init(
-                        Core
-                    )
-                end
+            warn(
+                "[Loader] Game module failed: "
+                .. info.Path
+                .. "\n"
+                .. tostring(err)
             )
-
-        if not initialized then
-
-            return false,
-                errorMessage
         end
     end
 
-    return true,
-        Main
+    return State.Game
 end
 
-------------------------------------------------------
--- LOAD LOBBY
-------------------------------------------------------
+function Loader:InitGame()
+    local Core = State.Core
 
-local function loadLobby(Core)
+    for name, module in pairs(State.Game) do
+        if type(module) == "table"
+            and type(module.Init) == "function"
+        then
+            local success, err = pcall(function()
+                module:Init(Core, State.Main)
+            end)
 
-    local success,
-        Lobby =
-        Loader:TryLoad(
-            "Lobby"
-        )
-
-    if not success then
-
-        --------------------------------------------------
-        -- OPTIONAL
-        --------------------------------------------------
-
-        return true
+            if not success then
+                warn(
+                    "[Loader] Game Init failed: "
+                    .. name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
     end
-
-    Core.Lobby =
-        Lobby
-
-    initializeModule(
-        Lobby,
-        Core,
-        "Lobby"
-    )
-
-    return true
 end
 
-------------------------------------------------------
--- GLOBAL OBJECT
-------------------------------------------------------
+function Loader:BuildGame()
+    for name, module in pairs(State.Game) do
+        if type(module) == "table"
+            and type(module.Build) == "function"
+        then
+            local success, err = pcall(function()
+                module:Build()
+            end)
 
-local function createGlobal(Core)
+            if not success then
+                warn(
+                    "[Loader] Game Build failed: "
+                    .. name
+                    .. "\n"
+                    .. tostring(err)
+                )
+            end
+        end
+    end
+end
 
-    local global =
-        GlobalEnv.JustXDoors
+--//==================================================
+--// Global
+--//==================================================
 
-    if type(global)
-        ~= "table"
+function Loader:CreateGlobal()
+    local existing = GLOBAL_ENV[GLOBAL_NAME]
+
+    if type(existing) == "table"
+        and existing.Loader
     then
-
-        global = {}
+        return existing
     end
 
-    global.Version =
-        Loader.Version
+    local global = {
+        Version = self.Version,
 
-    global.Core =
-        Core
+        Loader = self,
 
-    global.Loader = {
-        Version =
-            Loader.Version,
+        Core = State.Core,
+        Features = State.Features,
+        Game = State.Game,
 
-        Loaded =
-            LoaderState.Loaded,
+        Main = State.Main,
 
-        State =
-            LoaderState
+        State = State,
+
+        Unload = function()
+            self:UnloadAll()
+        end
     }
 
-    GlobalEnv.JustXDoors =
-        global
+    GLOBAL_ENV[GLOBAL_NAME] = global
 
     return global
 end
 
-------------------------------------------------------
--- START
-------------------------------------------------------
+--//==================================================
+--// Start
+--//==================================================
 
 function Loader:Start()
-
-    if LoaderState.Started then
-
-        return GlobalEnv.JustXDoors
+    if State.Started then
+        return GLOBAL_ENV[GLOBAL_NAME]
     end
 
-    LoaderState.Started =
-        true
+    State.Started = true
 
-    log(
-        "Starting JustXDoors..."
-    )
+    -- 1. Core
+    self:LoadCore()
 
-    --------------------------------------------------
-    -- CORE
-    --------------------------------------------------
+    -- 2. Root coordinator
+    self:LoadMain()
 
-    local coreSuccess,
-        Core =
-        pcall(
-            loadCore
-        )
+    -- 3. Create UI / root tabs
+    self:InitMain()
 
-    if not coreSuccess then
+    -- 4. Features
+    self:LoadFeatures()
+    self:InitFeatures()
+    self:BuildFeatures()
 
-        LoaderState.Started =
-            false
+    -- 5. Game modules
+    self:LoadGame()
+    self:InitGame()
+    self:BuildGame()
 
-        error(
-            "Core initialization failed:\n"
-                .. tostring(Core)
-        )
-    end
+    -- 6. Global API
+    local global = self:CreateGlobal()
 
-    --------------------------------------------------
-    -- BASE FEATURES
-    --------------------------------------------------
-
-    local featureSuccess,
-        featureResult =
-        pcall(
-            function()
-                return loadFeatures(
-                    Core
-                )
-            end
-        )
-
-    if not featureSuccess then
-
-        LoaderState.Started =
-            false
-
-        error(
-            "Feature loading failed:\n"
-                .. tostring(
-                    featureResult
-                )
-        )
-    end
-
-    --------------------------------------------------
-    -- MAIN UI
-    --
-    -- Main creates the window and tabs.
-    --------------------------------------------------
-
-    local mainSuccess,
-        mainResult =
-        loadMain(
-            Core
-        )
-
-    if not mainSuccess then
-
-        LoaderState.Started =
-            false
-
-        error(
-            "Main initialization failed:\n"
-                .. tostring(
-                    mainResult
-                )
-        )
-    end
-
-    --------------------------------------------------
-    -- LOBBY
-    --------------------------------------------------
-
-    local lobbySuccess,
-        lobbyResult =
-        pcall(
-            function()
-                return loadLobby(
-                    Core
-                )
-            end
-        )
-
-    if not lobbySuccess then
-
-        warnLog(
-            "Lobby loading failed:",
-            lobbyResult
-        )
-    end
-
-    --------------------------------------------------
-    -- BUILD FEATURES
-    --
-    -- Main has already created the UI,
-    -- so feature modules can now add their
-    -- controls to the existing tabs.
-    --------------------------------------------------
-
-    local buildSuccess,
-        buildResult =
-        pcall(
-            function()
-                buildFeatures(
-                    Core
-                )
-            end
-        )
-
-    if not buildSuccess then
-
-        warnLog(
-            "Feature UI build failed:",
-            buildResult
-        )
-    end
-
-    --------------------------------------------------
-    -- GLOBAL
-    --------------------------------------------------
-
-    local global =
-        createGlobal(
-            Core
-        )
-
-    LoaderState.Finished =
-        true
-
-    log(
-        "JustXDoors loaded successfully."
-    )
+    State.Finished = true
 
     return global
 end
 
-------------------------------------------------------
--- AUTO START
-------------------------------------------------------
+--//==================================================
+--// State API
+--//==================================================
 
-local success,
-    result =
-    pcall(
-        function()
-            return Loader:Start()
-        end
-    )
-
-if not success then
-
-    warn(
-        "[JustXDoors Loader] "
-            .. tostring(result)
-    )
-
-    return nil
+function Loader:IsLoaded(path)
+    return isLoaded(path)
 end
 
-return result
+function Loader:IsLoading(path)
+    path = normalizePath(path)
+
+    return State.Loading[path] == true
+end
+
+function Loader:GetState()
+    return State
+end
+
+function Loader:Get(path)
+    return getLoaded(path)
+end
+
+--//==================================================
+--// Auto Start
+--//==================================================
+
+local success, result = xpcall(
+    function()
+        return Loader:Start()
+    end,
+    function(err)
+        return tostring(err)
+            .. "\n"
+            .. debug.traceback()
+    end
+)
+
+if not success then
+    warn(
+        "[JustXDoors Loader] Startup failed:\n"
+        .. tostring(result)
+    )
+else
+    return result
+end
+
+return Loader
