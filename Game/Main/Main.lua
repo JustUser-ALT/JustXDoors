@@ -1,16 +1,3 @@
---[[
-    JustXDoors
-    Game/Main/Main.lua
-
-    Character tab — Speed, Acceleration, Fly, Jump/Slide, Noclip, Idle Kick
-    Ported from Abyssal Hub / Abyssal Hub Continued.
-
-    Lifecycle (called by Loader):
-        Main:Init(Core)   — grab core refs, resolve character / game data
-        Main:Build()      — build UI into Core.Main.Tabs.Main, wire connections
-        Main:Destroy()    — clean up connections + state
-]]
-
 local Main = {}
 local Visual
 
