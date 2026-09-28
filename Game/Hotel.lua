@@ -230,8 +230,9 @@ local function buildProxy(entry, object)
     humanoid.Parent = proxy
 
     local count = 0
+    local sources = object:IsA("BasePart") and {object} or object:GetDescendants()
 
-    for _, source in ipairs(object:GetDescendants()) do
+    for _, source in ipairs(sources) do
         if source:IsA("BasePart") and source.Size.Magnitude > 0 then
             local part = Instance.new("Part")
             part.Name = "HighlightPart"
