@@ -8,42 +8,38 @@ local Tab
 local Connections = {}
 local Elements = {}
 
-local Highlights = {
+local ESP = {
     Doors = {},
-    Keys = {},
+    Drawers = {},
+    Closets = {},
+    Key = {},
 }
 
-local Labels = {
-    Doors = {},
-    Keys = {},
+local Display = {
+    Name = true,
+    Distance = false,
 }
 
-local DoorRooms = {}
-
-local ESPEnabled = {
-    Doors = false,
-    Keys = false,
-}
-
-local DisplayName = true
-local DisplayDistance = false
-local ScanTimer = 0
-
-local ESPColors = {
+local Colors = {
     Doors = Color3.fromRGB(255, 200, 50),
-    Keys = Color3.fromRGB(50, 220, 255),
+    Drawers = Color3.fromRGB(255, 170, 70),
+    Closets = Color3.fromRGB(190, 120, 255),
+    Key = Color3.fromRGB(50, 220, 255),
 }
+
+local ScanTimer = 0
+local RoomsConnection
 
 local function connect(signal, callback)
-    local connection = signal:Connect(callback)
-    table.insert(Connections, connection)
-    return connection
+    local c = signal:Connect(callback)
+    table.insert(Connections, c)
+    return c
 end
 
 local function disconnectAll()
-    for _, connection in ipairs(Connections) do
+    for _, c in ipairs(Connections) do
         pcall(function()
-            connection:Disconnect()
+            c:Disconnect()
         end)
     end
 
@@ -54,14 +50,16 @@ local function getRooms()
     return workspace:FindFirstChild("CurrentRooms")
 end
 
-local function getPlayerRoot()
-    local player = Players.LocalPlayer
-    local character = player and player.Character
-
+local function getRoot()
+    local character = Players.LocalPlayer.Character
     return character and character:FindFirstChild("HumanoidRootPart")
 end
 
-local function getDisplayPart(object)
+local function getPart(object)
+    if not object then
+        return nil
+    end
+
     if object:IsA("BasePart") then
         return object
     end
@@ -72,13 +70,11 @@ local function getDisplayPart(object)
         end
 
         local hitbox = object:FindFirstChild("Hitbox", true)
-
         if hitbox and hitbox:IsA("BasePart") then
             return hitbox
         end
 
         local handle = object:FindFirstChild("Handle", true)
-
         if handle and handle:IsA("BasePart") then
             return handle
         end
@@ -90,7 +86,7 @@ local function getDisplayPart(object)
 end
 
 local function getDoorNumber(room)
-    local door = room:FindFirstChild("Door")
+    local door = room and room:FindFirstChild("Door")
     local sign = door and door:FindFirstChild("Sign")
     local stinker = sign and sign:FindFirstChild("Stinker")
 
@@ -99,16 +95,15 @@ local function getDoorNumber(room)
             return stinker.Text
         end)
 
-        if ok and type(value) == "string" and value ~= "" then
-            local digits = value:match("%d+")
-
-            if digits then
-                return digits
+        if ok and type(value) == "string" then
+            local number = value:match("%d+")
+            if number then
+                return number
             end
         end
     end
 
-    local roomNumber = tonumber(room.Name)
+    local roomNumber = room and tonumber(room.Name)
 
     if roomNumber then
         return string.format("%04d", roomNumber + 1)
@@ -117,170 +112,181 @@ local function getDoorNumber(room)
     return "????"
 end
 
-local function makeHighlight(object, color)
-    local highlight = Instance.new("Highlight")
+local function getLabel(kind, object)
+    local text = {}
 
-    highlight.Name = "JustXDoorsESP"
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = color
-    highlight.OutlineColor = color
-    highlight.FillTransparency = 0.55
-    highlight.OutlineTransparency = 0
-    highlight.Adornee = object
-    highlight.Parent = object
-
-    return highlight
-end
-
-local function getESPText(kind, object)
-    local parts = {}
-
-    if DisplayName then
+    if Display.Name then
         if kind == "Doors" then
-            local room = DoorRooms[object]
-            local number = room and getDoorNumber(room) or "????"
+            local room = object:GetAttribute("JustXDoorsRoom")
+            local rooms = getRooms()
+            local roomObject = rooms and rooms:FindFirstChild(tostring(room))
 
-            parts[#parts + 1] = "Doors • " .. number
+            text[#text + 1] = "Doors • " .. getDoorNumber(roomObject)
         else
-            parts[#parts + 1] = "Key"
+            text[#text + 1] = kind == "Key" and "Key" or kind
         end
     end
 
-    if DisplayDistance then
-        local root = getPlayerRoot()
-        local target = getDisplayPart(object)
+    if Display.Distance then
+        local root = getRoot()
+        local part = getPart(object)
 
-        if root and target then
-            local distance = math.floor(
-                (root.Position - target.Position).Magnitude + 0.5
-            )
-
-            parts[#parts + 1] = tostring(distance)
+        if root and part then
+            text[#text + 1] = tostring(math.floor((root.Position - part.Position).Magnitude + 0.5))
         end
     end
 
-    return table.concat(parts, " • ")
+    return table.concat(text, " • ")
 end
 
-local function removeLabel(tbl, object)
-    local gui = tbl[object]
-
-    if gui then
+local function destroyLabel(entry)
+    if entry.Label then
         pcall(function()
-            gui:Destroy()
+            entry.Label:Destroy()
         end)
-
-        tbl[object] = nil
+        entry.Label = nil
     end
 end
 
-local function updateLabel(kind, object)
-    local tbl = Labels[kind]
-
+local function updateLabel(kind, object, entry)
     if not object or not object.Parent then
-        removeLabel(tbl, object)
         return
     end
 
-    local text = getESPText(kind, object)
-    local target = getDisplayPart(object)
-    local gui = tbl[object]
+    local part = getPart(object)
 
-    if not DisplayName and not DisplayDistance then
-        if gui then
-            gui.Enabled = false
+    if not part then
+        destroyLabel(entry)
+        return
+    end
+
+    if not Display.Name and not Display.Distance then
+        if entry.Label then
+            entry.Label.Enabled = false
         end
-
         return
     end
 
-    if not target then
-        removeLabel(tbl, object)
-        return
-    end
-
-    if not gui then
-        gui = Instance.new("BillboardGui")
-
+    if not entry.Label then
+        local gui = Instance.new("BillboardGui")
         gui.Name = "JustXDoorsESPLabel"
         gui.AlwaysOnTop = true
         gui.LightInfluence = 0
         gui.MaxDistance = 1000
-        gui.Size = UDim2.fromOffset(180, 28)
+        gui.Size = UDim2.fromOffset(180, 26)
         gui.StudsOffset = Vector3.new(0, 2.5, 0)
-        gui.Adornee = target
-        gui.Parent = target
+        gui.Adornee = part
+        gui.Parent = part
 
         local label = Instance.new("TextLabel")
-
         label.Name = "Text"
         label.BackgroundTransparency = 1
         label.Size = UDim2.fromScale(1, 1)
         label.Font = Enum.Font.GothamBold
         label.TextSize = 13
-        label.TextColor3 = ESPColors[kind]
+        label.TextColor3 = Colors[kind]
         label.TextStrokeTransparency = 0.35
         label.Parent = gui
 
-        tbl[object] = gui
+        entry.Label = gui
     else
-        gui.Adornee = target
+        entry.Label.Adornee = part
     end
 
-    gui.Enabled = text ~= ""
+    entry.Label.Enabled = true
 
-    local label = gui:FindFirstChild("Text")
-
+    local label = entry.Label:FindFirstChild("Text")
     if label then
-        label.Text = text
+        label.Text = getLabel(kind, object)
     end
 end
 
-local function addDoorESP(doorPart, room)
-    if not doorPart or not doorPart:IsA("BasePart") then
-        return
-    end
+local function addHighlight(entry, object, part, kind)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsESP"
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind]
+    highlight.OutlineColor = Colors[kind]
+    highlight.FillTransparency = 0.55
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = part
+    highlight.Parent = part
 
-    DoorRooms[doorPart] = room
-
-    if not Highlights.Doors[doorPart] then
-        Highlights.Doors[doorPart] = makeHighlight(
-            doorPart,
-            ESPColors.Doors
-        )
-
-        doorPart.Destroying:Once(function()
-            Highlights.Doors[doorPart] = nil
-            DoorRooms[doorPart] = nil
-            removeLabel(Labels.Doors, doorPart)
-        end)
-    end
-
-    updateLabel("Doors", doorPart)
+    entry.Highlights[#entry.Highlights + 1] = highlight
 end
 
-local function addKeyESP(key)
-    if not key then
+local function clearEntry(kind, object)
+    local entry = ESP[kind][object]
+
+    if not entry then
         return
     end
 
-    if not key:IsA("BasePart") and not key:IsA("Model") then
-        return
-    end
-
-    if not Highlights.Keys[key] then
-        Highlights.Keys[key] = makeHighlight(
-            key,
-            ESPColors.Keys
-        )
-
-        key.Destroying:Once(function()
-            Highlights.Keys[key] = nil
-            removeLabel(Labels.Keys, key)
+    for _, highlight in ipairs(entry.Highlights) do
+        pcall(function()
+            highlight:Destroy()
         end)
     end
 
-    updateLabel("Keys", key)
+    destroyLabel(entry)
+    ESP[kind][object] = nil
+end
+
+local function addObject(kind, object, room)
+    if not object or not object.Parent then
+        return
+    end
+
+    if ESP[kind][object] then
+        local entry = ESP[kind][object]
+        updateLabel(kind, object, entry)
+        return
+    end
+
+    local entry = {
+        Highlights = {},
+        Room = room,
+    }
+
+    ESP[kind][object] = entry
+
+    if kind == "Doors" and room then
+        object:SetAttribute("JustXDoorsRoom", tonumber(room.Name))
+    end
+
+    if kind == "Doors" then
+        local parts = {}
+
+        for _, child in ipairs(object:GetDescendants()) do
+            if child:IsA("BasePart") and child.Name == "Door" then
+                parts[#parts + 1] = child
+            end
+        end
+
+        if #parts == 0 then
+            for _, child in ipairs(object:GetDescendants()) do
+                if child:IsA("BasePart") then
+                    parts[#parts + 1] = child
+                end
+            end
+        end
+
+        for _, part in ipairs(parts) do
+            addHighlight(entry, object, part, kind)
+        end
+    else
+        addHighlight(entry, object, object:IsA("BasePart") and object or getPart(object), kind)
+    end
+
+    updateLabel(kind, object, entry)
+
+    object.Destroying:Once(function()
+        clearEntry(kind, object)
+    end)
+end
+
+local function hasDrawerContainer(object)
+    return object and object:FindFirstChild("DrawerContainer", true) ~= nil
 end
 
 local function scanRoom(room)
@@ -288,33 +294,48 @@ local function scanRoom(room)
         return
     end
 
-    if ESPEnabled.Doors then
-        local doorModel = room:FindFirstChild("Door")
+    local assets = room:FindFirstChild("Assets")
 
-        if doorModel then
-            local doorPart = doorModel:FindFirstChild("Door", true)
+    if ESP.Doors and room:FindFirstChild("Door") then
+        addObject("Doors", room.Door, room)
+    end
 
-            if doorPart and doorPart:IsA("BasePart") then
-                addDoorESP(doorPart, room)
+    if assets then
+        if ESP.Drawers then
+            for _, object in ipairs(assets:GetChildren()) do
+                if (object.Name == "Dresser" or object.Name == "Table")
+                    and hasDrawerContainer(object)
+                then
+                    addObject("Drawers", object, room)
+                end
+            end
+        end
+
+        if ESP.Closets then
+            for _, object in ipairs(assets:GetChildren()) do
+                if object.Name == "Wardrobe" then
+                    addObject("Closets", object, room)
+                end
             end
         end
     end
 
-    if ESPEnabled.Keys then
+    if ESP.Key[room] then
+        return
+    end
+
+    if ESP.Key then
         for _, object in ipairs(room:GetDescendants()) do
             if object.Name == "KeyObtain"
-                and (
-                    object:IsA("BasePart")
-                    or object:IsA("Model")
-                )
+                and (object:IsA("Model") or object:IsA("BasePart"))
             then
-                addKeyESP(object)
+                addObject("Key", object, room)
             end
         end
     end
 end
 
-local function scanAllRooms()
+local function scanAll()
     local rooms = getRooms()
 
     if not rooms then
@@ -326,98 +347,130 @@ local function scanAllRooms()
     end
 end
 
-local function clearESP(kind)
-    for object, highlight in pairs(Highlights[kind]) do
-        pcall(function()
-            highlight:Destroy()
-        end)
+local function clearKind(kind)
+    local copy = {}
 
-        Highlights[kind][object] = nil
-
-        if kind == "Doors" then
-            DoorRooms[object] = nil
-        end
+    for object in pairs(ESP[kind]) do
+        copy[#copy + 1] = object
     end
 
-    for object, gui in pairs(Labels[kind]) do
-        pcall(function()
-            gui:Destroy()
-        end)
-
-        Labels[kind][object] = nil
+    for _, object in ipairs(copy) do
+        clearEntry(kind, object)
     end
 end
 
-local function applyESP(selected)
-    local wantedDoors = false
-    local wantedKeys = false
+local function setKind(kind, enabled)
+    if enabled then
+        scanAll()
+    else
+        clearKind(kind)
+    end
+end
+
+local function applyInteractables(selected)
+    local doors = false
+    local drawers = false
+    local closets = false
 
     if type(selected) == "table" then
         for _, value in ipairs(selected) do
             if value == "Doors" then
-                wantedDoors = true
-            elseif value == "Key" then
-                wantedKeys = true
+                doors = true
+            elseif value == "Drawers" then
+                drawers = true
+            elseif value == "Closets" then
+                closets = true
             end
         end
     elseif selected == "Doors" then
-        wantedDoors = true
-    elseif selected == "Key" then
-        wantedKeys = true
+        doors = true
+    elseif selected == "Drawers" then
+        drawers = true
+    elseif selected == "Closets" then
+        closets = true
     end
 
-    ESPEnabled.Doors = wantedDoors
-    ESPEnabled.Keys = wantedKeys
+    ESP.Doors = doors
+    ESP.Drawers = drawers
+    ESP.Closets = closets
 
-    if not wantedDoors then
-        clearESP("Doors")
-    end
-
-    if not wantedKeys then
-        clearESP("Keys")
-    end
-
-    scanAllRooms()
+    setKind("Doors", doors)
+    setKind("Drawers", drawers)
+    setKind("Closets", closets)
 end
 
-local function refreshAllLabels()
-    for object in pairs(Highlights.Doors) do
-        if object and object.Parent then
-            updateLabel("Doors", object)
+local function applyItems(selected)
+    local key = false
+
+    if type(selected) == "table" then
+        for _, value in ipairs(selected) do
+            if value == "Key" then
+                key = true
+            end
         end
+    elseif selected == "Key" then
+        key = true
     end
 
-    for object in pairs(Highlights.Keys) do
-        if object and object.Parent then
-            updateLabel("Keys", object)
+    ESP.Key = key
+
+    if key then
+        scanAll()
+    else
+        clearKind("Key")
+    end
+end
+
+local function refreshLabels()
+    for kind, objects in pairs(ESP) do
+        if type(objects) == "table" then
+            for object, entry in pairs(objects) do
+                if typeof(object) == "Instance" and object.Parent then
+                    updateLabel(kind, object, entry)
+                end
+            end
         end
     end
 end
 
 local function hookRooms(rooms)
+    if RoomsConnection then
+        pcall(function()
+            RoomsConnection:Disconnect()
+        end)
+        RoomsConnection = nil
+    end
+
     if not rooms then
         return
     end
 
-    connect(rooms.ChildAdded, function(room)
+    RoomsConnection = rooms.ChildAdded:Connect(function(room)
         task.defer(function()
             scanRoom(room)
         end)
     end)
 
+    table.insert(Connections, RoomsConnection)
+
     connect(rooms.DescendantAdded, function(object)
         if object.Name == "KeyObtain"
             or object.Name == "Door"
-            or object.Name == "Sign"
+            or object.Name == "Dresser"
+            or object.Name == "Table"
+            or object.Name == "Wardrobe"
+            or object.Name == "DrawerContainer"
             or object.Name == "Stinker"
         then
             task.defer(function()
-                scanAllRooms()
+                if object.Parent then
+                    scanAll()
+                end
             end)
         end
     end)
 
-    scanAllRooms()
+    scanAll()
 end
 
 local function createUI()
@@ -454,20 +507,35 @@ local function createUI()
     local visualPage = visualPages:Page("Visual")
     local settingsPage = visualPages:Page("Settings")
 
-    Elements.ESPDropdown = visualPage:Dropdown({
-        Name = "ESP",
-        Flag = "Hotel_ESP",
+    Elements.Interactables = visualPage:Dropdown({
+        Name = "Interactables",
+        Flag = "Hotel_Interactables",
         Options = {
             "Doors",
+            "Drawers",
+            "Closets",
+        },
+        MultiSelect = true,
+        MaxSelect = 3,
+        Default = {},
+        Search = true,
+        Callback = function(selected)
+            applyInteractables(selected)
+        end,
+    })
+
+    Elements.Items = visualPage:Dropdown({
+        Name = "Items",
+        Flag = "Hotel_Items",
+        Options = {
             "Key",
         },
         MultiSelect = true,
-        MaxSelect = 2,
+        MaxSelect = 1,
         Default = {},
         Search = true,
-        Tooltip = "Select multiple ESP types.",
         Callback = function(selected)
-            applyESP(selected)
+            applyItems(selected)
         end,
     })
 
@@ -476,8 +544,8 @@ local function createUI()
         Flag = "Hotel_DisplayName",
         Default = true,
         Callback = function(value)
-            DisplayName = value
-            refreshAllLabels()
+            Display.Name = value
+            refreshLabels()
         end,
     })
 
@@ -486,8 +554,8 @@ local function createUI()
         Flag = "Hotel_DisplayDistance",
         Default = false,
         Callback = function(value)
-            DisplayDistance = value
-            refreshAllLabels()
+            Display.Distance = value
+            refreshLabels()
         end,
     })
 
@@ -526,15 +594,15 @@ local function setupConnections()
     connect(RunService.Heartbeat, function(dt)
         ScanTimer += dt
 
-        if ScanTimer < 0.25 then
+        if ScanTimer < 0.35 then
             return
         end
 
         ScanTimer = 0
 
-        if ESPEnabled.Doors or ESPEnabled.Keys then
-            scanAllRooms()
-            refreshAllLabels()
+        if ESP.Doors or ESP.Drawers or ESP.Closets or ESP.Key then
+            scanAll()
+            refreshLabels()
         end
     end)
 end
@@ -554,31 +622,29 @@ function Hotel:Init(core)
     local ok, result = pcall(createUI)
 
     if not ok or not result then
-        warn(
-            "[JustXDoors Hotel] Failed to create UI: "
-            .. tostring(result)
-        )
-
+        warn("[JustXDoors Hotel] Failed to create UI: " .. tostring(result))
         return self
     end
 
     setupConnections()
 
     self.Initialized = true
-
     return self
 end
 
 function Hotel:Destroy()
-    clearESP("Doors")
-    clearESP("Keys")
+    clearKind("Doors")
+    clearKind("Drawers")
+    clearKind("Closets")
+    clearKind("Key")
     disconnectAll()
 
-    ESPEnabled.Doors = false
-    ESPEnabled.Keys = false
+    ESP.Doors = false
+    ESP.Drawers = false
+    ESP.Closets = false
+    ESP.Key = false
 
     table.clear(Elements)
-
     Tab = nil
     Core = nil
     self.Initialized = false
