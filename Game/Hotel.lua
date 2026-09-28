@@ -527,7 +527,7 @@ local function createUI()
             "Key",
         },
         MultiSelect = true,
-        MaxSelect = 1,
+        MaxSelect = 20,
         Default = {},
         Search = true,
         Callback = function(selected)
