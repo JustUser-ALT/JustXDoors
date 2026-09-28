@@ -15,6 +15,13 @@ local ESP = {
     Key = {},
 }
 
+local Enabled = {
+    Doors = false,
+    Drawers = false,
+    Closets = false,
+    Key = false,
+}
+
 local Display = {
     Name = true,
     Distance = false,
@@ -96,9 +103,9 @@ local function getDoorNumber(room)
         end)
 
         if ok and type(value) == "string" then
-            local number = value:match("%d+")
+            local number = tonumber(value:match("%d+"))
             if number then
-                return number
+                return string.format("%04d", number)
             end
         end
     end
@@ -201,7 +208,69 @@ local function updateLabel(kind, object, entry)
     end
 end
 
-local function addHighlight(entry, object, part, kind)
+local function destroyProxy(entry)
+    if entry.Proxy then
+        pcall(function()
+            entry.Proxy:Destroy()
+        end)
+        entry.Proxy = nil
+    end
+end
+
+local function buildProxy(entry, object)
+    destroyProxy(entry)
+
+    local proxy = Instance.new("Model")
+    proxy.Name = "JustXDoorsESPProxy"
+    proxy.Parent = workspace
+
+    local humanoid = Instance.new("Humanoid")
+    humanoid.Name = "HighlightHumanoid"
+    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    humanoid.Parent = proxy
+
+    local count = 0
+
+    for _, source in ipairs(object:GetDescendants()) do
+        if source:IsA("BasePart") and source.Size.Magnitude > 0 then
+            local part = Instance.new("Part")
+            part.Name = "HighlightPart"
+            part.Size = source.Size
+            part.CFrame = source.CFrame
+            part.Transparency = 0.999
+            part.CanCollide = false
+            part.CanTouch = false
+            part.CanQuery = false
+            part.CastShadow = false
+            part.Massless = true
+            part.Material = Enum.Material.Plastic
+            part.Anchored = false
+            part.Parent = proxy
+
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = part
+            weld.Part1 = source
+            weld.Parent = part
+
+            count += 1
+        end
+    end
+
+    if count == 0 then
+        proxy:Destroy()
+        return nil
+    end
+
+    entry.Proxy = proxy
+    return proxy
+end
+
+local function addHighlight(entry, object, kind)
+    local adornee = buildProxy(entry, object)
+    if not adornee then
+        return
+    end
+
     local highlight = Instance.new("Highlight")
     highlight.Name = "JustXDoorsESP"
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -209,10 +278,20 @@ local function addHighlight(entry, object, part, kind)
     highlight.OutlineColor = Colors[kind]
     highlight.FillTransparency = 0.55
     highlight.OutlineTransparency = 0
-    highlight.Adornee = part
-    highlight.Parent = part
+    highlight.Adornee = adornee
+    highlight.Parent = adornee
 
     entry.Highlights[#entry.Highlights + 1] = highlight
+end
+
+local function rebuildHighlights(entry, object, kind)
+    for _, highlight in ipairs(entry.Highlights) do
+        pcall(function()
+            highlight:Destroy()
+        end)
+    end
+    table.clear(entry.Highlights)
+    addHighlight(entry, object, kind)
 end
 
 local function clearEntry(kind, object)
@@ -229,6 +308,13 @@ local function clearEntry(kind, object)
     end
 
     destroyLabel(entry)
+    destroyProxy(entry)
+    if entry.Connection then
+        pcall(function()
+            entry.Connection:Disconnect()
+        end)
+        entry.Connection = nil
+    end
     ESP[kind][object] = nil
 end
 
@@ -254,35 +340,25 @@ local function addObject(kind, object, room)
         object:SetAttribute("JustXDoorsRoom", tonumber(room.Name))
     end
 
-    if kind == "Doors" then
-        local parts = {}
+    addHighlight(entry, object, kind)
 
-        for _, child in ipairs(object:GetDescendants()) do
-            if child:IsA("BasePart") and child.Name == "Door" then
-                parts[#parts + 1] = child
-            end
-        end
-
-        if #parts == 0 then
-            for _, child in ipairs(object:GetDescendants()) do
-                if child:IsA("BasePart") then
-                    parts[#parts + 1] = child
+    entry.Connection = object.DescendantAdded:Connect(function(child)
+        if child:IsA("BasePart") then
+            task.defer(function()
+                if object.Parent and ESP[kind][object] == entry then
+                    rebuildHighlights(entry, object, kind)
                 end
-            end
+            end)
         end
+    end)
 
-        for _, part in ipairs(parts) do
-            addHighlight(entry, object, part, kind)
-        end
-    else
-        addHighlight(entry, object, object:IsA("BasePart") and object or getPart(object), kind)
-    end
-
-    updateLabel(kind, object, entry)
+    table.insert(Connections, entry.Connection)
 
     object.Destroying:Once(function()
         clearEntry(kind, object)
     end)
+
+    updateLabel(kind, object, entry)
 end
 
 local function hasDrawerContainer(object)
@@ -296,12 +372,12 @@ local function scanRoom(room)
 
     local assets = room:FindFirstChild("Assets")
 
-    if ESP.Doors and room:FindFirstChild("Door") then
+    if Enabled.Doors and room:FindFirstChild("Door") then
         addObject("Doors", room.Door, room)
     end
 
     if assets then
-        if ESP.Drawers then
+        if Enabled.Drawers then
             for _, object in ipairs(assets:GetChildren()) do
                 if (object.Name == "Dresser" or object.Name == "Table")
                     and hasDrawerContainer(object)
@@ -311,7 +387,7 @@ local function scanRoom(room)
             end
         end
 
-        if ESP.Closets then
+        if Enabled.Closets then
             for _, object in ipairs(assets:GetChildren()) do
                 if object.Name == "Wardrobe" then
                     addObject("Closets", object, room)
@@ -320,7 +396,7 @@ local function scanRoom(room)
         end
     end
 
-    if ESP.Key then
+    if Enabled.Key then
         for _, object in ipairs(room:GetDescendants()) do
             if object.Name == "KeyObtain"
                 and (object:IsA("Model") or object:IsA("BasePart"))
@@ -386,9 +462,9 @@ local function applyInteractables(selected)
         closets = true
     end
 
-    ESP.Doors = doors
-    ESP.Drawers = drawers
-    ESP.Closets = closets
+    Enabled.Doors = doors
+    Enabled.Drawers = drawers
+    Enabled.Closets = closets
 
     setKind("Doors", doors)
     setKind("Drawers", drawers)
@@ -408,7 +484,7 @@ local function applyItems(selected)
         key = true
     end
 
-    ESP.Key = key
+    Enabled.Key = key
 
     if key then
         scanAll()
@@ -596,7 +672,7 @@ local function setupConnections()
 
         ScanTimer = 0
 
-        if ESP.Doors or ESP.Drawers or ESP.Closets or ESP.Key then
+        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key then
             scanAll()
             refreshLabels()
         end
@@ -635,10 +711,10 @@ function Hotel:Destroy()
     clearKind("Key")
     disconnectAll()
 
-    ESP.Doors = false
-    ESP.Drawers = false
-    ESP.Closets = false
-    ESP.Key = false
+    Enabled.Doors = false
+    Enabled.Drawers = false
+    Enabled.Closets = false
+    Enabled.Key = false
 
     table.clear(Elements)
     Tab = nil
