@@ -583,29 +583,25 @@ local function createUI()
         return false
     end
 
-    local characterSection = Core:Section({
-        Tab = Tab,
+    local characterSection = Tab:Section({
         Title = "Character",
         Column = 1,
         Icon = "user",
     })
 
-    local movementSection = Core:Section({
-        Tab = Tab,
+    local movementSection = Tab:Section({
         Title = "Movement",
         Column = 2,
         Icon = "move",
     })
 
-    local visualSection = Core:Section({
-        Tab = Tab,
+    local visualSection = Tab:Section({
         Title = "Visual",
         Column = 3,
         Icon = "eye",
     })
 
-    local miscSection = Core:Section({
-        Tab = Tab,
+    local miscSection = Tab:Section({
         Title = "Misc",
         Column = 1,
         Icon = "settings-2",
