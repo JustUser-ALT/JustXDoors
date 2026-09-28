@@ -1,7 +1,6 @@
 local Core = {}
 
 local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
 
 local LibraryURL = "https://raw.githubusercontent.com/JustUser-ALT/JustLib/refs/heads/main/JustLib.lua"
 local IconURL = "https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"
@@ -79,6 +78,7 @@ function Core:Create()
     self.Tabs = {}
     self.Sections = {}
     self.Flags = JL.Flags
+    self.SettingsCreated = false
 
     Window:Open()
 
@@ -88,9 +88,24 @@ function Core:Create()
         ShowFriends = true,
     })
 
-    Window:Settings()
-
     return self
+end
+
+function Core:CreateSettings()
+    if not self.Window or self.SettingsCreated then
+        return
+    end
+
+    local ok, err = pcall(function()
+        self.Window:Settings()
+    end)
+
+    if not ok then
+        warn("[JustXDoors] Settings error: " .. tostring(err))
+        return
+    end
+
+    self.SettingsCreated = true
 end
 
 function Core:Tab(options)
@@ -100,14 +115,16 @@ function Core:Tab(options)
 
     options = options or {}
 
+    local name = options.Name or "Tab"
+
     local tab = self.Window:Tab({
-        Name = options.Name or "Tab",
+        Name = name,
         Icon = options.Icon,
         Type = options.Type or "Grid",
     })
 
     if tab then
-        self.Tabs[options.Name] = tab
+        self.Tabs[name] = tab
     end
 
     return tab
@@ -132,7 +149,9 @@ function Core:Notify(options)
         return
     end
 
-    self.Window:Notify(options or {})
+    pcall(function()
+        self.Window:Notify(options or {})
+    end)
 end
 
 function Core:Confirm(options)
@@ -140,7 +159,15 @@ function Core:Confirm(options)
         return false
     end
 
-    return self.Library:Confirm(options or {})
+    local ok, result = pcall(function()
+        return self.Library:Confirm(options or {})
+    end)
+
+    if ok then
+        return result
+    end
+
+    return false
 end
 
 function Core:GetTab(name)
@@ -192,6 +219,7 @@ function Core:Destroy()
     self.Library = nil
     self.Tabs = {}
     self.Sections = {}
+    self.SettingsCreated = false
 end
 
 return Core
