@@ -1,90 +1,81 @@
 local Main = {}
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local Player = Players.LocalPlayer
 
 local Core
-local Window
+local Tab
 local Character
 local Humanoid
-local Root
+local RootPart
 
 local Connections = {}
-local CharacterConnections = {}
+local Elements = {}
 
-local FlyEnabled = false
-local FlySpeed = 20
 local FlyVelocity
 local FlyGyro
+local FlyEnabled = false
 
-local InfiniteJump = false
-local InstantInteract = false
-local EnableJump = false
-local EnableSlide = false
-
-local FullbrightEnabled = false
+local FullBrightEnabled = false
 local NoFogEnabled = false
-local FullbrightBrightness = 35
 
-local SavedLighting = {
-    Ambient = nil,
-    OutdoorAmbient = nil,
-    Brightness = nil,
-    ClockTime = nil,
-    FogStart = nil,
-    FogEnd = nil,
-    Atmospheres = {},
-}
+local LightingBackup = nil
+local AtmosphereBackup = {}
 
 local ModifiedPrompts = {}
 
-local function connect(signal, callback, bucket)
+local OldJump = false
+local OldSlide = false
+
+local function connect(signal, callback)
     local connection = signal:Connect(callback)
-    table.insert(bucket or Connections, connection)
+    table.insert(Connections, connection)
     return connection
 end
 
-local function disconnectBucket(bucket)
-    for _, connection in ipairs(bucket) do
+local function disconnectAll()
+    for _, connection in ipairs(Connections) do
         pcall(function()
             connection:Disconnect()
         end)
     end
 
-    table.clear(bucket)
+    table.clear(Connections)
 end
 
 local function getCharacter()
-    Character = LocalPlayer.Character
-    Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
-    Root = Character and Character:FindFirstChild("HumanoidRootPart")
+    Character = Player.Character or Player.CharacterAdded:Wait()
 
-    return Character, Humanoid, Root
+    Humanoid = Character:FindFirstChildOfClass("Humanoid")
+    RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    return Character
 end
 
 local function getFloor()
-    local floor = ReplicatedStorage:FindFirstChild("Floor")
+    local gameData = ReplicatedStorage:FindFirstChild("GameData")
 
-    if floor and floor:IsA("StringValue") then
+    if not gameData then
+        return "Hotel"
+    end
+
+    local floor = gameData:FindFirstChild("Floor")
+
+    if floor then
         return floor.Value
     end
 
-    local value = workspace:GetAttribute("Floor")
-    if value ~= nil then
-        return tostring(value)
-    end
-
-    return ""
+    return "Hotel"
 end
 
-local function getRemotes()
-    return ReplicatedStorage:FindFirstChild("RemotesFolder")
+local function getLiveModifiers()
+    return workspace:FindFirstChild("LiveModifiers")
+        or ReplicatedStorage:FindFirstChild("LiveModifiers")
 end
 
 local function isCrouching()
@@ -98,15 +89,17 @@ local function isCrouching()
         return Character:GetAttribute("Crouching") == true
     end
 
-    local collisionPart = Character:FindFirstChild("CollisionPart")
+    local collisionPart =
+        Character:FindFirstChild("CollisionPart")
+        or Character:FindFirstChild("Collision")
 
     if collisionPart and collisionPart:IsA("BasePart") then
         local ok, group = pcall(function()
             return collisionPart.CollisionGroup
         end)
 
-        if ok and group then
-            return group == "PlayerCrouching"
+        if ok and group == "PlayerCrouching" then
+            return true
         end
     end
 
@@ -118,11 +111,11 @@ local function getInjuriesSpeed()
         return 0
     end
 
-    return 0.075 * math.max(0, Humanoid.MaxHealth - Humanoid.Health)
+    return 0.075 * (Humanoid.MaxHealth - Humanoid.Health)
 end
 
 local function getCurrentSpeed()
-    if not Character or not Humanoid then
+    if not Character then
         return 15
     end
 
@@ -132,47 +125,116 @@ local function getCurrentSpeed()
     speed += Character:GetAttribute("SpeedBoostBehind") or 0
     speed += Character:GetAttribute("SpeedBoostExtra") or 0
 
-    speed += getFloor() == "Party" and 10 or 0
-
-    local modifiers = workspace:FindFirstChild("LiveModifiers")
-
-    if modifiers then
-        speed += modifiers:FindFirstChild("PlayerFast") and 3 or 0
-        speed += modifiers:FindFirstChild("PlayerFaster") and 6 or 0
-        speed += modifiers:FindFirstChild("PlayerFastest") and 20 or 0
-
-        speed -= modifiers:FindFirstChild("PlayerSlow") and 3 or 0
-        speed -= modifiers:FindFirstChild("PlayerSlowHealth") and getInjuriesSpeed() or 0
-
-        if isCrouching() then
-            if modifiers:FindFirstChild("PlayerCrouchSlow") then
-                speed -= 8
-            elseif modifiers:FindFirstChild("PlayerSlow") then
-                speed -= 8
-            else
-                speed -= 5
-            end
-        end
-    elseif isCrouching() then
-        speed -= 5
+    if getFloor() == "Party" then
+        speed += 10
     end
 
-    return math.max(0, speed)
+    local modifiers = getLiveModifiers()
+
+    if modifiers then
+        if modifiers:FindFirstChild("PlayerFast") then
+            speed += 3
+        end
+
+        if modifiers:FindFirstChild("PlayerFaster") then
+            speed += 6
+        end
+
+        if modifiers:FindFirstChild("PlayerFastest") then
+            speed += 20
+        end
+
+        if modifiers:FindFirstChild("PlayerSlow") then
+            speed -= 3
+        end
+
+        if modifiers:FindFirstChild("PlayerSlowHealth") then
+            speed -= getInjuriesSpeed()
+        end
+    end
+
+    if isCrouching() then
+        if modifiers and modifiers:FindFirstChild("PlayerCrouchSlow") then
+            speed -= 8
+        elseif modifiers and modifiers:FindFirstChild("PlayerSlow") then
+            speed -= 8
+        else
+            speed -= 5
+        end
+    end
+
+    return math.max(speed, 0)
 end
 
-local function updateWalkSpeed()
-    if not Humanoid or FlyEnabled then
+local function getSpeedBoost()
+    local slider = Elements.SpeedBoost
+
+    if not slider then
+        return 0
+    end
+
+    local value = slider.Get and slider:Get()
+
+    if type(value) == "number" then
+        return value
+    end
+
+    if type(slider.Value) == "number" then
+        return slider.Value
+    end
+
+    return 0
+end
+
+local function getToggleValue(element)
+    if not element then
+        return false
+    end
+
+    if type(element.Get) == "function" then
+        local ok, value = pcall(function()
+            return element:Get()
+        end)
+
+        if ok then
+            return value == true
+        end
+    end
+
+    return element.Value == true
+end
+
+local function speedEnabled()
+    return getToggleValue(Elements.SpeedBoostToggle)
+end
+
+local function applySpeed()
+    if not Humanoid or not Humanoid.Parent then
         return
     end
 
-    Humanoid.WalkSpeed = getCurrentSpeed()
+    if not speedEnabled() then
+        Humanoid.WalkSpeed = getCurrentSpeed()
+        return
+    end
+
+    local speed = getCurrentSpeed() + getSpeedBoost()
+
+    Humanoid.WalkSpeed = math.max(speed, 0)
 end
 
-local function sendCrouchState()
-    local remotes = getRemotes()
-    local crouch = remotes and remotes:FindFirstChild("Crouch")
+local function fireCrouchRemote()
+    local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+        or ReplicatedStorage:FindFirstChild("EntityInfo")
+        or ReplicatedStorage:FindFirstChild("Bricks")
 
-    if not crouch then
+    if not remotes then
+        return
+    end
+
+    local crouch = remotes:FindFirstChild("Crouch")
+
+    if not crouch or not crouch:IsA("RemoteEvent") then
         return
     end
 
@@ -181,189 +243,239 @@ local function sendCrouchState()
     end)
 end
 
-local function applyCharacterState()
-    getCharacter()
-
-    if not Humanoid then
+local function applyJump(enabled)
+    if not Character then
         return
     end
 
-    updateWalkSpeed()
-
-    if Humanoid.UseJumpPower then
-        Humanoid.JumpPower = EnableJump and 50 or 0
-    else
-        Humanoid.JumpHeight = EnableJump and 7.2 or 0
-    end
-
-    Character:SetAttribute("CanJump", EnableJump)
-    Character:SetAttribute("CanSlide", EnableSlide)
+    Character:SetAttribute(
+        "CanJump",
+        enabled and true or OldJump
+    )
 end
 
-local function startFly()
-    getCharacter()
-
-    if not Character or not Humanoid or not Root then
+local function applySlide(enabled)
+    if not Character then
         return
     end
 
-    FlyEnabled = true
-    Humanoid.PlatformStand = true
-    Humanoid.AutoRotate = false
+    Character:SetAttribute(
+        "CanSlide",
+        enabled and true or OldSlide
+    )
+end
+
+local function createFly()
+    if FlyVelocity then
+        pcall(function()
+            FlyVelocity:Destroy()
+        end)
+    end
+
+    if FlyGyro then
+        pcall(function()
+            FlyGyro:Destroy()
+        end)
+    end
+
+    if not RootPart then
+        return
+    end
 
     FlyVelocity = Instance.new("BodyVelocity")
     FlyVelocity.Name = "JustXDoorsFlyVelocity"
-    FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    FlyVelocity.MaxForce = Vector3.new(
+        math.huge,
+        math.huge,
+        math.huge
+    )
+    FlyVelocity.P = 10000
     FlyVelocity.Velocity = Vector3.zero
-    FlyVelocity.Parent = Root
+    FlyVelocity.Parent = RootPart
 
     FlyGyro = Instance.new("BodyGyro")
     FlyGyro.Name = "JustXDoorsFlyGyro"
-    FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    FlyGyro.P = 9e4
+    FlyGyro.MaxTorque = Vector3.new(
+        math.huge,
+        math.huge,
+        math.huge
+    )
+    FlyGyro.P = 10000
     FlyGyro.D = 500
-    FlyGyro.CFrame = Root.CFrame
-    FlyGyro.Parent = Root
+    FlyGyro.CFrame = RootPart.CFrame
+    FlyGyro.Parent = RootPart
 end
 
-local function stopFly()
-    FlyEnabled = false
-
-    if Humanoid then
-        Humanoid.PlatformStand = false
-        Humanoid.AutoRotate = true
-    end
-
+local function destroyFly()
     if FlyVelocity then
-        FlyVelocity:Destroy()
+        pcall(function()
+            FlyVelocity:Destroy()
+        end)
         FlyVelocity = nil
     end
 
     if FlyGyro then
-        FlyGyro:Destroy()
+        pcall(function()
+            FlyGyro:Destroy()
+        end)
         FlyGyro = nil
     end
 
-    updateWalkSpeed()
+    if Humanoid then
+        pcall(function()
+            Humanoid.PlatformStand = false
+            Humanoid.AutoRotate = true
+        end)
+    end
+end
+
+local function getFlySpeed()
+    local slider = Elements.FlySpeed
+
+    if not slider then
+        return 20
+    end
+
+    if type(slider.Get) == "function" then
+        local ok, value = pcall(function()
+            return slider:Get()
+        end)
+
+        if ok and type(value) == "number" then
+            return value
+        end
+    end
+
+    if type(slider.Value) == "number" then
+        return slider.Value
+    end
+
+    return 20
 end
 
 local function updateFly()
-    if not FlyEnabled or not Root or not Humanoid then
+    if not FlyEnabled or not RootPart or not Humanoid then
+        return
+    end
+
+    if not FlyVelocity or not FlyVelocity.Parent then
+        createFly()
+    end
+
+    if not FlyVelocity then
+        return
+    end
+
+    local camera = workspace.CurrentCamera
+
+    if not camera then
         return
     end
 
     local move = Humanoid.MoveDirection
+
     local velocity = Vector3.zero
 
     if move.Magnitude > 0 then
-        local cameraCF = Camera.CFrame
-        local forward = cameraCF.LookVector
-        local right = cameraCF.RightVector
+        velocity = move.Unit * getFlySpeed()
+    end
 
-        local horizontal = Vector3.new(move.X, 0, move.Z)
+    local vertical = 0
 
-        if horizontal.Magnitude > 0 then
-            local direction = (right * horizontal.X) + (forward * horizontal.Z)
-            velocity = direction.Unit * FlySpeed
-        end
+    if Humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+        vertical += getFlySpeed()
     end
 
     if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-        velocity += Vector3.new(0, FlySpeed, 0)
+        vertical += getFlySpeed()
     end
 
-    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-        velocity -= Vector3.new(0, FlySpeed, 0)
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+        or UserInputService:IsKeyDown(Enum.KeyCode.C)
+    then
+        vertical -= getFlySpeed()
     end
 
-    if FlyVelocity then
-        FlyVelocity.Velocity = velocity
-    end
+    velocity += Vector3.new(0, vertical, 0)
 
-    if FlyGyro then
-        FlyGyro.CFrame = CFrame.lookAt(Root.Position, Root.Position + Camera.CFrame.LookVector)
-    end
-end
+    FlyVelocity.Velocity = velocity
 
-local function setJumpEnabled(state)
-    EnableJump = state
+    local look = camera.CFrame.LookVector
 
-    if Character then
-        Character:SetAttribute("CanJump", state)
-    end
-
-    if Humanoid then
-        if Humanoid.UseJumpPower then
-            Humanoid.JumpPower = state and 50 or 0
-        else
-            Humanoid.JumpHeight = state and 7.2 or 0
-        end
+    if look.Magnitude > 0 then
+        FlyGyro.CFrame = CFrame.lookAt(
+            RootPart.Position,
+            RootPart.Position + look
+        )
     end
 end
 
-local function setSlideEnabled(state)
-    EnableSlide = state
-
-    if Character then
-        Character:SetAttribute("CanSlide", state)
-    end
-end
-
-local function onJumpRequest()
-    if not InfiniteJump or not Humanoid or not Character then
+local function enableFly()
+    if FlyEnabled then
         return
     end
 
-    Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    getCharacter()
+
+    if not RootPart or not Humanoid then
+        return
+    end
+
+    FlyEnabled = true
+
+    createFly()
+
+    Humanoid.PlatformStand = true
+    Humanoid.AutoRotate = false
+end
+
+local function disableFly()
+    FlyEnabled = false
+    destroyFly()
 end
 
 local function saveLighting()
-    if SavedLighting.Ambient ~= nil then
+    if LightingBackup then
         return
     end
 
-    SavedLighting.Ambient = Lighting.Ambient
-    SavedLighting.OutdoorAmbient = Lighting.OutdoorAmbient
-    SavedLighting.Brightness = Lighting.Brightness
-    SavedLighting.ClockTime = Lighting.ClockTime
-    SavedLighting.FogStart = Lighting.FogStart
-    SavedLighting.FogEnd = Lighting.FogEnd
+    LightingBackup = {
+        Ambient = Lighting.Ambient,
+        OutdoorAmbient = Lighting.OutdoorAmbient,
+        Brightness = Lighting.Brightness,
+        ClockTime = Lighting.ClockTime,
+        FogStart = Lighting.FogStart,
+        FogEnd = Lighting.FogEnd,
+        ExposureCompensation = Lighting.ExposureCompensation,
+        ColorShift_Bottom = Lighting.ColorShift_Bottom,
+        ColorShift_Top = Lighting.ColorShift_Top,
+    }
 
-    table.clear(SavedLighting.Atmospheres)
+    table.clear(AtmosphereBackup)
 
     for _, object in ipairs(Lighting:GetChildren()) do
         if object:IsA("Atmosphere") then
-            SavedLighting.Atmospheres[object] = {
+            AtmosphereBackup[object] = {
                 Density = object.Density,
-                Offset = object.Offset,
-                Color = object.Color,
-                Decay = object.Decay,
-                Glare = object.Glare,
                 Haze = object.Haze,
-                Enabled = object.Enabled,
+                Glare = object.Glare,
             }
         end
     end
 end
 
-local function applyFullbright()
-    if not FullbrightEnabled then
+local function applyFullBright()
+    if not FullBrightEnabled then
         return
     end
 
     saveLighting()
 
-    local value = math.clamp(FullbrightBrightness / 100, 0, 1)
-
-    Lighting.Brightness = 1 + value * 2
-    Lighting.Ambient = Color3.new(value, value, value)
-    Lighting.OutdoorAmbient = Color3.new(value, value, value)
+    Lighting.Ambient = Color3.new(1, 1, 1)
+    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+    Lighting.Brightness = 3
     Lighting.ClockTime = 14
-
-    if NoFogEnabled then
-        Lighting.FogStart = 0
-        Lighting.FogEnd = 1e6
-    end
+    Lighting.ExposureCompensation = 0
 
     for _, object in ipairs(Lighting:GetChildren()) do
         if object:IsA("Atmosphere") then
@@ -382,7 +494,7 @@ local function applyNoFog()
     saveLighting()
 
     Lighting.FogStart = 0
-    Lighting.FogEnd = 1e6
+    Lighting.FogEnd = 1000000
 
     for _, object in ipairs(Lighting:GetChildren()) do
         if object:IsA("Atmosphere") then
@@ -394,54 +506,41 @@ local function applyNoFog()
 end
 
 local function restoreLighting()
-    if FullbrightEnabled or NoFogEnabled then
+    if not LightingBackup then
         return
     end
 
-    if SavedLighting.Ambient == nil then
+    if FullBrightEnabled or NoFogEnabled then
         return
     end
 
-    Lighting.Ambient = SavedLighting.Ambient
-    Lighting.OutdoorAmbient = SavedLighting.OutdoorAmbient
-    Lighting.Brightness = SavedLighting.Brightness
-    Lighting.ClockTime = SavedLighting.ClockTime
-    Lighting.FogStart = SavedLighting.FogStart
-    Lighting.FogEnd = SavedLighting.FogEnd
+    pcall(function()
+        Lighting.Ambient = LightingBackup.Ambient
+        Lighting.OutdoorAmbient = LightingBackup.OutdoorAmbient
+        Lighting.Brightness = LightingBackup.Brightness
+        Lighting.ClockTime = LightingBackup.ClockTime
+        Lighting.FogStart = LightingBackup.FogStart
+        Lighting.FogEnd = LightingBackup.FogEnd
+        Lighting.ExposureCompensation = LightingBackup.ExposureCompensation
+        Lighting.ColorShift_Bottom = LightingBackup.ColorShift_Bottom
+        Lighting.ColorShift_Top = LightingBackup.ColorShift_Top
+    end)
 
-    for object, data in pairs(SavedLighting.Atmospheres) do
+    for object, values in pairs(AtmosphereBackup) do
         if object and object.Parent then
-            object.Density = data.Density
-            object.Offset = data.Offset
-            object.Color = data.Color
-            object.Decay = data.Decay
-            object.Glare = data.Glare
-            object.Haze = data.Haze
-            object.Enabled = data.Enabled
+            pcall(function()
+                object.Density = values.Density
+                object.Haze = values.Haze
+                object.Glare = values.Glare
+            end)
         end
     end
 
-    table.clear(SavedLighting.Atmospheres)
-
-    SavedLighting.Ambient = nil
-    SavedLighting.OutdoorAmbient = nil
-    SavedLighting.Brightness = nil
-    SavedLighting.ClockTime = nil
-    SavedLighting.FogStart = nil
-    SavedLighting.FogEnd = nil
+    LightingBackup = nil
+    table.clear(AtmosphereBackup)
 end
 
-local function refreshLighting()
-    if FullbrightEnabled then
-        applyFullbright()
-    elseif NoFogEnabled then
-        applyNoFog()
-    else
-        restoreLighting()
-    end
-end
-
-local function setPrompt(prompt)
+local function applyPrompt(prompt)
     if not prompt:IsA("ProximityPrompt") then
         return
     end
@@ -453,204 +552,355 @@ local function setPrompt(prompt)
     prompt.HoldDuration = 0
 end
 
-local function restorePrompts()
+local function enableInstantInteract()
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object:IsA("ProximityPrompt") then
+            applyPrompt(object)
+        end
+    end
+end
+
+local function disableInstantInteract()
     for prompt, duration in pairs(ModifiedPrompts) do
         if prompt and prompt.Parent then
-            prompt.HoldDuration = duration
+            pcall(function()
+                prompt.HoldDuration = duration
+            end)
         end
     end
 
     table.clear(ModifiedPrompts)
 end
 
-local function setInstantInteract(state)
-    InstantInteract = state
+local function createUI()
+    Tab = Core:Tab({
+        Name = "Main",
+        Icon = "user",
+        Type = "Grid",
+    })
 
-    if state then
-        for _, object in ipairs(workspace:GetDescendants()) do
-            if object:IsA("ProximityPrompt") then
-                setPrompt(object)
-            end
-        end
-    else
-        restorePrompts()
+    if not Tab then
+        return false
     end
+
+    local characterSection = Core:Section({
+        Tab = Tab,
+        Title = "Character",
+        Column = 1,
+        Icon = "user",
+    })
+
+    local movementSection = Core:Section({
+        Tab = Tab,
+        Title = "Movement",
+        Column = 2,
+        Icon = "move",
+    })
+
+    local visualSection = Core:Section({
+        Tab = Tab,
+        Title = "Visual",
+        Column = 3,
+        Icon = "eye",
+    })
+
+    local miscSection = Core:Section({
+        Tab = Tab,
+        Title = "Misc",
+        Column = 1,
+        Icon = "settings-2",
+    })
+
+    if not characterSection
+        or not movementSection
+        or not visualSection
+        or not miscSection
+    then
+        return false
+    end
+
+    Elements.SpeedBoost = characterSection:Slider({
+        Name = "Speed Boost",
+        Min = 0,
+        Max = 100,
+        Default = 0,
+        Flag = "Main_SpeedBoost",
+        TextMode = "Smart",
+    })
+
+    Elements.SpeedBoostToggle = characterSection:Toggle({
+        Name = "Enable Speed Boost",
+        Default = false,
+        Flag = "Main_SpeedBoostToggle",
+        TextMode = "Smart",
+        Callback = function(value)
+            if value then
+                applySpeed()
+            else
+                applySpeed()
+            end
+        end,
+    })
+
+    Elements.EnableJump = characterSection:Toggle({
+        Name = "Enable Jumping",
+        Default = false,
+        Flag = "Main_EnableJump",
+        TextMode = "Smart",
+        Callback = function(value)
+            applyJump(value)
+        end,
+    })
+
+    Elements.InfiniteJump = characterSection:Toggle({
+        Name = "Infinite Jump",
+        Default = false,
+        Flag = "Main_InfiniteJump",
+        TextMode = "Smart",
+    })
+
+    Elements.EnableSlide = characterSection:Toggle({
+        Name = "Enable Sliding",
+        Default = false,
+        Flag = "Main_EnableSlide",
+        TextMode = "Smart",
+        Callback = function(value)
+            applySlide(value)
+        end,
+    })
+
+    Elements.Fly = movementSection:Toggle({
+        Name = "Fly",
+        Default = false,
+        Flag = "Main_Fly",
+        TextMode = "Smart",
+        Callback = function(value)
+            if value then
+                enableFly()
+            else
+                disableFly()
+            end
+        end,
+    })
+
+    Elements.FlySpeed = movementSection:Slider({
+        Name = "Fly Speed",
+        Min = 0,
+        Max = 115,
+        Default = 20,
+        Flag = "Main_FlySpeed",
+        TextMode = "Smart",
+    })
+
+    Elements.FullBright = visualSection:Toggle({
+        Name = "Fullbright",
+        Default = false,
+        Flag = "Main_FullBright",
+        TextMode = "Smart",
+        Callback = function(value)
+            FullBrightEnabled = value == true
+
+            if FullBrightEnabled then
+                saveLighting()
+                applyFullBright()
+            else
+                if not NoFogEnabled then
+                    restoreLighting()
+                end
+            end
+        end,
+    })
+
+    Elements.NoFog = visualSection:Toggle({
+        Name = "No Fog",
+        Default = false,
+        Flag = "Main_NoFog",
+        TextMode = "Smart",
+        Callback = function(value)
+            NoFogEnabled = value == true
+
+            if NoFogEnabled then
+                saveLighting()
+                applyNoFog()
+            else
+                if not FullBrightEnabled then
+                    restoreLighting()
+                end
+            end
+        end,
+    })
+
+    Elements.Brightness = visualSection:Slider({
+        Name = "Brightness",
+        Min = 25,
+        Max = 100,
+        Default = 35,
+        Flag = "Main_Brightness",
+        TextMode = "Smart",
+    })
+
+    Elements.InstantInteract = miscSection:Toggle({
+        Name = "Instant Interact",
+        Default = false,
+        Flag = "Main_InstantInteract",
+        TextMode = "Smart",
+        Callback = function(value)
+            if value then
+                enableInstantInteract()
+            else
+                disableInstantInteract()
+            end
+        end,
+    })
+
+    return true
 end
 
-local function setupCharacter()
-    disconnectBucket(CharacterConnections)
-
+local function setupConnections()
     getCharacter()
 
     if not Character then
         return
     end
 
-    connect(Character:GetAttributeChangedSignal("SpeedBoost"), updateWalkSpeed, CharacterConnections)
-    connect(Character:GetAttributeChangedSignal("SpeedBoostBehind"), updateWalkSpeed, CharacterConnections)
-    connect(Character:GetAttributeChangedSignal("SpeedBoostExtra"), updateWalkSpeed, CharacterConnections)
-    connect(Character:GetAttributeChangedSignal("Crouching"), function()
-        updateWalkSpeed()
-        sendCrouchState()
-    end, CharacterConnections)
+    OldJump = Character:GetAttribute("CanJump") or false
+    OldSlide = Character:GetAttribute("CanSlide") or false
 
-    if Humanoid then
-        connect(Humanoid:GetPropertyChangedSignal("Health"), updateWalkSpeed, CharacterConnections)
-        connect(Humanoid:GetPropertyChangedSignal("MaxHealth"), updateWalkSpeed, CharacterConnections)
-    end
+    connect(
+        Player.CharacterAdded,
+        function(character)
+            Character = character
 
-    applyCharacterState()
-end
+            Humanoid = character:WaitForChild("Humanoid", 10)
+            RootPart = character:WaitForChild("HumanoidRootPart", 10)
 
-local function createCharacterTab()
-    local tab = Core:Tab({
-        Name = "Main",
-        Icon = "house",
-        Type = "Grid",
-    })
+            OldJump = character:GetAttribute("CanJump") or false
+            OldSlide = character:GetAttribute("CanSlide") or false
 
-    if not tab then
-        return
-    end
+            if getToggleValue(Elements.EnableJump) then
+                applyJump(true)
+            end
 
-    local characterSection = Core:Section(tab, {
-        Title = "Character",
-        Column = 1,
-        Icon = "person-standing",
-    })
+            if getToggleValue(Elements.EnableSlide) then
+                applySlide(true)
+            end
 
-    characterSection:Slider({
-        Name = "Speed Boost",
-        Flag = "SpeedBoost",
-        Min = 0,
-        Max = 85,
-        Step = 1,
-        Default = 0,
-        Suffix = "",
-        Callback = function(value)
-            local remotes = getRemotes()
-            local crouch = remotes and remotes:FindFirstChild("Crouch")
+            if FlyEnabled then
+                task.defer(function()
+                    createFly()
 
-            if crouch then
-                pcall(function()
-                    crouch:FireServer(isCrouching(), true)
+                    if Humanoid then
+                        Humanoid.PlatformStand = true
+                        Humanoid.AutoRotate = false
+                    end
                 end)
             end
 
-            if Character then
-                Character:SetAttribute("SpeedBoost", value)
+            if speedEnabled() then
+                task.defer(applySpeed)
+            end
+        end
+    )
+
+    connect(
+        UserInputService.JumpRequest,
+        function()
+            if not getToggleValue(Elements.InfiniteJump) then
+                return
             end
 
-            updateWalkSpeed()
-        end,
-    })
-
-    characterSection:Toggle({
-        Name = "Fly",
-        Flag = "Fly",
-        Default = false,
-        Callback = function(value)
-            if value then
-                startFly()
-            else
-                stopFly()
+            if not Humanoid or Humanoid.Health <= 0 then
+                return
             end
-        end,
-    })
 
-    characterSection:Slider({
-        Name = "Fly Speed",
-        Flag = "FlySpeed",
-        Min = 0,
-        Max = 115,
-        Step = 1,
-        Default = 20,
-        Suffix = "",
-        Callback = function(value)
-            FlySpeed = value
-        end,
-    })
+            pcall(function()
+                Humanoid:ChangeState(
+                    Enum.HumanoidStateType.Jumping
+                )
+            end)
+        end
+    )
 
-    characterSection:Divider()
-
-    characterSection:Toggle({
-        Name = "Enable Jump",
-        Flag = "EnableJump",
-        Default = false,
-        Callback = setJumpEnabled,
-    })
-
-    characterSection:Toggle({
-        Name = "Infinite Jump",
-        Flag = "InfiniteJump",
-        Default = false,
-        Callback = function(value)
-            InfiniteJump = value
-        end,
-    })
-
-    characterSection:Toggle({
-        Name = "Enable Slide",
-        Flag = "EnableSlide",
-        Default = false,
-        Callback = setSlideEnabled,
-    })
-
-    local visualSection = Core:Section(tab, {
-        Title = "Visual",
-        Column = 2,
-        Icon = "eye",
-    })
-
-    visualSection:Slider({
-        Name = "Brightness",
-        Flag = "FullbrightBrightness",
-        Min = 25,
-        Max = 100,
-        Step = 1,
-        Default = 35,
-        Suffix = "%",
-        Callback = function(value)
-            FullbrightBrightness = value
-
-            if FullbrightEnabled then
-                applyFullbright()
+    connect(
+        workspace.DescendantAdded,
+        function(object)
+            if object:IsA("ProximityPrompt")
+                and getToggleValue(Elements.InstantInteract)
+            then
+                task.defer(function()
+                    if object.Parent then
+                        applyPrompt(object)
+                    end
+                end)
             end
-        end,
-    })
+        end
+    )
 
-    visualSection:Toggle({
-        Name = "Fullbright",
-        Flag = "Fullbright",
-        Default = false,
-        Callback = function(value)
-            FullbrightEnabled = value
-            refreshLighting()
-        end,
-    })
+    connect(
+        Lighting.ChildAdded,
+        function(object)
+            if not (FullBrightEnabled or NoFogEnabled) then
+                return
+            end
 
-    visualSection:Toggle({
-        Name = "No Fog",
-        Flag = "NoFog",
-        Default = false,
-        Callback = function(value)
-            NoFogEnabled = value
-            refreshLighting()
-        end,
-    })
+            if object:IsA("Atmosphere") then
+                task.defer(function()
+                    if FullBrightEnabled or NoFogEnabled then
+                        object.Density = 0
+                        object.Haze = 0
+                        object.Glare = 0
+                    end
+                end)
+            end
+        end
+    )
 
-    local miscSection = Core:Section(tab, {
-        Title = "Misc",
-        Column = 3,
-        Icon = "settings-2",
-    })
+    connect(
+        RunService.Heartbeat,
+        function()
+            if not Character or not Character.Parent then
+                return
+            end
 
-    miscSection:Toggle({
-        Name = "Instant Interact",
-        Flag = "InstantInteract",
-        Default = false,
-        Callback = setInstantInteract,
-    })
+            if not Humanoid or not Humanoid.Parent then
+                return
+            end
+
+            if speedEnabled() then
+                applySpeed()
+                fireCrouchRemote()
+            end
+
+            if FlyEnabled then
+                updateFly()
+            end
+
+            if FullBrightEnabled then
+                applyFullBright()
+            end
+
+            if NoFogEnabled then
+                applyNoFog()
+            end
+        end
+    )
+
+    connect(
+        RunService.RenderStepped,
+        function()
+            if not FullBrightEnabled and not NoFogEnabled then
+                return
+            end
+
+            if FullBrightEnabled then
+                applyFullBright()
+            end
+
+            if NoFogEnabled then
+                applyNoFog()
+            end
+        end
+    )
 end
 
 function Main:Init(core)
@@ -658,62 +908,25 @@ function Main:Init(core)
         return self
     end
 
+    if type(core) ~= "table" then
+        warn("[JustXDoors Main] Core is missing.")
+        return self
+    end
+
     Core = core
 
-    if not Core then
-        return nil
+    if not createUI() then
+        warn("[JustXDoors Main] Failed to create Main UI.")
+        return self
     end
 
-    Window = Core:GetWindow()
-
-    if not Window then
-        return nil
-    end
+    setupConnections()
 
     self.Initialized = true
 
-    getCharacter()
-    setupCharacter()
-    createCharacterTab()
-
-    connect(LocalPlayer.CharacterAdded:Connect(function()
-        task.wait()
-        setupCharacter()
-    end))
-
-    connect(UserInputService.JumpRequest, onJumpRequest)
-
-    connect(RunService.RenderStepped, function()
-        updateFly()
-
-        if not FlyEnabled then
-            updateWalkSpeed()
-        end
-
-        if FullbrightEnabled or NoFogEnabled then
-            refreshLighting()
-        end
-    end)
-
-    connect(workspace.DescendantAdded, function(object)
-        if InstantInteract and object:IsA("ProximityPrompt") then
-            task.defer(function()
-                if object.Parent then
-                    setPrompt(object)
-                end
-            end)
-        end
-    end)
-
-    connect(Lighting.ChildAdded, function(object)
-        if FullbrightEnabled or NoFogEnabled then
-            task.defer(refreshLighting)
-        end
-    end)
-
     Core:Notify({
         Title = "Main",
-        Desc = "Character, Visual and Misc loaded",
+        Desc = "Main module loaded.",
         Type = "Success",
         Duration = 3,
     })
@@ -722,16 +935,24 @@ function Main:Init(core)
 end
 
 function Main:Destroy()
-    stopFly()
-    restorePrompts()
+    disableFly()
+    disableInstantInteract()
 
-    FullbrightEnabled = false
+    FullBrightEnabled = false
     NoFogEnabled = false
 
     restoreLighting()
 
-    disconnectBucket(CharacterConnections)
-    disconnectBucket(Connections)
+    disconnectAll()
+
+    if Character then
+        applyJump(false)
+        applySlide(false)
+    end
+
+    Elements = {}
+    Tab = nil
+    Core = nil
 
     self.Initialized = false
 end
