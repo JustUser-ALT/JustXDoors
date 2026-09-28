@@ -320,10 +320,6 @@ local function scanRoom(room)
         end
     end
 
-    if ESP.Key[room] then
-        return
-    end
-
     if ESP.Key then
         for _, object in ipairs(room:GetDescendants()) do
             if object.Name == "KeyObtain"
