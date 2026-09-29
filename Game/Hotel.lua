@@ -14,6 +14,8 @@ local ESP = {
     Closets = {},
     Key = {},
     Gold = {},
+    Chest = {},
+    Rush = {},
 }
 
 local Enabled = {
@@ -22,6 +24,9 @@ local Enabled = {
     Closets = false,
     Key = false,
     Gold = false,
+    Chest = false,
+    LockedChest = false,
+    Rush = false,
 }
 
 Hotel.GoldLevel = 1
@@ -37,6 +42,8 @@ local Colors = {
     Closets = Color3.fromRGB(165, 105, 55),
     Key = Color3.fromRGB(70, 235, 220),
     Gold = Color3.fromRGB(255, 215, 50),
+    Chest = Color3.fromRGB(255, 230, 80),
+    Rush = Color3.fromRGB(255, 70, 70),
 }
 
 local ScanTimer = 0
@@ -133,12 +140,23 @@ local function getLabel(kind, object)
             local rooms = getRooms()
             local roomObject = rooms and rooms:FindFirstChild(tostring(room))
 
-            text[#text + 1] = "Doors • " .. getDoorNumber(roomObject)
+            text[#text + 1] = "Door • " .. getDoorNumber(roomObject)
         else
             if kind == "Key" then
                 text[#text + 1] = "Key"
             elseif kind == "Gold" then
                 text[#text + 1] = "Gold"
+            elseif kind == "Drawers" then
+                text[#text + 1] = "Drawer"
+            elseif kind == "Closets" then
+                text[#text + 1] = "Closet"
+            elseif kind == "Chest" then
+                text[#text + 1] = "LockedChest"
+                if object.Name == "ChestBox" then
+                    text[#text] = "Chest"
+                end
+            elseif kind == "Rush" then
+                text[#text + 1] = "Rush"
             else
                 text[#text + 1] = kind
             end
@@ -441,6 +459,10 @@ local function isRoomVisible(kind, room)
         return number == current or number == current + 1
     end
 
+    if kind == "Key" or kind == "Gold" then
+        return number >= current - 1 and number <= current + 1
+    end
+
     return number == current
 end
 
@@ -455,22 +477,29 @@ local function scanRoom(room)
         addObject("Doors", room.Door, room)
     end
 
-    if assets then
-        if Enabled.Drawers and isRoomVisible("Drawers", room) then
-            for _, object in ipairs(assets:GetChildren()) do
-                if (object.Name == "Dresser" or object.Name == "Table")
-                    and hasDrawerContainer(object)
-                then
-                    addObject("Drawers", object, room)
-                end
+    if assets and isRoomVisible("Drawers", room) then
+        for _, object in ipairs(assets:GetDescendants()) do
+            if Enabled.Drawers and (object.Name == "Dresser" or object.Name == "Table" or object.Name == "Rolltop_Desk")
+                and (object.Name == "Rolltop_Desk" or hasDrawerContainer(object))
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                addObject("Drawers", object, room)
             end
-        end
 
-        if Enabled.Closets and isRoomVisible("Closets", room) then
-            for _, object in ipairs(assets:GetChildren()) do
-                if object.Name == "Wardrobe" then
-                    addObject("Closets", object, room)
-                end
+            if Enabled.Closets and object.Name == "Wardrobe"
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                addObject("Closets", object, room)
+            end
+
+            if Enabled.Chest and (object.Name == "ChestBox" or object.Name == "ChestBoxLocked")
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                addObject("Chest", object, room)
+            elseif Enabled.LockedChest and object.Name == "LockedChestBox"
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                addObject("Chest", object, room)
             end
         end
     end
@@ -502,6 +531,45 @@ local function scanRoom(room)
             end
         end
     end
+end
+
+local function clearEntityESP()
+    clearKind("Rush")
+end
+
+local function scanEntities()
+    if not Enabled.Rush then
+        clearEntityESP()
+        return
+    end
+
+    local entity = workspace:FindFirstChild("RushMoving")
+    if not entity then
+        clearEntityESP()
+        return
+    end
+
+    local root = entity:FindFirstChild("RushNew") or entity.PrimaryPart or entity:FindFirstChildWhichIsA("BasePart", true)
+    if not root then
+        return
+    end
+
+    entity.PrimaryPart = root
+
+    local humanoid = entity:FindFirstChild("HighlightHumanoid")
+    if not humanoid then
+        humanoid = Instance.new("Humanoid")
+        humanoid.Name = "HighlightHumanoid"
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        humanoid.Parent = entity
+    end
+
+    if root:IsA("BasePart") then
+        root.Transparency = 0.999
+        root.Material = Enum.Material.Glass
+    end
+
+    addObject("Rush", entity, nil)
 end
 
 local function refreshRoomVisibility()
@@ -556,32 +624,55 @@ local function applyInteractables(selected)
     local doors = false
     local drawers = false
     local closets = false
+    local chest = false
+    local lockedChest = false
 
     if type(selected) == "table" then
-        for _, value in ipairs(selected) do
-            if value == "Doors" then
-                doors = true
-            elseif value == "Drawers" then
-                drawers = true
-            elseif value == "Closets" then
-                closets = true
+        if #selected > 0 then
+            for _, value in ipairs(selected) do
+                if value == "Doors" then doors = true
+                elseif value == "Drawers" then drawers = true
+                elseif value == "Closets" then closets = true
+                elseif value == "Chest" then chest = true
+                elseif value == "LockedChest" then lockedChest = true
+                elseif value == "All" then
+                    chest = true
+                    lockedChest = true
+                end
+            end
+        else
+            doors = selected.Doors ~= nil
+            drawers = selected.Drawers ~= nil
+            closets = selected.Closets ~= nil
+            chest = selected.Chest ~= nil
+            lockedChest = selected.LockedChest ~= nil
+            if selected.All ~= nil then
+                chest = true
+                lockedChest = true
             end
         end
-    elseif selected == "Doors" then
-        doors = true
-    elseif selected == "Drawers" then
-        drawers = true
-    elseif selected == "Closets" then
-        closets = true
-    end
+    elseif selected == "Doors" then doors = true
+    elseif selected == "Drawers" then drawers = true
+    elseif selected == "Closets" then closets = true
+    elseif selected == "Chest" then chest = true
+    elseif selected == "LockedChest" then lockedChest = true
+    elseif selected == "All" then chest = true; lockedChest = true end
 
     Enabled.Doors = doors
     Enabled.Drawers = drawers
     Enabled.Closets = closets
+    Enabled.Chest = chest
+    Enabled.LockedChest = lockedChest
 
     setKind("Doors", doors)
     setKind("Drawers", drawers)
     setKind("Closets", closets)
+
+    if chest or lockedChest then
+        scanAll()
+    else
+        clearKind("Chest")
+    end
 end
 
 local function applyItems(selected)
@@ -700,16 +791,19 @@ local function createUI()
     local visualPage = visualPages:Page("Visual")
     local settingsPage = visualPages:Page("Settings")
 
-    Elements.Interactables = visualPage:Dropdown({
+    Elements.Interactables = visualPage:ValueDropdown({
         Name = "Interactables",
         Flag = "Hotel_Interactables",
         Options = {
             "Doors",
             "Drawers",
             "Closets",
+            "Chest",
+            "LockedChest",
+            "All",
         },
         MultiSelect = true,
-        MaxSelect = 3,
+        MaxSelect = 6,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -760,7 +854,7 @@ local function createUI()
         end,
     })
 
-    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold"}) do
+    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Rush"}) do
         Elements[kind .. "Color"] = settingsPage:ColorPicker({
             Name = kind .. " ESP Color",
             Flag = "Hotel_" .. kind .. "Color",
@@ -787,8 +881,42 @@ local function createUI()
         Icon = "shield",
     })
 
-    entityPages:Page("Entity"):Label({
-        Text = "Entity features.",
+    local entityPage = entityPages:Page("Entity")
+
+    Elements.Entities = entityPage:Dropdown({
+        Name = "Entities",
+        Flag = "Hotel_Entities",
+        Options = {
+            "Rush",
+        },
+        MultiSelect = true,
+        MaxSelect = 1,
+        Default = {},
+        Search = true,
+        Callback = function(selected)
+            local rush = false
+            if type(selected) == "table" then
+                if #selected > 0 then
+                    for _, value in ipairs(selected) do
+                        if value == "Rush" then rush = true end
+                    end
+                else
+                    rush = selected.Rush ~= nil
+                end
+            elseif selected == "Rush" then
+                rush = true
+            end
+            Enabled.Rush = rush
+            if rush then
+                scanEntities()
+            else
+                clearKind("Rush")
+            end
+        end,
+    })
+
+    entityPage:Label({
+        Text = "Entity ESP",
     })
 
     entityPages:Page("Anti"):Label({
@@ -810,6 +938,10 @@ local function setupConnections()
             task.defer(function()
                 hookRooms(object)
             end)
+        elseif object.Name == "RushMoving" then
+            task.defer(function()
+                scanEntities()
+            end)
         end
     end)
 
@@ -826,9 +958,12 @@ local function setupConnections()
 
         ScanTimer = 0
 
-        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold then
+        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold or Enabled.Chest then
             scanAll()
             refreshLabels()
+        end
+        if Enabled.Rush then
+            scanEntities()
         end
     end)
 end
@@ -864,6 +999,8 @@ function Hotel:Destroy()
     clearKind("Closets")
     clearKind("Key")
     clearKind("Gold")
+    clearKind("Chest")
+    clearKind("Rush")
     disconnectAll()
 
     Enabled.Doors = false
@@ -871,6 +1008,9 @@ function Hotel:Destroy()
     Enabled.Closets = false
     Enabled.Key = false
     Enabled.Gold = false
+    Enabled.Chest = false
+    Enabled.LockedChest = false
+    Enabled.Rush = false
 
     table.clear(Elements)
     Tab = nil
