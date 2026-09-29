@@ -13,6 +13,7 @@ local ESP = {
     Drawers = {},
     Closets = {},
     Key = {},
+    Gold = {},
 }
 
 local Enabled = {
@@ -20,7 +21,10 @@ local Enabled = {
     Drawers = false,
     Closets = false,
     Key = false,
+    Gold = false,
 }
+
+Hotel.GoldLevel = 1
 
 local Display = {
     Name = true,
@@ -130,7 +134,13 @@ local function getLabel(kind, object)
 
             text[#text + 1] = "Doors • " .. getDoorNumber(roomObject)
         else
-            text[#text + 1] = kind == "Key" and "Key" or kind
+            if kind == "Key" then
+                text[#text + 1] = "Key"
+            elseif kind == "Gold" then
+                text[#text + 1] = "Gold"
+            else
+                text[#text + 1] = kind
+            end
         end
     end
 
@@ -217,12 +227,43 @@ local function destroyProxy(entry)
     end
 end
 
-local function buildProxy(entry, object)
+local function isIgnoredPart(part)
+    local n = part.Name:lower()
+    return n:find("hitbox", 1, true)
+        or n:find("collision", 1, true)
+        or n:find("prompt", 1, true)
+        or n == "primarypart"
+end
+
+local function getVisiblePart(object)
+    local preferred = {"Handle", "Main", "Key", "Mesh", "Root"}
+    for _, name in ipairs(preferred) do
+        local p = object:FindFirstChild(name, true)
+        if p and p:IsA("BasePart") and p.Transparency < 1 and not isIgnoredPart(p) then
+            return p
+        end
+    end
+
+    local best
+    local bestVolume = math.huge
+    for _, p in ipairs(object:GetDescendants()) do
+        if p:IsA("BasePart") and p.Transparency < 1 and not isIgnoredPart(p) then
+            local volume = p.Size.X * p.Size.Y * p.Size.Z
+            if volume > 0 and volume < bestVolume then
+                best = p
+                bestVolume = volume
+            end
+        end
+    end
+    return best
+end
+
+local function buildDoorProxy(entry, object)
     destroyProxy(entry)
 
     local proxy = Instance.new("Model")
-    proxy.Name = "JustXDoorsESPProxy"
-    proxy.Parent = workspace
+    proxy.Name = "HighlightModel"
+    proxy.Parent = object
 
     local humanoid = Instance.new("Humanoid")
     humanoid.Name = "HighlightHumanoid"
@@ -230,22 +271,17 @@ local function buildProxy(entry, object)
     humanoid.Parent = proxy
 
     local count = 0
-    local sources = object:IsA("BasePart") and {object} or object:GetDescendants()
-
-    for _, source in ipairs(sources) do
-        if source:IsA("BasePart") and source.Size.Magnitude > 0 then
+    for _, source in ipairs(object:GetChildren()) do
+        if source:IsA("BasePart") and source.Name == "Door" then
             local part = Instance.new("Part")
             part.Name = "HighlightPart"
+            part.Transparency = 0.999
             part.Size = source.Size
             part.CFrame = source.CFrame
-            part.Transparency = 0.999
             part.CanCollide = false
             part.CanTouch = false
             part.CanQuery = false
-            part.CastShadow = false
-            part.Massless = true
-            part.Material = Enum.Material.Plastic
-            part.Anchored = false
+            part.Material = Enum.Material.Glass
             part.Parent = proxy
 
             local weld = Instance.new("WeldConstraint")
@@ -267,7 +303,14 @@ local function buildProxy(entry, object)
 end
 
 local function addHighlight(entry, object, kind)
-    local adornee = buildProxy(entry, object)
+    local adornee
+
+    if kind == "Doors" then
+        adornee = buildDoorProxy(entry, object)
+    else
+        adornee = object
+    end
+
     if not adornee then
         return
     end
@@ -280,7 +323,7 @@ local function addHighlight(entry, object, kind)
     highlight.FillTransparency = 0.55
     highlight.OutlineTransparency = 0
     highlight.Adornee = adornee
-    highlight.Parent = adornee
+    highlight.Parent = object
 
     entry.Highlights[#entry.Highlights + 1] = highlight
 end
@@ -315,6 +358,12 @@ local function clearEntry(kind, object)
             entry.Connection:Disconnect()
         end)
         entry.Connection = nil
+    end
+    if entry.RemovingConnection then
+        pcall(function()
+            entry.RemovingConnection:Disconnect()
+        end)
+        entry.RemovingConnection = nil
     end
     ESP[kind][object] = nil
 end
@@ -353,7 +402,18 @@ local function addObject(kind, object, room)
         end
     end)
 
+    entry.RemovingConnection = object.DescendantRemoving:Connect(function(child)
+        if child:IsA("BasePart") then
+            task.defer(function()
+                if object.Parent and ESP[kind][object] == entry then
+                    rebuildHighlights(entry, object, kind)
+                end
+            end)
+        end
+    end)
+
     table.insert(Connections, entry.Connection)
+    table.insert(Connections, entry.RemovingConnection)
 
     object.Destroying:Once(function()
         clearEntry(kind, object)
@@ -366,6 +426,21 @@ local function hasDrawerContainer(object)
     return object and object:FindFirstChild("DrawerContainer", true) ~= nil
 end
 
+local function isRoomVisible(kind, room)
+    local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
+    local number = tonumber(room and room.Name)
+
+    if not current or not number then
+        return true
+    end
+
+    if kind == "Doors" then
+        return number == current or number == current + 1
+    end
+
+    return number == current
+end
+
 local function scanRoom(room)
     if not room or not room.Parent then
         return
@@ -373,12 +448,12 @@ local function scanRoom(room)
 
     local assets = room:FindFirstChild("Assets")
 
-    if Enabled.Doors and room:FindFirstChild("Door") then
+    if Enabled.Doors and room:FindFirstChild("Door") and isRoomVisible("Doors", room) then
         addObject("Doors", room.Door, room)
     end
 
     if assets then
-        if Enabled.Drawers then
+        if Enabled.Drawers and isRoomVisible("Drawers", room) then
             for _, object in ipairs(assets:GetChildren()) do
                 if (object.Name == "Dresser" or object.Name == "Table")
                     and hasDrawerContainer(object)
@@ -388,7 +463,7 @@ local function scanRoom(room)
             end
         end
 
-        if Enabled.Closets then
+        if Enabled.Closets and isRoomVisible("Closets", room) then
             for _, object in ipairs(assets:GetChildren()) do
                 if object.Name == "Wardrobe" then
                     addObject("Closets", object, room)
@@ -397,7 +472,7 @@ local function scanRoom(room)
         end
     end
 
-    if Enabled.Key then
+    if Enabled.Key and isRoomVisible("Key", room) then
         for _, object in ipairs(room:GetDescendants()) do
             if object.Name == "KeyObtain"
                 and (object:IsA("Model") or object:IsA("BasePart"))
@@ -406,6 +481,40 @@ local function scanRoom(room)
             end
         end
     end
+
+    if Enabled.Gold and isRoomVisible("Gold", room) then
+        local gold = room:FindFirstChild("Assets")
+        if gold then
+            for _, pile in ipairs(gold:GetDescendants()) do
+                if pile.Name == "GoldPile" and (pile:IsA("Model") or pile:IsA("BasePart")) then
+                    for _, levelObject in ipairs(pile:GetChildren()) do
+                        local level = tonumber(levelObject.Name)
+                        if level and level >= (Hotel.GoldLevel or 1) then
+                            if levelObject:IsA("Model") or levelObject:IsA("BasePart") then
+                                addObject("Gold", levelObject, room)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function refreshRoomVisibility()
+    local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
+    if not current then return end
+
+    for kind, objects in pairs(ESP) do
+        for object, entry in pairs(objects) do
+            local room = entry.Room
+            if not room or not room.Parent or not isRoomVisible(kind, room) then
+                clearEntry(kind, object)
+            end
+        end
+    end
+
+    scanAll()
 end
 
 local function scanAll()
@@ -474,23 +583,31 @@ end
 
 local function applyItems(selected)
     local key = false
+    local goldLevel = nil
 
     if type(selected) == "table" then
-        for _, value in ipairs(selected) do
-            if value == "Key" then
-                key = true
-            end
-        end
+        key = selected.Key ~= nil
+        goldLevel = tonumber(selected.Gold)
     elseif selected == "Key" then
         key = true
+    elseif selected == "Gold" then
+        goldLevel = 1
     end
 
     Enabled.Key = key
+    Enabled.Gold = goldLevel ~= nil
+    Hotel.GoldLevel = goldLevel or 1
 
     if key then
         scanAll()
     else
         clearKind("Key")
+    end
+
+    if goldLevel ~= nil then
+        scanAll()
+    else
+        clearKind("Gold")
     end
 end
 
@@ -597,14 +714,22 @@ local function createUI()
         end,
     })
 
-    Elements.Items = visualPage:Dropdown({
+    Elements.Items = visualPage:ValueDropdown({
         Name = "Items",
         Flag = "Hotel_Items",
         Options = {
             "Key",
+            "Gold",
+        },
+        Values = {
+            Gold = {
+                Min = 1,
+                Max = 6,
+                Default = 1,
+            },
         },
         MultiSelect = true,
-        MaxSelect = 20,
+        MaxSelect = 2,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -631,6 +756,27 @@ local function createUI()
             refreshLabels()
         end,
     })
+
+    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold"}) do
+        Elements[kind .. "Color"] = settingsPage:ColorPicker({
+            Name = kind .. " ESP Color",
+            Flag = "Hotel_" .. kind .. "Color",
+            Default = Colors[kind],
+            Callback = function(value)
+                Colors[kind] = value
+                for object, entry in pairs(ESP[kind]) do
+                    for _, highlight in ipairs(entry.Highlights) do
+                        highlight.FillColor = value
+                        highlight.OutlineColor = value
+                    end
+                    local label = entry.Label and entry.Label:FindFirstChild("Text")
+                    if label then
+                        label.TextColor3 = value
+                    end
+                end
+            end,
+        })
+    end
 
     local entityPages = Tab:MultiSection({
         Pages = { "Entity", "Anti" },
@@ -664,6 +810,10 @@ local function setupConnections()
         end
     end)
 
+    connect(Players.LocalPlayer:GetAttributeChangedSignal("CurrentRoom"), function()
+        refreshRoomVisibility()
+    end)
+
     connect(RunService.Heartbeat, function(dt)
         ScanTimer += dt
 
@@ -673,7 +823,7 @@ local function setupConnections()
 
         ScanTimer = 0
 
-        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key then
+        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold then
             scanAll()
             refreshLabels()
         end
@@ -710,12 +860,14 @@ function Hotel:Destroy()
     clearKind("Drawers")
     clearKind("Closets")
     clearKind("Key")
+    clearKind("Gold")
     disconnectAll()
 
     Enabled.Doors = false
     Enabled.Drawers = false
     Enabled.Closets = false
     Enabled.Key = false
+    Enabled.Gold = false
 
     table.clear(Elements)
     Tab = nil
