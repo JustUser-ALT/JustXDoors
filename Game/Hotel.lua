@@ -32,10 +32,11 @@ local Display = {
 }
 
 local Colors = {
-    Doors = Color3.fromRGB(255, 200, 50),
-    Drawers = Color3.fromRGB(255, 170, 70),
-    Closets = Color3.fromRGB(190, 120, 255),
-    Key = Color3.fromRGB(50, 220, 255),
+    Doors = Color3.fromRGB(80, 170, 255),
+    Drawers = Color3.fromRGB(255, 150, 60),
+    Closets = Color3.fromRGB(165, 105, 55),
+    Key = Color3.fromRGB(70, 235, 220),
+    Gold = Color3.fromRGB(255, 215, 50),
 }
 
 local ScanTimer = 0
