@@ -619,44 +619,52 @@ local function applyNoclip()
     end
 end
 
-local function getNextDoor()
-    local currentRooms = workspace:FindFirstChild("CurrentRooms")
-    if not currentRooms then
+local function getNextClosedDoor()
+    if not Character then
         return nil
     end
 
-    local current = tonumber(Player:GetAttribute("CurrentRoom"))
-    if not current then
+    local gameData = ReplicatedStorage:FindFirstChild("GameData")
+    local latestRoom = gameData and gameData:FindFirstChild("LatestRoom")
+    if not latestRoom then
         return nil
     end
 
-    local room = currentRooms:FindFirstChild(tostring(current + 1))
-        or currentRooms:FindFirstChild(tostring(current))
-
-    local door = room and room:FindFirstChild("Door")
-    if not door then
+    local startRoom = tonumber(latestRoom.Value)
+    if not startRoom then
         return nil
     end
 
-    local part = door:FindFirstChild("Door")
-        or door.PrimaryPart
-        or door:FindFirstChildWhichIsA("BasePart", true)
+    local bestDoor
+    local bestNumber = math.huge
 
-    return door, part
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object.Name == "Door" and object:IsA("Model") then
+            local open = object:GetAttribute("Open")
+            if open == false or open == nil then
+                local room = object.Parent
+                local roomNumber = tonumber(room and room.Name)
+
+                if roomNumber and roomNumber >= startRoom and roomNumber < bestNumber then
+                    bestNumber = roomNumber
+                    bestDoor = object
+                end
+            end
+        end
+    end
+
+    return bestDoor
 end
 
 local function teleportNextDoor()
     getCharacter()
-    if not RootPart then
+
+    local door = getNextClosedDoor()
+    if not door or not Character then
         return
     end
 
-    local _, part = getNextDoor()
-    if not part or not part:IsA("BasePart") then
-        return
-    end
-
-    RootPart.CFrame = part.CFrame + part.CFrame.LookVector * -3 + Vector3.new(0, 2, 0)
+    Character:PivotTo(door:GetPivot())
 end
 
 local function fireDoorReach()
@@ -1045,7 +1053,9 @@ local function createUI()
         Callback = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local remote = remotes and remotes:FindFirstChild("PlayAgain")
-            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
+            if remote and remote:IsA("RemoteEvent") then
+                remote:FireServer()
+            end
         end,
     })
 
@@ -1054,7 +1064,9 @@ local function createUI()
         Callback = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local remote = remotes and remotes:FindFirstChild("Lobby")
-            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
+            if remote and remote:IsA("RemoteEvent") then
+                remote:FireServer()
+            end
         end,
     })
 
@@ -1063,14 +1075,21 @@ local function createUI()
         Callback = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local remote = remotes and remotes:FindFirstChild("Revive")
-            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
+            if remote and remote:IsA("RemoteEvent") then
+                remote:FireServer()
+            end
         end,
     })
 
     gameSection:Button({
         Name = "Reset Character",
         Callback = function()
-            if Character and Humanoid then
+            local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+            local underwater = remotes and remotes:FindFirstChild("Underwater")
+
+            if underwater and underwater:IsA("RemoteEvent") then
+                underwater:FireServer(true)
+            elseif Humanoid then
                 Humanoid.Health = 0
             end
         end,
@@ -1086,7 +1105,35 @@ local function createUI()
         return false
     end
 
-    Elements.TpNextDoor = debugSection:Button({
+    debugSection:Button({
+        Name = "Void",
+        Callback = function()
+            if not Character then
+                return
+            end
+
+            local pivot = Character:GetPivot()
+            local target = pivot + Vector3.new(0, -120 - pivot.Position.Y, 0)
+
+            for _ = 1, 22 do
+                Character:PivotTo(target)
+            end
+        end,
+    })
+
+    debugSection:Button({
+        Name = "Exit Closet",
+        Callback = function()
+            local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+            local camLock = remotes and remotes:FindFirstChild("CamLock")
+
+            if camLock and camLock:IsA("RemoteEvent") then
+                camLock:FireServer()
+            end
+        end,
+    })
+
+    debugSection:Button({
         Name = "Tp Next Door",
         Callback = teleportNextDoor,
     })
@@ -1269,7 +1316,13 @@ local function setupConnections()
         end
 
         if AutoTpNextDoorEnabled then
-            teleportNextDoor()
+            local now = tick()
+            if not Main._LastAutoTp or now - Main._LastAutoTp >= 0.15 then
+                Main._LastAutoTp = now
+                teleportNextDoor()
+            end
+        else
+            Main._LastAutoTp = nil
         end
     end)
 
