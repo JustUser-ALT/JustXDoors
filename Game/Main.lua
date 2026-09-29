@@ -601,7 +601,7 @@ local function restorePromptProperties()
 end
 
 local function applyNoclip()
-    if not Character then
+    if not Character or not Character.Parent then
         return
     end
 
@@ -610,7 +610,12 @@ local function applyNoclip()
             if NoclipProperties[object] == nil then
                 NoclipProperties[object] = object.CanCollide
             end
-            object.CanCollide = NoclipEnabled and false or NoclipProperties[object]
+
+            if NoclipEnabled then
+                object.CanCollide = false
+            else
+                object.CanCollide = NoclipProperties[object]
+            end
         end
     end
 
