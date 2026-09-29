@@ -53,6 +53,8 @@ local Colors = {
     Smoothie = Color3.fromRGB(190, 100, 255),
     Flashlight = Color3.fromRGB(255, 245, 170),
     TipJar = Color3.fromRGB(255, 190, 90),
+    Rush = Color3.fromRGB(255, 70, 70),
+    Ambush = Color3.fromRGB(190, 70, 255),
     VentGate = Color3.fromRGB(100, 190, 255),
     Lever = Color3.fromRGB(255, 190, 70),
     Rush = Color3.fromRGB(255, 70, 70),
@@ -623,8 +625,13 @@ local function notifyEntity(entity)
         return
     end
 
+    local alias = entity.Name == "RushMoving" and "Rush" or entity.Name == "AmbushMoving" and "Ambush" or nil
+    if not alias then
+        return
+    end
+
     local selected = Elements.NotificationEntities and Elements.NotificationEntities:Get()
-    if not isSelected(selected, "Rush") then
+    if not isSelected(selected, alias) then
         return
     end
 
@@ -632,8 +639,8 @@ local function notifyEntity(entity)
 
     if Core then
         Core:Notify({
-            Title = "Rush",
-            Desc = "Rush has spawned.",
+            Title = "Entity '" .. alias .. "' has spawned.",
+            Desc = "Find a hiding spot.",
             Type = "Warning",
             Duration = 5,
         })
@@ -645,48 +652,59 @@ local function notifyEntity(entity)
 end
 
 local function scanEntities()
-    if not Enabled.Rush then
-        clearEntityESP()
+    if not Enabled.Rush and not Enabled.Ambush then
+        clearKind("Rush")
+        clearKind("Ambush")
         return
     end
 
-    local found = {}
+    local foundRush = {}
+    local foundAmbush = {}
 
     for _, entity in ipairs(workspace:GetChildren()) do
-        if entity.Name ~= "RushMoving" or not entity:IsA("Model") then
-            continue
+        local isRush = entity.Name == "RushMoving"
+        local isAmbush = entity.Name == "AmbushMoving"
+
+        if (isRush and Enabled.Rush) or (isAmbush and Enabled.Ambush) then
+            local root = entity:FindFirstChild("RushNew") or entity.PrimaryPart or entity:FindFirstChildWhichIsA("BasePart", true)
+            if root and root:IsA("BasePart") then
+                entity.PrimaryPart = root
+                notifyEntity(entity)
+
+                local humanoid = entity:FindFirstChild("HighlightHumanoid")
+                if not humanoid then
+                    humanoid = Instance.new("Humanoid")
+                    humanoid.Name = "HighlightHumanoid"
+                    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+                    humanoid.Parent = entity
+                end
+
+                root.Transparency = 0.999
+                root.Material = Enum.Material.Glass
+
+                local kind = isRush and "Rush" or "Ambush"
+                addObject(kind, entity, nil)
+                if isRush then
+                    foundRush[entity] = true
+                else
+                    foundAmbush[entity] = true
+                end
+            end
         end
-
-        found[entity] = true
-
-        local root = entity:FindFirstChild("RushNew") or entity.PrimaryPart or entity:FindFirstChildWhichIsA("BasePart", true)
-        if not root or not root:IsA("BasePart") then
-            continue
-        end
-
-        entity.PrimaryPart = root
-        notifyEntity(entity)
-
-        local humanoid = entity:FindFirstChild("HighlightHumanoid")
-        if not humanoid then
-            humanoid = Instance.new("Humanoid")
-            humanoid.Name = "HighlightHumanoid"
-            humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-            humanoid.Parent = entity
-        end
-
-        root.Transparency = 0.999
-        root.Material = Enum.Material.Glass
-        addObject("Rush", entity, nil)
     end
 
     for entity in pairs(ESP.Rush) do
-        if not found[entity] or not entity.Parent then
+        if not foundRush[entity] or not entity.Parent then
             clearEntry("Rush", entity)
         end
     end
-end
 
+    for entity in pairs(ESP.Ambush) do
+        if not foundAmbush[entity] or not entity.Parent then
+            clearEntry("Ambush", entity)
+        end
+    end
+end
 local function refreshRoomVisibility()
     local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
     if not current then return end
@@ -817,6 +835,8 @@ local function applyItems(selected)
     local goldLevel = nil
     local bandage = false
     local smoothie = false
+    local flashlight = false
+    local tipJar = false
 
     local function enable(value)
         if value == "Key" then
@@ -827,6 +847,10 @@ local function applyItems(selected)
             bandage = true
         elseif value == "Smoothie" then
             smoothie = true
+        elseif value == "Flashlight" then
+            flashlight = true
+        elseif value == "Tip Jar" then
+            tipJar = true
         end
     end
 
@@ -842,6 +866,8 @@ local function applyItems(selected)
             end
             if selected.Bandage == true then bandage = true end
             if selected.Smoothie == true then smoothie = true end
+            if selected.Flashlight == true then flashlight = true end
+            if selected["Tip Jar"] == true then tipJar = true end
         end
     else
         enable(selected)
@@ -851,6 +877,8 @@ local function applyItems(selected)
     Enabled.Gold = goldLevel ~= nil
     Enabled.Bandage = bandage
     Enabled.Smoothie = smoothie
+    Enabled.Flashlight = flashlight
+    Enabled.TipJar = tipJar
     Hotel.GoldLevel = goldLevel or 1
 
     clearKind("Key")
@@ -1115,30 +1143,33 @@ local function createUI()
         Flag = "Hotel_Entities",
         Options = {
             "Rush",
+            "Ambush",
         },
         MultiSelect = true,
-        MaxSelect = 1,
+        MaxSelect = 2,
         Default = {},
         Search = true,
         Callback = function(selected)
             local rush = false
+            local ambush = false
             if type(selected) == "table" then
                 if #selected > 0 then
                     for _, value in ipairs(selected) do
                         if value == "Rush" then rush = true end
+                        if value == "Ambush" then ambush = true end
                     end
                 else
-                    rush = selected.Rush ~= nil
+                    rush = selected.Rush == true
+                    ambush = selected.Ambush == true
                 end
             elseif selected == "Rush" then
                 rush = true
+            elseif selected == "Ambush" then
+                ambush = true
             end
             Enabled.Rush = rush
-            if rush then
-                scanEntities()
-            else
-                clearKind("Rush")
-            end
+            Enabled.Ambush = ambush
+            scanEntities()
         end,
     })
 
@@ -1153,9 +1184,10 @@ local function createUI()
         Flag = "Hotel_NotificationEntities",
         Options = {
             "Rush",
+            "Ambush",
         },
         MultiSelect = true,
-        MaxSelect = 1,
+        MaxSelect = 2,
         Default = {},
         Search = true,
         Callback = function()
@@ -1274,6 +1306,7 @@ function Hotel:Destroy()
     clearKind("VentGate")
     clearKind("Lever")
     clearKind("Rush")
+    clearKind("Ambush")
     table.clear(NotifiedEntities)
     if HighlightContainer then
         pcall(function()
@@ -1298,6 +1331,7 @@ function Hotel:Destroy()
     Enabled.VentGate = false
     Enabled.Lever = false
     Enabled.Rush = false
+    Enabled.Ambush = false
 
     table.clear(Elements)
     Tab = nil
