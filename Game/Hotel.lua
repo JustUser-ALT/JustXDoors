@@ -15,6 +15,10 @@ local ESP = {
     Key = {},
     Gold = {},
     Chest = {},
+    Bandage = {},
+    Smoothie = {},
+    VentGate = {},
+    Lever = {},
     Rush = {},
 }
 
@@ -43,6 +47,10 @@ local Colors = {
     Key = Color3.fromRGB(70, 235, 220),
     Gold = Color3.fromRGB(255, 215, 50),
     Chest = Color3.fromRGB(255, 230, 80),
+    Bandage = Color3.fromRGB(235, 235, 235),
+    Smoothie = Color3.fromRGB(190, 100, 255),
+    VentGate = Color3.fromRGB(100, 190, 255),
+    Lever = Color3.fromRGB(255, 190, 70),
     Rush = Color3.fromRGB(255, 70, 70),
 }
 
@@ -158,6 +166,14 @@ local function getLabel(kind, object)
                 if object.Name == "ChestBox" then
                     text[#text] = "Chest"
                 end
+                    elseif kind == "Bandage" then
+                text[#text + 1] = "Bandage"
+            elseif kind == "Smoothie" then
+                text[#text + 1] = "Smoothie"
+            elseif kind == "VentGate" then
+                text[#text + 1] = "Vent Gate"
+            elseif kind == "Lever" then
+                text[#text + 1] = "Lever"
             elseif kind == "Rush" then
                 text[#text + 1] = "Rush"
             else
@@ -353,7 +369,7 @@ local function addHighlight(entry, object, kind)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.FillColor = Colors[kind]
     highlight.OutlineColor = Colors[kind]
-    highlight.FillTransparency = 0.55
+    highlight.FillTransparency = (kind == "Drawers" or kind == "Closets" or kind == "Chest") and 1 or 0.55
     highlight.OutlineTransparency = 0
     highlight.Adornee = adornee
     highlight.Parent = getHighlightContainer()
@@ -536,6 +552,22 @@ local function scanRoom(room)
                 end
             end
         end
+
+        if object.Name == "Bandage" and Enabled.Bandage and roomVisible.Key then
+            addObject("Bandage", object, room)
+        end
+
+        if object.Name == "Smoothie" and Enabled.Smoothie and roomVisible.Key then
+            addObject("Smoothie", object, room)
+        end
+
+        if object.Name == "VentGrate" and Enabled.VentGate and roomVisible.Drawers then
+            addObject("VentGate", object, room)
+        end
+
+        if object.Name == "LeverForGate" and Enabled.Lever and roomVisible.Drawers then
+            addObject("Lever", object, room)
+        end
     end
 end
 
@@ -678,50 +710,71 @@ local function applyInteractables(selected)
     local closets = false
     local chest = false
     local lockedChest = false
+    local ventGate = false
+    local lever = false
+
+    local function enable(value)
+        if value == "Doors" then doors = true
+        elseif value == "Drawers" then drawers = true
+        elseif value == "Closets" then closets = true
+        elseif value == "Chest" then chest = true
+        elseif value == "LockedChest" then lockedChest = true
+        elseif value == "Vent Gate" then ventGate = true
+        elseif value == "Lever" then lever = true
+        elseif value == "All" then
+            doors = true
+            drawers = true
+            closets = true
+            chest = true
+            lockedChest = true
+            ventGate = true
+            lever = true
+        end
+    end
 
     if type(selected) == "table" then
         if #selected > 0 then
             for _, value in ipairs(selected) do
-                if value == "Doors" then doors = true
-                elseif value == "Drawers" then drawers = true
-                elseif value == "Closets" then closets = true
-                elseif value == "Chest" then chest = true
-                elseif value == "LockedChest" then lockedChest = true
-                elseif value == "All" then
-                    chest = true
-                    lockedChest = true
-                end
+                enable(value)
             end
         else
-            doors = selected.Doors ~= nil
-            drawers = selected.Drawers ~= nil
-            closets = selected.Closets ~= nil
-            chest = selected.Chest ~= nil
-            lockedChest = selected.LockedChest ~= nil
-            if selected.All ~= nil then
+            if selected.Doors == true then doors = true end
+            if selected.Drawers == true then drawers = true end
+            if selected.Closets == true then closets = true end
+            if selected.Chest == true then chest = true end
+            if selected.LockedChest == true then lockedChest = true end
+            if selected["Vent Gate"] == true then ventGate = true end
+            if selected.Lever == true then lever = true end
+            if selected.All == true then
+                doors = true
+                drawers = true
+                closets = true
                 chest = true
                 lockedChest = true
+                ventGate = true
+                lever = true
             end
         end
-    elseif selected == "Doors" then doors = true
-    elseif selected == "Drawers" then drawers = true
-    elseif selected == "Closets" then closets = true
-    elseif selected == "Chest" then chest = true
-    elseif selected == "LockedChest" then lockedChest = true
-    elseif selected == "All" then chest = true; lockedChest = true end
+    else
+        enable(selected)
+    end
 
     Enabled.Doors = doors
     Enabled.Drawers = drawers
     Enabled.Closets = closets
     Enabled.Chest = chest
     Enabled.LockedChest = lockedChest
+    Enabled.VentGate = ventGate
+    Enabled.Lever = lever
 
     setKind("Doors", doors)
     setKind("Drawers", drawers)
     setKind("Closets", closets)
-
     clearKind("Chest")
-    if chest or lockedChest then
+    clearKind("VentGate")
+    clearKind("Lever")
+
+    if chest or lockedChest or ventGate or lever then
         scanAll()
     end
 end
@@ -729,28 +782,50 @@ end
 local function applyItems(selected)
     local key = false
     local goldLevel = nil
+    local bandage = false
+    local smoothie = false
+
+    local function enable(value)
+        if value == "Key" then
+            key = true
+        elseif value == "Gold" then
+            goldLevel = 1
+        elseif value == "Bandage" then
+            bandage = true
+        elseif value == "Smoothie" then
+            smoothie = true
+        end
+    end
 
     if type(selected) == "table" then
-        key = selected.Key ~= nil
-        goldLevel = tonumber(selected.Gold)
-    elseif selected == "Key" then
-        key = true
-    elseif selected == "Gold" then
-        goldLevel = 1
+        if #selected > 0 then
+            for _, value in ipairs(selected) do
+                enable(value)
+            end
+        else
+            if selected.Key == true then key = true end
+            if selected.Gold ~= nil and selected.Gold ~= false then
+                goldLevel = tonumber(selected.Gold) or 1
+            end
+            if selected.Bandage == true then bandage = true end
+            if selected.Smoothie == true then smoothie = true end
+        end
+    else
+        enable(selected)
     end
 
     Enabled.Key = key
     Enabled.Gold = goldLevel ~= nil
+    Enabled.Bandage = bandage
+    Enabled.Smoothie = smoothie
     Hotel.GoldLevel = goldLevel or 1
 
-    if key then
-        scanAll()
-    else
-        clearKind("Key")
-    end
-
+    clearKind("Key")
     clearKind("Gold")
-    if goldLevel ~= nil then
+    clearKind("Bandage")
+    clearKind("Smoothie")
+
+    if key or goldLevel ~= nil or bandage or smoothie then
         scanAll()
     end
 end
@@ -830,6 +905,10 @@ local function hookRooms(rooms)
             or object.Name == "DrawerContainer"
             or object.Name == "Stinker"
             or object.Name == "GoldPile"
+            or object.Name == "Bandage"
+            or object.Name == "Smoothie"
+            or object.Name == "VentGrate"
+            or object.Name == "LeverForGate"
         then
             local room = object:FindFirstAncestorWhichIsA("Model")
             while room and tonumber(room.Name) == nil and room.Parent do
@@ -889,10 +968,12 @@ local function createUI()
             "Closets",
             "Chest",
             "LockedChest",
+            "Vent Gate",
+            "Lever",
             "All",
         },
         MultiSelect = true,
-        MaxSelect = 6,
+        MaxSelect = 8,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -906,6 +987,8 @@ local function createUI()
         Options = {
             "Key",
             "Gold",
+            "Bandage",
+            "Smoothie",
         },
         Values = {
             Gold = {
@@ -915,7 +998,7 @@ local function createUI()
             },
         },
         MultiSelect = true,
-        MaxSelect = 2,
+        MaxSelect = 4,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -943,7 +1026,7 @@ local function createUI()
         end,
     })
 
-    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Rush"}) do
+    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Bandage", "Smoothie", "VentGate", "Lever", "Rush"}) do
         Elements[kind .. "Color"] = settingsPage:ColorPicker({
             Name = kind .. " ESP Color",
             Flag = "Hotel_" .. kind .. "Color",
@@ -1046,6 +1129,21 @@ local function setupConnections()
         hookRooms(rooms)
     end
 
+    local oldContainer = workspace:FindFirstChild("JustXDoors_HotelESP")
+    if oldContainer then
+        pcall(function()
+            oldContainer:Destroy()
+        end)
+    end
+
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object:IsA("BillboardGui") and object.Name == "JustXDoorsESPLabel" then
+            pcall(function()
+                object:Destroy()
+            end)
+        end
+    end
+
     connect(workspace.ChildAdded, function(object)
         if object.Name == "CurrentRooms" then
             task.defer(function()
@@ -1071,7 +1169,8 @@ local function setupConnections()
 
         ScanTimer = 0
 
-        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold or Enabled.Chest then
+        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold or Enabled.Chest
+            or Enabled.Bandage or Enabled.Smoothie or Enabled.VentGate or Enabled.Lever then
             scanAll()
             refreshLabels()
         end
@@ -1113,6 +1212,10 @@ function Hotel:Destroy()
     clearKind("Key")
     clearKind("Gold")
     clearKind("Chest")
+    clearKind("Bandage")
+    clearKind("Smoothie")
+    clearKind("VentGate")
+    clearKind("Lever")
     clearKind("Rush")
     table.clear(NotifiedEntities)
     if HighlightContainer then
@@ -1131,6 +1234,10 @@ function Hotel:Destroy()
     Enabled.Gold = false
     Enabled.Chest = false
     Enabled.LockedChest = false
+    Enabled.Bandage = false
+    Enabled.Smoothie = false
+    Enabled.VentGate = false
+    Enabled.Lever = false
     Enabled.Rush = false
 
     table.clear(Elements)
