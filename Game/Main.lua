@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local Player = Players.LocalPlayer
 
@@ -48,6 +49,18 @@ local NoclipProperties = {}
 local DoorReachEnabled = false
 local AutoTpNextDoorEnabled = false
 
+local AnticheatBypassEnabled = false
+local AnticheatDisabled = false
+local VelocityManipulationEnabled = false
+local VelocityManipulationMode = "Velocity"
+local ManipulateBody
+local PositionSpoofEnabled = false
+local CrouchSpoofEnabled = false
+local OldHipHeight = 2.396
+local InfiniteItemsEnabled = false
+local InfiniteItemsSelection = {}
+local InfiniteItemConnections = {}
+
 local CrouchThrottle = 0
 
 local function connect(signal, callback)
@@ -81,6 +94,219 @@ local function getCharacter()
     RootPart = Character:FindFirstChild("HumanoidRootPart")
 
     return Character
+end
+
+local function getRemotes()
+    return ReplicatedStorage:FindFirstChild("RemotesFolder")
+end
+
+local function isInfiniteItemSelected(name)
+    if type(InfiniteItemsSelection) ~= "table" then
+        return false
+    end
+
+    if #InfiniteItemsSelection > 0 then
+        for _, value in ipairs(InfiniteItemsSelection) do
+            if value == name then
+                return true
+            end
+        end
+        return false
+    end
+
+    return InfiniteItemsSelection[name] == true
+end
+
+local InfiniteItemNames = {
+    Lockpick = "Lockpicks",
+    SkeletonKey = "Skeleton Key",
+    Shears = "Shears",
+    Multitool = "Multitool",
+}
+
+local function getSelectedInfiniteTool()
+    if not Character then
+        return nil, nil
+    end
+
+    for toolName, displayName in pairs(InfiniteItemNames) do
+        local tool = Character:FindFirstChild(toolName)
+        if tool and isInfiniteItemSelected(displayName) then
+            return tool, displayName
+        end
+    end
+
+    return nil, nil
+end
+
+local function firePrompt(prompt)
+    if not prompt then
+        return
+    end
+
+    if type(fireproximityprompt) == "function" then
+        pcall(function()
+            fireproximityprompt(prompt)
+        end)
+    end
+end
+
+local function handleInfiniteItemPrompt(prompt)
+    if not InfiniteItemsEnabled or not prompt or not prompt:IsA("ProximityPrompt") then
+        return
+    end
+
+    local tool, toolName = getSelectedInfiniteTool()
+    if not tool or not toolName then
+        return
+    end
+
+    local parent = prompt.Parent
+    local parentName = parent and parent.Name or ""
+    local grandParentName = parent and parent.Parent and parent.Parent.Name or ""
+
+    local valid =
+        prompt.Name == "FusesPrompt"
+        or parentName == "Lock"
+        or parentName == "ChestBoxLocked"
+        or parentName == "Cellar"
+        or parentName == "Chest_Vine"
+        or parentName == "CuttableVines"
+        or parentName == "SkullLock"
+        or parentName == "Toolbox_Locked"
+        or parentName == "Lock1"
+        or parentName == "Lock2"
+        or grandParentName == "Locker_Small_Locked"
+
+    if not valid then
+        return
+    end
+
+    local remotes = getRemotes()
+    local drops = workspace:FindFirstChild("Drops")
+
+    if not remotes or not drops then
+        return
+    end
+
+    local dropRemote = remotes:FindFirstChild("DropItem")
+    if not dropRemote or not dropRemote:IsA("RemoteEvent") then
+        return
+    end
+
+    task.spawn(function()
+        pcall(function()
+            dropRemote:FireServer(tool)
+        end)
+
+        local drop
+        local start = tick()
+
+        repeat
+            for _, object in ipairs(drops:GetChildren()) do
+                if object.Name == tool.Name then
+                    local part = object:IsA("Model") and object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart", true)
+                    if part and RootPart and (part.Position - RootPart.Position).Magnitude < 15 then
+                        drop = object
+                        break
+                    end
+                end
+            end
+
+            if drop or not Character or not Character:FindFirstChild(tool.Name) then
+                break
+            end
+
+            task.wait(0.01)
+        until tick() - start > 2.5
+
+        local dropPrompt = drop and drop:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        if dropPrompt then
+            firePrompt(dropPrompt)
+        end
+
+        firePrompt(prompt)
+    end)
+end
+
+local function setupInfiniteItems()
+    for _, connection in ipairs(InfiniteItemConnections) do
+        disconnect(connection)
+    end
+    table.clear(InfiniteItemConnections)
+
+    if not InfiniteItemsEnabled then
+        return
+    end
+
+    local connection = ProximityPromptService.PromptTriggered:Connect(function(prompt)
+        handleInfiniteItemPrompt(prompt)
+    end)
+
+    table.insert(InfiniteItemConnections, connection)
+end
+
+local function applyPositionSpoof(enabled)
+    if not Character or not RootPart or not Humanoid then
+        return
+    end
+
+    if getFloor() == "Fools" or getFloor() == "OldHotel" then
+        return
+    end
+
+    if enabled then
+        RootPart.CFrame = RootPart.CFrame * CFrame.new(0, -2.346, 0)
+        OldHipHeight = Humanoid.HipHeight
+        Humanoid.HipHeight = 0.05
+
+        local remotes = getRemotes()
+        local crouch = remotes and remotes:FindFirstChild("Crouch")
+        if crouch and crouch:IsA("RemoteEvent") then
+            crouch:FireServer(true, true)
+        end
+    else
+        RootPart.CFrame = RootPart.CFrame * CFrame.new(0, 2.346, 0)
+        Humanoid.HipHeight = OldHipHeight
+    end
+end
+
+local function applyCrouchSpoof()
+    local remotes = getRemotes()
+    local crouch = remotes and remotes:FindFirstChild("Crouch")
+
+    if crouch and crouch:IsA("RemoteEvent") then
+        crouch:FireServer(CrouchSpoofEnabled and true or isCrouching(), true)
+    end
+end
+
+local function setupManipulateBody()
+    if ManipulateBody then
+        pcall(function()
+            ManipulateBody:Destroy()
+        end)
+    end
+
+    ManipulateBody = Instance.new("BodyVelocity")
+    ManipulateBody.Name = "JustXDoorsVelocityManipulation"
+    ManipulateBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    ManipulateBody.Velocity = Vector3.zero
+end
+
+local function resetAnticheatState()
+    if AnticheatDisabled then
+        local remotes = getRemotes()
+        local climb = remotes and remotes:FindFirstChild("ClimbLadder")
+
+        if climb and climb:IsA("RemoteEvent") then
+            pcall(function()
+                climb:FireServer()
+            end)
+        end
+    end
+
+    AnticheatDisabled = false
 end
 
 local function getFloor()
@@ -780,15 +1006,13 @@ local function createUI()
         return false
     end
 
-    local character = Tab:Section({
-        Title = "Character",
+    local characterPages = Tab:MultiSection({
+        Pages = { "Character", "Bypass" },
         Column = 1,
         Icon = "user",
     })
 
-    if not character then
-        return false
-    end
+    local character = characterPages:Page("Character")
 
     Elements.SpeedBoost = character:Slider({
         Name = "Speed Boost",
@@ -913,15 +1137,113 @@ local function createUI()
         end,
     })
 
-    local visual = Tab:Section({
-        Title = "Visual",
+    local bypass = characterPages:Page("Bypass")
+
+    Elements.AnticheatBypass = bypass:Toggle({
+        Name = "Anticheat Bypass",
+        Flag = "Main_AnticheatBypass",
+        Default = false,
+
+        Callback = function(value)
+            AnticheatBypassEnabled = value
+            if not value then
+                resetAnticheatState()
+            end
+        end,
+    })
+
+    Elements.VelocityManipulation = bypass:Toggle({
+        Name = "Velocity Manipulation",
+        Flag = "Main_VelocityManipulation",
+        Default = false,
+
+        Callback = function(value)
+            VelocityManipulationEnabled = value
+            if value and not ManipulateBody then
+                setupManipulateBody()
+            end
+            if not value and ManipulateBody then
+                ManipulateBody.Parent = nil
+            end
+        end,
+    })
+
+    Elements.VelocityManipulationMode = bypass:Dropdown({
+        Name = "Manipulation Method",
+        Flag = "Main_VelocityManipulationMode",
+        Options = { "Velocity", "Pivot" },
+        Default = "Velocity",
+        Search = true,
+        Callback = function(value)
+            if type(value) == "table" then
+                value = value[1] or value.Value
+            end
+            VelocityManipulationMode = value or "Velocity"
+        end,
+    })
+
+    bypass:Divider()
+
+    Elements.InfiniteItems = bypass:Toggle({
+        Name = "Infinite Items",
+        Flag = "Main_InfiniteItems",
+        Default = false,
+
+        Callback = function(value)
+            InfiniteItemsEnabled = value
+            setupInfiniteItems()
+        end,
+    })
+
+    Elements.InfiniteItemsList = bypass:ValueDropdown({
+        Name = "Item List",
+        Flag = "Main_InfiniteItemsList",
+        Options = {
+            "Lockpicks",
+            "Skeleton Key",
+            "Shears",
+            "Multitool",
+        },
+        MultiSelect = true,
+        MaxSelect = 4,
+        Default = {},
+        Search = true,
+        Callback = function(value)
+            InfiniteItemsSelection = value or {}
+        end,
+    })
+
+    bypass:Divider()
+
+    Elements.PositionSpoof = bypass:Toggle({
+        Name = "Position Spoof",
+        Flag = "Main_PositionSpoof",
+        Default = false,
+
+        Callback = function(value)
+            PositionSpoofEnabled = value
+            applyPositionSpoof(value)
+        end,
+    })
+
+    Elements.CrouchSpoof = bypass:Toggle({
+        Name = "Crouch Spoof",
+        Flag = "Main_CrouchSpoof",
+        Default = false,
+
+        Callback = function(value)
+            CrouchSpoofEnabled = value
+            applyCrouchSpoof()
+        end,
+    })
+
+    local visualPages = Tab:MultiSection({
+        Pages = { "Visual", "Audio" },
         Column = 2,
         Icon = "eye",
     })
 
-    if not visual then
-        return false
-    end
+    local visual = visualPages:Page("Visual")
 
     Elements.FullBright = visual:Toggle({
         Name = "Fullbright",
@@ -974,6 +1296,12 @@ local function createUI()
                 restoreLighting()
             end
         end,
+    })
+
+    local audio = visualPages:Page("Audio")
+
+    audio:Label({
+        Text = "Audio features.",
     })
 
     local misc = Tab:Section({
@@ -1209,6 +1537,14 @@ local function setupConnections()
             applyNoclip()
         end
 
+        setupManipulateBody()
+
+        if PositionSpoofEnabled then
+            task.defer(function()
+                applyPositionSpoof(true)
+            end)
+        end
+
         bindInfiniteJumpButton()
     end)
 
@@ -1251,6 +1587,35 @@ local function setupConnections()
             end
         end)
     end)
+
+    local remotes = getRemotes()
+    if remotes then
+        local cutscene = remotes:FindFirstChild("Cutscene")
+        if cutscene and cutscene:IsA("RemoteEvent") then
+            connect(cutscene.OnClientEvent, function(cutsceneName)
+                if AnticheatDisabled and type(cutsceneName) == "string" and not cutsceneName:find("SewerSeek") then
+                    AnticheatDisabled = false
+                    if Core then
+                        Core:Notify({
+                            Title = "Anticheat",
+                            Desc = "Anticheat re-enabled.",
+                            Type = "Warning",
+                            Duration = 3,
+                        })
+                    end
+                end
+            end)
+        end
+
+        local useEnemy = remotes:FindFirstChild("UseEnemyModule")
+        if useEnemy and useEnemy:IsA("RemoteEvent") then
+            connect(useEnemy.OnClientEvent, function(moduleName)
+                if moduleName == "Void" or moduleName == "Glitch" then
+                    AnticheatDisabled = false
+                end
+            end)
+        end
+    end
 
     connect(Player.PlayerGui.ChildAdded, function(object)
         if object.Name == "MainUI" then
@@ -1333,6 +1698,59 @@ local function setupConnections()
     end)
 
     connect(RunService.RenderStepped, function()
+        if AnticheatBypassEnabled and Character and Character.Parent then
+            if Character:GetAttribute("Climbing") == true and not AnticheatDisabled then
+                task.defer(function()
+                    if AnticheatBypassEnabled and Character and Character.Parent and Character:GetAttribute("Climbing") == true then
+                        Character:SetAttribute("Climbing", false)
+                        AnticheatDisabled = true
+
+                        if Core then
+                            Core:Notify({
+                                Title = "Anticheat Bypass",
+                                Desc = "Anticheat disabled.",
+                                Type = "Success",
+                                Duration = 3,
+                            })
+                        end
+                    end
+                end)
+            end
+        end
+
+        if VelocityManipulationEnabled and RootPart and Character then
+            if not ManipulateBody then
+                setupManipulateBody()
+            end
+
+            if VelocityManipulationMode == "Velocity" then
+                ManipulateBody.Parent = RootPart
+                ManipulateBody.Velocity = RootPart.CFrame.LookVector * 2.25
+            else
+                ManipulateBody.Parent = nil
+                if getFloor() ~= "Fools" and getFloor() ~= "OldHotel" then
+                    Character:PivotTo(workspace.CurrentCamera:GetPivot() * CFrame.new(0, 0, 2560))
+                end
+            end
+        elseif ManipulateBody then
+            ManipulateBody.Parent = nil
+        end
+
+        if PositionSpoofEnabled and Character and RootPart and Humanoid then
+            local floor = getFloor()
+            if floor ~= "Fools" and floor ~= "OldHotel" then
+                local remotes = getRemotes()
+                local crouch = remotes and remotes:FindFirstChild("Crouch")
+                if crouch and crouch:IsA("RemoteEvent") then
+                    crouch:FireServer(true, true)
+                end
+            end
+        end
+
+        if CrouchSpoofEnabled then
+            applyCrouchSpoof()
+        end
+
         if FullBrightEnabled then
             applyFullBright()
         end
@@ -1388,6 +1806,24 @@ function Main:Destroy()
     table.clear(NoclipProperties)
     DoorReachEnabled = false
     AutoTpNextDoorEnabled = false
+    AnticheatBypassEnabled = false
+    resetAnticheatState()
+    VelocityManipulationEnabled = false
+    PositionSpoofEnabled = false
+    CrouchSpoofEnabled = false
+    InfiniteItemsEnabled = false
+    InfiniteItemsSelection = {}
+    for _, connection in ipairs(InfiniteItemConnections) do
+        disconnect(connection)
+    end
+    table.clear(InfiniteItemConnections)
+
+    if ManipulateBody then
+        pcall(function()
+            ManipulateBody:Destroy()
+        end)
+        ManipulateBody = nil
+    end
 
     RemoveAccelEnabled = false
     applyRemoveAcceleration()
