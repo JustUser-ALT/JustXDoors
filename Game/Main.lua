@@ -363,39 +363,21 @@ local function handleInfinitePrompt(fake)
     local realPrompt = FakePrompts[fake]
     if not realPrompt or not realPrompt.Parent or not Character then return end
 
-    local toolNames = {
-        Lockpick = "Lockpicks",
-        Shears = "Shears",
-        SkeletonKey = "Skeleton Key",
-        Key = "Key",
-        GeneratorFuse = "GeneratorFuse",
-        KeyElectrical = "KeyElectrical",
-        KeyBackdoor = "KeyBackdoor",
-        KeyIron = "KeyIron",
-        Multitool = "Multitool",
-    }
-
     local anyTool = Character:FindFirstChildOfClass("Tool")
-    local toolData = anyTool and toolNames[anyTool.Name]
+    local toolData = anyTool and InfiniteItemNames[anyTool.Name]
 
     local parent = fake.Parent
     local parentName = parent and parent.Name
     local grandParentName = parent and parent.Parent and parent.Parent.Name
 
-    local lockPromptNames = {
-        UnlockPrompt = true,
-        SkullPrompt = true,
-        LockPrompt = true,
-        ThingToEnable = true,
-        FusesPrompt = true,
-    }
-
     local isLockPrompt =
-        lockPromptNames[fake.Name]
+        InfinitePromptNames[fake.Name]
         or (parent and parent:GetAttribute("Locked") == true)
         or (grandParentName == "Locker_Small_Locked" and fake.Name == "ActivateEventPrompt")
 
-    if isLockPrompt and not anyTool then return end
+    if isLockPrompt and not anyTool then
+        return
+    end
 
     if (parentName == "CuttableVines" or parentName == "Chest_Vine" or parentName == "Cellar")
         and not Character:FindFirstChild("Shears")
@@ -423,51 +405,21 @@ local function handleInfinitePrompt(fake)
             return
         end
 
-        local finished = false
-        local connection
+        drops.ChildAdded:Once(function(newTool)
+            if not newTool or newTool.Name ~= anyTool.Name then
+                return
+            end
 
-        local function useDroppedTool(object)
-            if finished or not object or object.Name ~= anyTool.Name then return end
+            local prompt = newTool:FindFirstChild("ModulePrompt")
+            if not prompt then
+                return
+            end
 
-            local prompt = object:FindFirstChild("ModulePrompt", true)
-                or object:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-            if not prompt then return end
-
-            finished = true
-            disconnect(connection)
             firePrompt(prompt)
-            task.wait(0.05)
-            if realPrompt and realPrompt.Parent then
-                firePrompt(realPrompt)
-            end
-        end
-
-        connection = drops.ChildAdded:Connect(useDroppedTool)
-
-        for _, object in ipairs(drops:GetChildren()) do
-            useDroppedTool(object)
-            if finished then break end
-        end
-
-        if not finished then
-            dropRemote:FireServer(anyTool)
-
-            local deadline = tick() + 2
-            while not finished and tick() < deadline do
-                task.wait(0.03)
-                for _, object in ipairs(drops:GetChildren()) do
-                    useDroppedTool(object)
-                    if finished then break end
-                end
-            end
-        end
-
-        disconnect(connection)
-
-        if not finished and realPrompt and realPrompt.Parent then
             firePrompt(realPrompt)
-        end
+        end)
+
+        dropRemote:FireServer(anyTool)
     else
         firePrompt(realPrompt)
     end
@@ -1147,11 +1099,34 @@ local function applyPrompt(prompt)
         return
     end
 
+    local original = prompt:GetAttribute("HoldDuration_Old")
+    if original == nil then
+        original = prompt.HoldDuration
+        prompt:SetAttribute("HoldDuration_Old", original)
+    end
+
     if ModifiedPrompts[prompt] == nil then
-        ModifiedPrompts[prompt] = prompt.HoldDuration
+        ModifiedPrompts[prompt] = original
     end
 
     prompt.HoldDuration = 0
+
+    local real = FakePrompts[prompt]
+    local fake = InfinitePromptObjects[prompt]
+
+    if real and real.Parent and real:GetAttribute("HoldDuration_Old") == nil then
+        real:SetAttribute("HoldDuration_Old", original)
+    end
+
+    if fake and fake.Parent then
+        if fake:GetAttribute("HoldDuration_Old") == nil then
+            fake:SetAttribute("HoldDuration_Old", original)
+        end
+        if ModifiedPrompts[fake] == nil then
+            ModifiedPrompts[fake] = original
+        end
+        fake.HoldDuration = 0
+    end
 end
 
 local function applyPromptReach(prompt, multiplier)
@@ -1305,7 +1280,19 @@ local function disableInstantInteract()
     for prompt, duration in pairs(ModifiedPrompts) do
         if prompt and prompt.Parent then
             pcall(function()
-                prompt.HoldDuration = duration
+                local original = prompt:GetAttribute("HoldDuration_Old")
+                prompt.HoldDuration = original ~= nil and original or duration
+            end)
+        end
+    end
+
+    for fake, real in pairs(FakePrompts) do
+        if fake and fake.Parent and real then
+            pcall(function()
+                local original = real:GetAttribute("HoldDuration_Old")
+                if original ~= nil then
+                    fake.HoldDuration = original
+                end
             end)
         end
     end
