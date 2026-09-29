@@ -42,6 +42,10 @@ local LightingBackup
 local AtmosphereBackup = {}
 
 local ModifiedPrompts = {}
+local PromptProperties = {}
+local NoclipEnabled = false
+local DoorReachEnabled = false
+local AutoTpNextDoorEnabled = false
 
 local CrouchThrottle = 0
 
@@ -551,6 +555,125 @@ local function applyPrompt(prompt)
     prompt.HoldDuration = 0
 end
 
+local function applyPromptReach(prompt, multiplier)
+    if not prompt:IsA("ProximityPrompt") then
+        return
+    end
+
+    if PromptProperties[prompt] == nil then
+        PromptProperties[prompt] = {
+            MaxActivationDistance = prompt.MaxActivationDistance,
+            RequiresLineOfSight = prompt.RequiresLineOfSight,
+        }
+    end
+
+    local original = PromptProperties[prompt]
+    prompt.MaxActivationDistance = original.MaxActivationDistance * multiplier
+end
+
+local function applyPromptClip(prompt, enabled)
+    if not prompt:IsA("ProximityPrompt") then
+        return
+    end
+
+    if PromptProperties[prompt] == nil then
+        PromptProperties[prompt] = {
+            MaxActivationDistance = prompt.MaxActivationDistance,
+            RequiresLineOfSight = prompt.RequiresLineOfSight,
+        }
+    end
+
+    local original = PromptProperties[prompt]
+    prompt.RequiresLineOfSight = enabled and false or original.RequiresLineOfSight
+end
+
+local function restorePromptProperties()
+    for prompt, values in pairs(PromptProperties) do
+        if prompt and prompt.Parent then
+            pcall(function()
+                prompt.MaxActivationDistance = values.MaxActivationDistance
+                prompt.RequiresLineOfSight = values.RequiresLineOfSight
+            end)
+        end
+    end
+    table.clear(PromptProperties)
+end
+
+local function applyNoclip()
+    if not Character then
+        return
+    end
+
+    for _, object in ipairs(Character:GetDescendants()) do
+        if object:IsA("BasePart") then
+            object.CanCollide = not NoclipEnabled
+        end
+    end
+end
+
+local function getNextDoor()
+    local currentRooms = workspace:FindFirstChild("CurrentRooms")
+    if not currentRooms then
+        return nil
+    end
+
+    local current = tonumber(Player:GetAttribute("CurrentRoom"))
+    if not current then
+        return nil
+    end
+
+    local room = currentRooms:FindFirstChild(tostring(current + 1))
+        or currentRooms:FindFirstChild(tostring(current))
+
+    local door = room and room:FindFirstChild("Door")
+    if not door then
+        return nil
+    end
+
+    local part = door:FindFirstChild("Door")
+        or door.PrimaryPart
+        or door:FindFirstChildWhichIsA("BasePart", true)
+
+    return door, part
+end
+
+local function teleportNextDoor()
+    getCharacter()
+    if not RootPart then
+        return
+    end
+
+    local _, part = getNextDoor()
+    if not part or not part:IsA("BasePart") then
+        return
+    end
+
+    RootPart.CFrame = part.CFrame + part.CFrame.LookVector * -3 + Vector3.new(0, 2, 0)
+end
+
+local function fireDoorReach()
+    local currentRooms = workspace:FindFirstChild("CurrentRooms")
+    local current = tonumber(Player:GetAttribute("CurrentRoom"))
+    if not currentRooms or not current then
+        return
+    end
+
+    local room = currentRooms:FindFirstChild(tostring(current))
+    local door = room and room:FindFirstChild("Door")
+    local openRemote = door and door:FindFirstChild("ClientOpen")
+    local part = door and (door:FindFirstChild("Door") or door.PrimaryPart or door:FindFirstChildWhichIsA("BasePart", true))
+
+    if not openRemote or not openRemote:IsA("RemoteEvent") or not part or not RootPart then
+        return
+    end
+
+    if (RootPart.Position - part.Position).Magnitude <= 75 then
+        pcall(function()
+            openRemote:FireServer()
+        end)
+    end
+end
+
 local function enableInstantInteract()
     for _, object in ipairs(workspace:GetDescendants()) do
         if object:IsA("ProximityPrompt") then
@@ -719,6 +842,17 @@ local function createUI()
         end,
     })
 
+    Elements.Noclip = character:Toggle({
+        Name = "Noclip",
+        Flag = "Main_Noclip",
+        Default = false,
+
+        Callback = function(value)
+            NoclipEnabled = value
+            applyNoclip()
+        end,
+    })
+
     character:Divider()
 
     Elements.EnableJump = character:Toggle({
@@ -845,6 +979,119 @@ local function createUI()
         end,
     })
 
+    Elements.InteractNoclip = misc:Toggle({
+        Name = "Interact Noclip",
+        Flag = "Main_InteractNoclip",
+        Default = false,
+
+        Callback = function(value)
+            for _, prompt in ipairs(workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") then
+                    applyPromptClip(prompt, value)
+                end
+            end
+        end,
+    })
+
+    Elements.InteractReach = misc:Slider({
+        Name = "Interact Reach",
+        Flag = "Main_InteractReach",
+        Min = 1,
+        Max = 2,
+        Step = 0.1,
+        Default = 1,
+
+        Callback = function(value)
+            for _, prompt in ipairs(workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") then
+                    applyPromptReach(prompt, value)
+                end
+            end
+        end,
+    })
+
+    misc:Divider()
+
+    Elements.DoorReach = misc:Toggle({
+        Name = "Door Reach",
+        Flag = "Main_DoorReach",
+        Default = false,
+
+        Callback = function(value)
+            DoorReachEnabled = value
+        end,
+    })
+
+    local gameSection = Tab:Section({
+        Title = "Game",
+        Column = 3,
+        Icon = "gamepad-2",
+    })
+
+    if not gameSection then
+        return false
+    end
+
+    gameSection:Button({
+        Name = "Play Again",
+        Callback = function()
+            local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+            local remote = remotes and remotes:FindFirstChild("PlayAgain")
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
+        end,
+    })
+
+    gameSection:Button({
+        Name = "Return to Lobby",
+        Callback = function()
+            local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+            local remote = remotes and remotes:FindFirstChild("Lobby")
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
+        end,
+    })
+
+    gameSection:Button({
+        Name = "Revive",
+        Callback = function()
+            local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+            local remote = remotes and remotes:FindFirstChild("Revive")
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
+        end,
+    })
+
+    gameSection:Button({
+        Name = "Reset Character",
+        Callback = function()
+            if Character and Humanoid then
+                Humanoid.Health = 0
+            end
+        end,
+    })
+
+    local debugSection = Tab:Section({
+        Title = "Debug",
+        Column = 3,
+        Icon = "bug",
+    })
+
+    if not debugSection then
+        return false
+    end
+
+    Elements.TpNextDoor = debugSection:Button({
+        Name = "Tp Next Door",
+        Callback = teleportNextDoor,
+    })
+
+    Elements.AutoTpNextDoor = debugSection:Toggle({
+        Name = "Auto Tp Next Door",
+        Flag = "Main_AutoTpNextDoor",
+        Default = false,
+        Callback = function(value)
+            AutoTpNextDoorEnabled = value
+        end,
+    })
+
     return true
 end
 
@@ -895,6 +1142,10 @@ local function setupConnections()
 
         if Elements.EnableSlide and Elements.EnableSlide:Get() then
             applySlide(true)
+        end
+
+        if NoclipEnabled then
+            applyNoclip()
         end
 
         bindInfiniteJumpButton()
@@ -948,13 +1199,22 @@ local function setupConnections()
     end)
 
     connect(workspace.DescendantAdded, function(object)
-        if object:IsA("ProximityPrompt")
-            and Elements.InstantInteract
-            and Elements.InstantInteract:Get()
-        then
+        if object:IsA("ProximityPrompt") then
             task.defer(function()
-                if object.Parent then
+                if not object.Parent then
+                    return
+                end
+
+                if Elements.InstantInteract and Elements.InstantInteract:Get() then
                     applyPrompt(object)
+                end
+
+                if Elements.InteractNoclip and Elements.InteractNoclip:Get() then
+                    applyPromptClip(object, true)
+                end
+
+                if Elements.InteractReach then
+                    applyPromptReach(object, Elements.InteractReach:Get() or 1)
                 end
             end)
         end
@@ -990,6 +1250,18 @@ local function setupConnections()
             tickFly()
         elseif FlyBody and FlyBody.Parent then
             FlyBody.Parent = nil
+        end
+
+        if NoclipEnabled then
+            applyNoclip()
+        end
+
+        if DoorReachEnabled then
+            fireDoorReach()
+        end
+
+        if AutoTpNextDoorEnabled then
+            teleportNextDoor()
         end
     end)
 
@@ -1044,6 +1316,10 @@ end
 function Main:Destroy()
     disableFly()
     disableInstantInteract()
+    restorePromptProperties()
+    NoclipEnabled = false
+    DoorReachEnabled = false
+    AutoTpNextDoorEnabled = false
 
     RemoveAccelEnabled = false
     applyRemoveAcceleration()
