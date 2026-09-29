@@ -578,9 +578,11 @@ local function refreshRoomVisibility()
 
     for kind, objects in pairs(ESP) do
         for object, entry in pairs(objects) do
-            local room = entry.Room
-            if not room or not room.Parent or not isRoomVisible(kind, room) then
-                clearEntry(kind, object)
+            if kind ~= "Rush" then
+                local room = entry.Room
+                if not room or not room.Parent or not isRoomVisible(kind, room) then
+                    clearEntry(kind, object)
+                end
             end
         end
     end
@@ -668,10 +670,9 @@ local function applyInteractables(selected)
     setKind("Drawers", drawers)
     setKind("Closets", closets)
 
+    clearKind("Chest")
     if chest or lockedChest then
         scanAll()
-    else
-        clearKind("Chest")
     end
 end
 
@@ -698,10 +699,9 @@ local function applyItems(selected)
         clearKind("Key")
     end
 
+    clearKind("Gold")
     if goldLevel ~= nil then
         scanAll()
-    else
-        clearKind("Gold")
     end
 end
 
