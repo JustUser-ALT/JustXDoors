@@ -50,6 +50,7 @@ local ScanTimer = 0
 local RoomsConnection
 local RoomScanQueued = {}
 local HighlightContainer
+local NotifiedEntities = {}
 
 local function connect(signal, callback)
     local c = signal:Connect(callback)
@@ -545,6 +546,46 @@ local function clearEntityESP()
     clearKind("Rush")
 end
 
+local function isSelected(value, name)
+    if type(value) == "table" then
+        if #value > 0 then
+            return table.find(value, name) ~= nil
+        end
+        return value[name] ~= nil
+    end
+    return value == name
+end
+
+local function notifyEntity(entity)
+    if not entity or NotifiedEntities[entity] then
+        return
+    end
+
+    if not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then
+        return
+    end
+
+    local selected = Elements.NotificationEntities and Elements.NotificationEntities:Get()
+    if not isSelected(selected, "Rush") then
+        return
+    end
+
+    NotifiedEntities[entity] = true
+
+    if Core then
+        Core:Notify({
+            Title = "Rush",
+            Desc = "Rush has spawned.",
+            Type = "Warning",
+            Duration = 5,
+        })
+    end
+
+    entity.Destroying:Once(function()
+        NotifiedEntities[entity] = nil
+    end)
+end
+
 local function scanEntities()
     if not Enabled.Rush then
         clearEntityESP()
@@ -563,6 +604,7 @@ local function scanEntities()
     end
 
     entity.PrimaryPart = root
+    notifyEntity(entity)
 
     local humanoid = entity:FindFirstChild("HighlightHumanoid")
     if not humanoid then
@@ -1072,6 +1114,7 @@ function Hotel:Destroy()
     clearKind("Gold")
     clearKind("Chest")
     clearKind("Rush")
+    table.clear(NotifiedEntities)
     if HighlightContainer then
         pcall(function()
             HighlightContainer:Destroy()
