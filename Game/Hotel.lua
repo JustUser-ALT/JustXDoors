@@ -48,6 +48,8 @@ local Colors = {
 
 local ScanTimer = 0
 local RoomsConnection
+local RoomScanQueued = {}
+local HighlightContainer
 
 local function connect(signal, callback)
     local c = signal:Connect(callback)
@@ -246,6 +248,17 @@ local function destroyProxy(entry)
     end
 end
 
+local function getHighlightContainer()
+    if HighlightContainer and HighlightContainer.Parent then
+        return HighlightContainer
+    end
+
+    HighlightContainer = Instance.new("Folder")
+    HighlightContainer.Name = "JustXDoors_HotelESP"
+    HighlightContainer.Parent = workspace
+    return HighlightContainer
+end
+
 local function isIgnoredPart(part)
     local n = part.Name:lower()
     return n:find("hitbox", 1, true)
@@ -282,7 +295,7 @@ local function buildDoorProxy(entry, object)
 
     local proxy = Instance.new("Model")
     proxy.Name = "HighlightModel"
-    proxy.Parent = object
+    proxy.Parent = workspace
 
     local humanoid = Instance.new("Humanoid")
     humanoid.Name = "HighlightHumanoid"
@@ -342,7 +355,7 @@ local function addHighlight(entry, object, kind)
     highlight.FillTransparency = 0.55
     highlight.OutlineTransparency = 0
     highlight.Adornee = adornee
-    highlight.Parent = object
+    highlight.Parent = getHighlightContainer()
 
     entry.Highlights[#entry.Highlights + 1] = highlight
 end
@@ -471,67 +484,62 @@ local function scanRoom(room)
         return
     end
 
-    local assets = room:FindFirstChild("Assets")
+    local roomVisible = {
+        Doors = isRoomVisible("Doors", room),
+        Drawers = isRoomVisible("Drawers", room),
+        Closets = isRoomVisible("Closets", room),
+        Key = isRoomVisible("Key", room),
+        Gold = isRoomVisible("Gold", room),
+    }
 
-    if Enabled.Doors and room:FindFirstChild("Door") and isRoomVisible("Doors", room) then
-        addObject("Doors", room.Door, room)
+    local door = room:FindFirstChild("Door")
+    if Enabled.Doors and roomVisible.Doors and door then
+        addObject("Doors", door, room)
     end
 
-    if assets and isRoomVisible("Drawers", room) then
-        for _, object in ipairs(assets:GetDescendants()) do
-            if Enabled.Drawers and (object.Name == "Dresser" or object.Name == "Table" or object.Name == "Rolltop_Desk")
-                and (object.Name == "Rolltop_Desk" or hasDrawerContainer(object))
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
-                addObject("Drawers", object, room)
-            end
+    for _, object in ipairs(room:GetDescendants()) do
+        if not object:IsA("Model") and not object:IsA("BasePart") then
+            continue
+        end
 
-            if Enabled.Closets and object.Name == "Wardrobe"
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
-                addObject("Closets", object, room)
-            end
+        if Enabled.Drawers and roomVisible.Drawers
+            and (object.Name == "Dresser" or object.Name == "Table" or object.Name == "Rolltop_Desk")
+            and (object.Name == "Rolltop_Desk" or hasDrawerContainer(object))
+        then
+            addObject("Drawers", object, room)
+        end
 
-            if Enabled.Chest and (object.Name == "ChestBox" or object.Name == "ChestBoxLocked")
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
+        if Enabled.Closets and roomVisible.Closets and object.Name == "Wardrobe" then
+            addObject("Closets", object, room)
+        end
+
+        if (Enabled.Chest or Enabled.LockedChest) and roomVisible.Drawers then
+            if Enabled.Chest and (object.Name == "ChestBox" or object.Name == "ChestBoxLocked") then
                 addObject("Chest", object, room)
-            elseif Enabled.LockedChest and object.Name == "LockedChestBox"
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
+            elseif Enabled.LockedChest and object.Name == "LockedChestBox" then
                 addObject("Chest", object, room)
             end
         end
-    end
 
-    if Enabled.Key and isRoomVisible("Key", room) then
-        for _, object in ipairs(room:GetDescendants()) do
-            if object.Name == "KeyObtain"
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
-                addObject("Key", object, room)
-            end
+        if Enabled.Key and roomVisible.Key and object.Name == "KeyObtain" then
+            addObject("Key", object, room)
         end
-    end
 
-    if Enabled.Gold and isRoomVisible("Gold", room) then
-        local gold = room:FindFirstChild("Assets")
-        if gold then
-            for _, pile in ipairs(gold:GetDescendants()) do
-                if pile.Name == "GoldPile" and (pile:IsA("Model") or pile:IsA("BasePart")) then
-                    for _, levelObject in ipairs(pile:GetChildren()) do
-                        local level = tonumber(levelObject.Name)
-                        if level and level >= (Hotel.GoldLevel or 1) then
-                            if levelObject:IsA("Model") or levelObject:IsA("BasePart") then
-                                addObject("Gold", levelObject, room)
-                            end
-                        end
-                    end
+        if Enabled.Gold and roomVisible.Gold and object.Name == "GoldPile" then
+            for _, levelObject in ipairs(object:GetChildren()) do
+                local level = tonumber(levelObject.Name)
+                if level and level >= (Hotel.GoldLevel or 1)
+                    and (levelObject:IsA("Model") or levelObject:IsA("BasePart"))
+                then
+                    addObject("Gold", levelObject, room)
                 end
             end
         end
     end
 end
+
+local clearKind
+local scanAll
 
 local function clearEntityESP()
     clearKind("Rush")
@@ -590,7 +598,7 @@ local function refreshRoomVisibility()
     scanAll()
 end
 
-local function scanAll()
+scanAll = function()
     local rooms = getRooms()
 
     if not rooms then
@@ -602,7 +610,7 @@ local function scanAll()
     end
 end
 
-local function clearKind(kind)
+clearKind = function(kind)
     local copy = {}
 
     for object in pairs(ESP[kind]) do
@@ -717,6 +725,21 @@ local function refreshLabels()
     end
 end
 
+local function queueRoomScan(room)
+    if not room or not room.Parent or RoomScanQueued[room] then
+        return
+    end
+
+    RoomScanQueued[room] = true
+
+    task.defer(function()
+        RoomScanQueued[room] = nil
+        if room.Parent then
+            scanRoom(room)
+        end
+    end)
+end
+
 local function hookRooms(rooms)
     if RoomsConnection then
         pcall(function()
@@ -730,12 +753,31 @@ local function hookRooms(rooms)
     end
 
     RoomsConnection = rooms.ChildAdded:Connect(function(room)
-        task.defer(function()
-            scanRoom(room)
+        queueRoomScan(room)
+
+        local roomConnection
+        roomConnection = room.DescendantAdded:Connect(function()
+            queueRoomScan(room)
+        end)
+
+        table.insert(Connections, roomConnection)
+
+        task.delay(0.15, function()
+            if room.Parent then
+                queueRoomScan(room)
+            end
         end)
     end)
 
     table.insert(Connections, RoomsConnection)
+
+    for _, room in ipairs(rooms:GetChildren()) do
+        local roomConnection = room.DescendantAdded:Connect(function()
+            queueRoomScan(room)
+        end)
+        table.insert(Connections, roomConnection)
+        queueRoomScan(room)
+    end
 
     connect(rooms.DescendantAdded, function(object)
         if object.Name == "KeyObtain"
@@ -745,12 +787,17 @@ local function hookRooms(rooms)
             or object.Name == "Wardrobe"
             or object.Name == "DrawerContainer"
             or object.Name == "Stinker"
+            or object.Name == "GoldPile"
         then
-            task.defer(function()
-                if object.Parent then
-                    scanAll()
-                end
-            end)
+            local room = object:FindFirstAncestorWhichIsA("Model")
+            while room and tonumber(room.Name) == nil and room.Parent do
+                room = room.Parent
+            end
+            if room then
+                queueRoomScan(room)
+            else
+                scanAll()
+            end
         end
     end)
 
@@ -876,7 +923,7 @@ local function createUI()
     end
 
     local entityPages = Tab:MultiSection({
-        Pages = { "Entity", "Anti" },
+        Pages = { "Entity", "Notifications", "Anti" },
         Column = 3,
         Icon = "shield",
     })
@@ -917,6 +964,30 @@ local function createUI()
 
     entityPage:Label({
         Text = "Entity ESP",
+    })
+
+    local notificationsPage = entityPages:Page("Notifications")
+
+    Elements.NotificationEntities = notificationsPage:Dropdown({
+        Name = "Entities",
+        Flag = "Hotel_NotificationEntities",
+        Options = {
+            "Rush",
+        },
+        MultiSelect = true,
+        MaxSelect = 1,
+        Default = {},
+        Search = true,
+        Callback = function()
+        end,
+    })
+
+    Elements.NotifyEntities = notificationsPage:Toggle({
+        Name = "Notify Entities",
+        Flag = "Hotel_NotifyEntities",
+        Default = false,
+        Callback = function()
+        end,
     })
 
     entityPages:Page("Anti"):Label({
@@ -1001,6 +1072,13 @@ function Hotel:Destroy()
     clearKind("Gold")
     clearKind("Chest")
     clearKind("Rush")
+    if HighlightContainer then
+        pcall(function()
+            HighlightContainer:Destroy()
+        end)
+        HighlightContainer = nil
+    end
+    table.clear(RoomScanQueued)
     disconnectAll()
 
     Enabled.Doors = false
