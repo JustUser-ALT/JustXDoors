@@ -19,6 +19,7 @@ local ESP = {
     Smoothie = {},
     Flashlight = {},
     TipJar = {},
+    Ambush = {},
     VentGate = {},
     Lever = {},
     Rush = {},
