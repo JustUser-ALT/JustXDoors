@@ -297,23 +297,37 @@ local function makeInfinitePrompt(prompt)
         return
     end
 
-    if not isInfiniteItemTarget(prompt) or FakePrompts[prompt] or prompt:GetAttribute("JustXDoors_RealPrompt") then
+    if not isInfiniteItemTarget(prompt) or InfinitePromptObjects[prompt] or prompt:GetAttribute("FakePrompt") then
         return
     end
 
-    if not prompt.Parent or prompt.Parent:FindFirstChild("JustXDoors_InfPrompt") then
+    if not prompt.Parent then
         return
+    end
+
+    if prompt:GetAttribute("HoldDuration_Old") == nil then
+        prompt:SetAttribute("HoldDuration_Old", prompt.HoldDuration)
+    end
+    if prompt:GetAttribute("RequiresLineOfSight_Old") == nil then
+        prompt:SetAttribute("RequiresLineOfSight_Old", prompt.RequiresLineOfSight)
+    end
+    if prompt:GetAttribute("MaxActivationDistance_Old") == nil then
+        prompt:SetAttribute("MaxActivationDistance_Old", prompt.MaxActivationDistance)
     end
 
     local fake = prompt:Clone()
-    fake.Name = "JustXDoors_InfPrompt"
     fake:SetAttribute("FakePrompt", true)
-    fake:SetAttribute("JustXDoors_RealPrompt", true)
-    fake.Enabled = prompt.Enabled
+
+    task.wait()
+    fake.Parent = prompt.Parent
+
+    fake:SetAttribute("HoldDuration_Old", prompt:GetAttribute("HoldDuration_Old"))
+    fake:SetAttribute("RequiresLineOfSight_Old", prompt:GetAttribute("RequiresLineOfSight_Old"))
+    fake:SetAttribute("MaxActivationDistance_Old", prompt:GetAttribute("MaxActivationDistance_Old"))
+
     fake.HoldDuration = prompt.HoldDuration
     fake.RequiresLineOfSight = prompt.RequiresLineOfSight
     fake.MaxActivationDistance = prompt.MaxActivationDistance
-    fake.Parent = prompt.Parent
 
     FakePrompts[fake] = prompt
     InfinitePromptObjects[prompt] = fake
@@ -324,22 +338,41 @@ local function makeInfinitePrompt(prompt)
         InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
     end
 
-    prompt.Parent = InfinitePromptContainer
+    pcall(function()
+        prompt.Parent = InfinitePromptContainer
+    end)
 
     local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
         if fake.Parent then
             fake.Enabled = prompt.Enabled
         end
     end)
+    table.insert(InfiniteItemConnections, enabledConnection)
+
+    prompt:GetPropertyChangedSignal("ActionText"):Once(function()
+        if prompt.Parent == InfinitePromptContainer and fake.Parent then
+            prompt.Parent = fake.Parent
+        end
+        pcall(function() fake:Destroy() end)
+        FakePrompts[fake] = nil
+        InfinitePromptObjects[prompt] = nil
+        disconnect(enabledConnection)
+    end)
+
+    prompt.Destroying:Once(function()
+        pcall(function() fake:Destroy() end)
+        FakePrompts[fake] = nil
+        InfinitePromptObjects[prompt] = nil
+        disconnect(enabledConnection)
+    end)
 
     table.insert(InfiniteItemConnections, enabledConnection)
 
-    prompt.Destroying:Once(function()
-        disconnect(enabledConnection)
-        FakePrompts[fake] = nil
-        InfinitePromptObjects[prompt] = nil
-        pcall(function() fake:Destroy() end)
-    end)
+    fake.Enabled = false
+    task.wait()
+    if fake.Parent and prompt.Parent then
+        fake.Enabled = prompt.Enabled
+    end
 end
 
 local function restoreInfinitePrompts()
