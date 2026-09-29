@@ -17,6 +17,8 @@ local ESP = {
     Chest = {},
     Bandage = {},
     Smoothie = {},
+    Flashlight = {},
+    TipJar = {},
     VentGate = {},
     Lever = {},
     Rush = {},
@@ -49,6 +51,8 @@ local Colors = {
     Chest = Color3.fromRGB(255, 230, 80),
     Bandage = Color3.fromRGB(235, 235, 235),
     Smoothie = Color3.fromRGB(190, 100, 255),
+    Flashlight = Color3.fromRGB(255, 245, 170),
+    TipJar = Color3.fromRGB(255, 190, 90),
     VentGate = Color3.fromRGB(100, 190, 255),
     Lever = Color3.fromRGB(255, 190, 70),
     Rush = Color3.fromRGB(255, 70, 70),
@@ -170,6 +174,10 @@ local function getLabel(kind, object)
                 text[#text + 1] = "Bandage"
             elseif kind == "Smoothie" then
                 text[#text + 1] = "Smoothie"
+            elseif kind == "Flashlight" then
+                text[#text + 1] = "Flashlight"
+            elseif kind == "TipJar" then
+                text[#text + 1] = "Tip Jar"
             elseif kind == "VentGate" then
                 text[#text + 1] = "Vent Gate"
             elseif kind == "Lever" then
@@ -561,6 +569,24 @@ local function scanRoom(room)
             addObject("Smoothie", object, room)
         end
 
+        if room.Name == "9" and (Enabled.Flashlight or Enabled.TipJar) then
+            local shop = room:FindFirstChild("RiftRoom_JeffShop")
+            if shop then
+                if Enabled.Flashlight then
+                    local flashlight = shop:FindFirstChild("Flashlight")
+                    if flashlight then
+                        addObject("Flashlight", flashlight, room)
+                    end
+                end
+                if Enabled.TipJar then
+                    local tipJar = shop:FindFirstChild("TipJar")
+                    if tipJar then
+                        addObject("TipJar", tipJar, room)
+                    end
+                end
+            end
+        end
+
         if object.Name == "VentGrate" and Enabled.VentGate and roomVisible.Drawers then
             addObject("VentGate", object, room)
         end
@@ -624,34 +650,41 @@ local function scanEntities()
         return
     end
 
-    local entity = workspace:FindFirstChild("RushMoving")
-    if not entity then
-        clearEntityESP()
-        return
-    end
+    local found = {}
 
-    local root = entity:FindFirstChild("RushNew") or entity.PrimaryPart or entity:FindFirstChildWhichIsA("BasePart", true)
-    if not root then
-        return
-    end
+    for _, entity in ipairs(workspace:GetChildren()) do
+        if entity.Name ~= "RushMoving" or not entity:IsA("Model") then
+            continue
+        end
 
-    entity.PrimaryPart = root
-    notifyEntity(entity)
+        found[entity] = true
 
-    local humanoid = entity:FindFirstChild("HighlightHumanoid")
-    if not humanoid then
-        humanoid = Instance.new("Humanoid")
-        humanoid.Name = "HighlightHumanoid"
-        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-        humanoid.Parent = entity
-    end
+        local root = entity:FindFirstChild("RushNew") or entity.PrimaryPart or entity:FindFirstChildWhichIsA("BasePart", true)
+        if not root or not root:IsA("BasePart") then
+            continue
+        end
 
-    if root:IsA("BasePart") then
+        entity.PrimaryPart = root
+        notifyEntity(entity)
+
+        local humanoid = entity:FindFirstChild("HighlightHumanoid")
+        if not humanoid then
+            humanoid = Instance.new("Humanoid")
+            humanoid.Name = "HighlightHumanoid"
+            humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+            humanoid.Parent = entity
+        end
+
         root.Transparency = 0.999
         root.Material = Enum.Material.Glass
+        addObject("Rush", entity, nil)
     end
 
-    addObject("Rush", entity, nil)
+    for entity in pairs(ESP.Rush) do
+        if not found[entity] or not entity.Parent then
+            clearEntry("Rush", entity)
+        end
+    end
 end
 
 local function refreshRoomVisibility()
@@ -946,8 +979,28 @@ local function createUI()
         return false
     end
 
-    gameSection:Label({
-        Text = "Hotel game features.",
+    Elements.AutoInteract = gameSection:Dropdown({
+        Name = "Auto Interact",
+        Flag = "Hotel_AutoInteract",
+        Options = {},
+        MultiSelect = true,
+        MaxSelect = 8,
+        Default = {},
+        Search = true,
+        Callback = function()
+        end,
+    })
+
+    Elements.AutoLoot = gameSection:Dropdown({
+        Name = "Auto Loot",
+        Flag = "Hotel_AutoLoot",
+        Options = {},
+        MultiSelect = true,
+        MaxSelect = 8,
+        Default = {},
+        Search = true,
+        Callback = function()
+        end,
     })
 
     local visualPages = Tab:MultiSection({
@@ -989,6 +1042,8 @@ local function createUI()
             "Gold",
             "Bandage",
             "Smoothie",
+            "Flashlight",
+            "Tip Jar",
         },
         Values = {
             Gold = {
@@ -1214,6 +1269,8 @@ function Hotel:Destroy()
     clearKind("Chest")
     clearKind("Bandage")
     clearKind("Smoothie")
+    clearKind("Flashlight")
+    clearKind("TipJar")
     clearKind("VentGate")
     clearKind("Lever")
     clearKind("Rush")
@@ -1236,6 +1293,8 @@ function Hotel:Destroy()
     Enabled.LockedChest = false
     Enabled.Bandage = false
     Enabled.Smoothie = false
+    Enabled.Flashlight = false
+    Enabled.TipJar = false
     Enabled.VentGate = false
     Enabled.Lever = false
     Enabled.Rush = false
