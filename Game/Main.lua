@@ -44,6 +44,7 @@ local AtmosphereBackup = {}
 local ModifiedPrompts = {}
 local PromptProperties = {}
 local NoclipEnabled = false
+local NoclipProperties = {}
 local DoorReachEnabled = false
 local AutoTpNextDoorEnabled = false
 
@@ -606,8 +607,15 @@ local function applyNoclip()
 
     for _, object in ipairs(Character:GetDescendants()) do
         if object:IsA("BasePart") then
-            object.CanCollide = not NoclipEnabled
+            if NoclipProperties[object] == nil then
+                NoclipProperties[object] = object.CanCollide
+            end
+            object.CanCollide = NoclipEnabled and false or NoclipProperties[object]
         end
+    end
+
+    if not NoclipEnabled then
+        table.clear(NoclipProperties)
     end
 end
 
@@ -1318,6 +1326,7 @@ function Main:Destroy()
     disableInstantInteract()
     restorePromptProperties()
     NoclipEnabled = false
+    table.clear(NoclipProperties)
     DoorReachEnabled = false
     AutoTpNextDoorEnabled = false
 
