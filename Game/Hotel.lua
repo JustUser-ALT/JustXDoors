@@ -936,18 +936,18 @@ local function createUI()
         return false
     end
 
-    local gamePages = Tab:MultiSection({
-        Pages = { "Game", "Bypass" },
+    local gameSection = Tab:Section({
+        Title = "Game",
         Column = 1,
         Icon = "joystick",
     })
 
-    gamePages:Page("Game"):Label({
-        Text = "Hotel game features.",
-    })
+    if not gameSection then
+        return false
+    end
 
-    gamePages:Page("Bypass"):Label({
-        Text = "Hotel bypass features.",
+    gameSection:Label({
+        Text = "Hotel game features.",
     })
 
     local visualPages = Tab:MultiSection({
