@@ -647,6 +647,12 @@ local function updateCollisionSpoof()
         return
     end
 
+    for _, part in ipairs(Character:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+
     RootPart.CanCollide = false
     Collision.CanCollide = false
 
