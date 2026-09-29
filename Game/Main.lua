@@ -2204,7 +2204,7 @@ function Main:Destroy()
     InfiniteItemsEnabled = false
     InfiniteItemsSelection = {}
     InfiniteCrucifixEnabled = false
-    restoreAllInfinitePrompts()
+    restoreInfinitePrompts()
     for _, connection in ipairs(InfiniteItemConnections) do
         disconnect(connection)
     end
