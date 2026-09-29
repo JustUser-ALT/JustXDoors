@@ -233,66 +233,6 @@ local function clearInfinitePrompts()
 end
 
 local function makeInfinitePrompt(prompt)
-    if not InfiniteItemsEnabled or type(fireproximityprompt) ~= "function" then return end
-    if not isInfiniteItemTarget(prompt) or InfinitePromptObjects[prompt] then return end
-    if not prompt.Parent or prompt:GetAttribute("FakePrompt") then return end
-
-    if not InfinitePromptContainer then
-        InfinitePromptContainer = Instance.new("Folder")
-        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
-        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
-    end
-
-    local fake = prompt:Clone()
-    fake:SetAttribute("FakePrompt", true)
-    fake.Name = prompt.Name
-    fake.Parent = prompt.Parent
-    fake.HoldDuration = prompt.HoldDuration
-    fake.RequiresLineOfSight = prompt.RequiresLineOfSight
-    fake.MaxActivationDistance = prompt.MaxActivationDistance
-
-    FakePrompts[fake] = prompt
-    InfinitePromptObjects[prompt] = fake
-    prompt.Parent = InfinitePromptContainer
-
-    local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
-        if fake.Parent then fake.Enabled = prompt.Enabled end
-    end)
-    table.insert(InfiniteItemConnections, enabledConnection)
-
-    prompt:GetPropertyChangedSignal("ActionText"):Once(function()
-        if prompt.Parent == InfinitePromptContainer and fake.Parent then prompt.Parent = fake.Parent end
-        pcall(function() fake:Destroy() end)
-        FakePrompts[fake] = nil
-        InfinitePromptObjects[prompt] = nil
-        disconnect(enabledConnection)
-    end)
-
-    prompt.Destroying:Once(function()
-        pcall(function() fake:Destroy() end)
-        FakePrompts[fake] = nil
-        InfinitePromptObjects[prompt] = nil
-        disconnect(enabledConnection)
-    end)
-
-    fake.Enabled = false
-    task.defer(function()
-        if fake.Parent and prompt.Parent then fake.Enabled = prompt.Enabled end
-    end)
-end
-
-local function clearInfinitePrompts()
-    for fake, real in pairs(FakePrompts) do
-        if fake then
-            pcall(function() fake:Destroy() end)
-        end
-        FakePrompts[fake] = nil
-    end
-
-    table.clear(InfinitePromptObjects)
-end
-
-local function makeInfinitePrompt(prompt)
     if not InfiniteItemsEnabled or type(fireproximityprompt) ~= "function" then
         return
     end
@@ -2089,17 +2029,6 @@ local function setupConnections()
         if object.Name == "MainUI" then
             task.wait(0.1)
             bindInfiniteJumpButton()
-        end
-    end)
-
-    connect(workspace.DescendantRemoving, function(object)
-        if object:IsA("ProximityPrompt") then
-            local fake = InfinitePromptObjects[object]
-            if fake then
-                pcall(function() fake:Destroy() end)
-                FakePrompts[fake] = nil
-                InfinitePromptObjects[object] = nil
-            end
         end
     end)
 
