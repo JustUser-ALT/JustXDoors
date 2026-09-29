@@ -70,6 +70,7 @@ local CollisionPart
 local CollisionPartClone
 local OriginalC1
 local InfiniteCrucifixEnabled = false
+local InfinitePromptContainer
 local InfiniteCrucifixRaycastParams = RaycastParams.new()
 InfiniteCrucifixRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -253,7 +254,13 @@ local function makeInfinitePrompt(prompt)
     FakePrompts[fake] = prompt
     InfinitePromptObjects[prompt] = fake
 
-    prompt.Parent = nil
+    if not InfinitePromptContainer then
+        InfinitePromptContainer = Instance.new("Folder")
+        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
+        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
+    end
+
+    prompt.Parent = InfinitePromptContainer
 
     local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
         if fake.Parent then
@@ -295,6 +302,12 @@ end
 
 local function setupInfiniteItems()
     restoreInfinitePrompts()
+
+    if not InfinitePromptContainer then
+        InfinitePromptContainer = Instance.new("Folder")
+        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
+        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
+    end
 
     if not InfiniteItemsEnabled or type(fireproximityprompt) ~= "function" then
         return
@@ -1990,6 +2003,13 @@ local function setupConnections()
             connect(useEnemy.OnClientEvent, function(moduleName)
                 if moduleName == "Void" or moduleName == "Glitch" then
                     AnticheatDisabled = false
+                    local latestRoom = ReplicatedStorage:FindFirstChild("GameData")
+                    latestRoom = latestRoom and latestRoom:FindFirstChild("LatestRoom")
+                    if latestRoom then
+                        pcall(function()
+                            Player:SetAttribute("CurrentRoom", latestRoom.Value)
+                        end)
+                    end
                 end
             end)
         end
