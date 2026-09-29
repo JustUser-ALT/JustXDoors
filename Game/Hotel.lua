@@ -393,28 +393,30 @@ local function addObject(kind, object, room)
 
     addHighlight(entry, object, kind)
 
-    entry.Connection = object.DescendantAdded:Connect(function(child)
-        if child:IsA("BasePart") then
-            task.defer(function()
-                if object.Parent and ESP[kind][object] == entry then
-                    rebuildHighlights(entry, object, kind)
-                end
-            end)
-        end
-    end)
+    if kind == "Doors" then
+        entry.Connection = object.ChildAdded:Connect(function(child)
+            if child:IsA("BasePart") and child.Name == "Door" then
+                task.defer(function()
+                    if object.Parent and ESP[kind][object] == entry then
+                        rebuildHighlights(entry, object, kind)
+                    end
+                end)
+            end
+        end)
 
-    entry.RemovingConnection = object.DescendantRemoving:Connect(function(child)
-        if child:IsA("BasePart") then
-            task.defer(function()
-                if object.Parent and ESP[kind][object] == entry then
-                    rebuildHighlights(entry, object, kind)
-                end
-            end)
-        end
-    end)
+        entry.RemovingConnection = object.ChildRemoved:Connect(function(child)
+            if child:IsA("BasePart") and child.Name == "Door" then
+                task.defer(function()
+                    if object.Parent and ESP[kind][object] == entry then
+                        rebuildHighlights(entry, object, kind)
+                    end
+                end)
+            end
+        end)
 
-    table.insert(Connections, entry.Connection)
-    table.insert(Connections, entry.RemovingConnection)
+        table.insert(Connections, entry.Connection)
+        table.insert(Connections, entry.RemovingConnection)
+    end
 
     object.Destroying:Once(function()
         clearEntry(kind, object)
