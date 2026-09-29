@@ -1177,6 +1177,7 @@ local function setupConnections()
 
         OldJump = character:GetAttribute("CanJump") or false
         OldSlide = character:GetAttribute("CanSlide") or false
+        table.clear(NoclipProperties)
 
         task.wait(0.25)
 
