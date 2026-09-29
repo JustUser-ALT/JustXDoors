@@ -221,68 +221,142 @@ local function isInfiniteItemTarget(prompt)
     return false
 end
 
-local InfinitePromptConnections = {}
-local InfiniteCrucifixBusy = false
-local InfiniteCrucifixCooldown = 0
-
 local function clearInfinitePrompts()
-    for fake, connection in pairs(InfinitePromptConnections) do
-        disconnect(connection)
-        pcall(function() fake:Destroy() end)
+    for fake, real in pairs(FakePrompts) do
+        if fake then
+            pcall(function() fake:Destroy() end)
+        end
+        FakePrompts[fake] = nil
     end
-    table.clear(InfinitePromptConnections)
-    table.clear(FakePrompts)
+
     table.clear(InfinitePromptObjects)
 end
 
 local function makeInfinitePrompt(prompt)
     if not InfiniteItemsEnabled or type(fireproximityprompt) ~= "function" then return end
-    if not isInfiniteItemTarget(prompt) or FakePrompts[prompt] or prompt:GetAttribute("JustXDoors_RealPrompt") then return end
-    if not prompt.Parent then return end
+    if not isInfiniteItemTarget(prompt) or InfinitePromptObjects[prompt] then return end
+    if not prompt.Parent or prompt:GetAttribute("FakePrompt") then return end
+
+    if not InfinitePromptContainer then
+        InfinitePromptContainer = Instance.new("Folder")
+        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
+        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
+    end
+
+    local fake = prompt:Clone()
+    fake:SetAttribute("FakePrompt", true)
+    fake.Name = prompt.Name
+    fake.Parent = prompt.Parent
+    fake.HoldDuration = prompt.HoldDuration
+    fake.RequiresLineOfSight = prompt.RequiresLineOfSight
+    fake.MaxActivationDistance = prompt.MaxActivationDistance
+
+    FakePrompts[fake] = prompt
+    InfinitePromptObjects[prompt] = fake
+    prompt.Parent = InfinitePromptContainer
+
+    local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
+        if fake.Parent then fake.Enabled = prompt.Enabled end
+    end)
+    table.insert(InfiniteItemConnections, enabledConnection)
+
+    prompt:GetPropertyChangedSignal("ActionText"):Once(function()
+        if prompt.Parent == InfinitePromptContainer and fake.Parent then prompt.Parent = fake.Parent end
+        pcall(function() fake:Destroy() end)
+        FakePrompts[fake] = nil
+        InfinitePromptObjects[prompt] = nil
+        disconnect(enabledConnection)
+    end)
+
+    prompt.Destroying:Once(function()
+        pcall(function() fake:Destroy() end)
+        FakePrompts[fake] = nil
+        InfinitePromptObjects[prompt] = nil
+        disconnect(enabledConnection)
+    end)
+
+    fake.Enabled = false
+    task.defer(function()
+        if fake.Parent and prompt.Parent then fake.Enabled = prompt.Enabled end
+    end)
+end
+
+local function clearInfinitePrompts()
+    for fake, real in pairs(FakePrompts) do
+        if fake then
+            pcall(function() fake:Destroy() end)
+        end
+        FakePrompts[fake] = nil
+    end
+
+    table.clear(InfinitePromptObjects)
+end
+
+local function makeInfinitePrompt(prompt)
+    if not InfiniteItemsEnabled or type(fireproximityprompt) ~= "function" then
+        return
+    end
+
+    if not isInfiniteItemTarget(prompt) or FakePrompts[prompt] or prompt:GetAttribute("JustXDoors_RealPrompt") then
+        return
+    end
+
+    if not prompt.Parent or prompt.Parent:FindFirstChild("JustXDoors_InfPrompt") then
+        return
+    end
 
     local fake = prompt:Clone()
     fake.Name = "JustXDoors_InfPrompt"
     fake:SetAttribute("FakePrompt", true)
     fake:SetAttribute("JustXDoors_RealPrompt", true)
     fake.Enabled = prompt.Enabled
+    fake.HoldDuration = prompt.HoldDuration
+    fake.RequiresLineOfSight = prompt.RequiresLineOfSight
+    fake.MaxActivationDistance = prompt.MaxActivationDistance
     fake.Parent = prompt.Parent
 
     FakePrompts[fake] = prompt
     InfinitePromptObjects[prompt] = fake
 
-    local connection
-    connection = fake.Triggered:Connect(function()
-        handleInfinitePrompt(fake)
-    end)
-    InfinitePromptConnections[fake] = connection
+    if not InfinitePromptContainer then
+        InfinitePromptContainer = Instance.new("Folder")
+        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
+        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
+    end
+
+    prompt.Parent = InfinitePromptContainer
 
     local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
         if fake.Parent then
             fake.Enabled = prompt.Enabled
         end
     end)
+
     table.insert(InfiniteItemConnections, enabledConnection)
 
-    local cleanup = function()
-        disconnect(connection)
+    prompt.Destroying:Once(function()
         disconnect(enabledConnection)
-        InfinitePromptConnections[fake] = nil
         FakePrompts[fake] = nil
         InfinitePromptObjects[prompt] = nil
         pcall(function() fake:Destroy() end)
-    end
-
-    prompt.Destroying:Once(cleanup)
-    fake.Destroying:Once(function()
-        disconnect(enabledConnection)
-        InfinitePromptConnections[fake] = nil
-        FakePrompts[fake] = nil
-        InfinitePromptObjects[prompt] = nil
     end)
 end
 
 local function restoreInfinitePrompts()
-    clearInfinitePrompts()
+    for fake, real in pairs(FakePrompts) do
+        if real then
+            pcall(function()
+                if not real.Parent and fake.Parent then
+                    real.Parent = fake.Parent
+                end
+                real.Enabled = true
+            end)
+        end
+        pcall(function() fake:Destroy() end)
+    end
+
+    table.clear(FakePrompts)
+    table.clear(InfinitePromptObjects)
 
     for _, connection in ipairs(InfiniteItemConnections) do
         disconnect(connection)
@@ -292,6 +366,12 @@ end
 
 local function setupInfiniteItems()
     restoreInfinitePrompts()
+
+    if not InfinitePromptContainer then
+        InfinitePromptContainer = Instance.new("Folder")
+        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
+        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
+    end
 
     if not InfiniteItemsEnabled or type(fireproximityprompt) ~= "function" then
         return
@@ -304,179 +384,322 @@ local function setupInfiniteItems()
     end
 end
 
-function handleInfinitePrompt(fake)
+local function handleInfinitePrompt(fake)
     if not InfiniteItemsEnabled or not fake or not fake:GetAttribute("FakePrompt") then return end
 
     local realPrompt = FakePrompts[fake]
-    if not realPrompt or not realPrompt.Parent then return end
+    if not realPrompt or not realPrompt.Parent or not Character then return end
 
-    local character = Player.Character
-    if not character then return end
+    local toolNames = {
+        Lockpick = "Lockpicks",
+        Shears = "Shears",
+        SkeletonKey = "Skeleton Key",
+        Key = "Key",
+        GeneratorFuse = "GeneratorFuse",
+        KeyElectrical = "KeyElectrical",
+        KeyBackdoor = "KeyBackdoor",
+        KeyIron = "KeyIron",
+        Multitool = "Multitool",
+    }
 
-    local selectedTool
-    local selectedDisplayName
+    local anyTool = Character:FindFirstChildOfClass("Tool")
+    local toolData = anyTool and toolNames[anyTool.Name]
 
-    for toolName, displayName in pairs(InfiniteItemNames) do
-        local tool = character:FindFirstChild(toolName)
-        if tool and isInfiniteItemSelected(displayName) then
-            selectedTool = tool
-            selectedDisplayName = displayName
-            break
-        end
-    end
-
-    if not selectedTool then
-        firePrompt(realPrompt)
-        return
-    end
-
-    local parent = realPrompt.Parent
+    local parent = fake.Parent
     local parentName = parent and parent.Name
     local grandParentName = parent and parent.Parent and parent.Parent.Name
 
-    local requiresShears = parentName == "CuttableVines" or parentName == "Chest_Vine" or parentName == "Cellar"
-    local requiresSkeletonKey = parentName == "SkullLock"
-    local requiresLockpick = parentName == "Lock1" or parentName == "Lock2"
+    local lockPromptNames = {
+        UnlockPrompt = true,
+        SkullPrompt = true,
+        LockPrompt = true,
+        ThingToEnable = true,
+        FusesPrompt = true,
+    }
 
-    if requiresShears and not (character:FindFirstChild("Shears") or character:FindFirstChild("Multitool")) then return end
-    if requiresSkeletonKey and not character:FindFirstChild("SkeletonKey") then return end
-    if requiresLockpick and not (character:FindFirstChild("Lockpick") or character:FindFirstChild("Multitool")) then return end
-    if grandParentName == "Locker_Small_Locked" and not character:FindFirstChild("SkeletonKey") then return end
+    local isLockPrompt =
+        lockPromptNames[fake.Name]
+        or (parent and parent:GetAttribute("Locked") == true)
+        or (grandParentName == "Locker_Small_Locked" and fake.Name == "ActivateEventPrompt")
 
-    local remotes = getRemotes()
-    local dropRemote = remotes and remotes:FindFirstChild("DropItem")
-    if not dropRemote or not dropRemote:IsA("RemoteEvent") then
-        firePrompt(realPrompt)
+    if isLockPrompt and not anyTool then return end
+
+    if (parentName == "CuttableVines" or parentName == "Chest_Vine" or parentName == "Cellar")
+        and not Character:FindFirstChild("Shears")
+        and not Character:FindFirstChild("Multitool") then
         return
     end
 
-    local drops = workspace:FindFirstChild("Drops")
-    local droppedTool
-    local finished = false
-    local dropConnection
-
-    if drops then
-        dropConnection = drops.ChildAdded:Connect(function(object)
-            if finished or not object or object.Name ~= selectedTool.Name then return end
-            droppedTool = object
-        end)
+    if parentName == "SkullLock" and not Character:FindFirstChild("SkeletonKey") then
+        return
     end
 
-    dropRemote:FireServer(selectedTool)
+    if (parentName == "Lock1" or parentName == "Lock2")
+        and not Character:FindFirstChild("Lockpick")
+        and not Character:FindFirstChild("Multitool") then
+        return
+    end
 
-    local startTime = tick()
-    while tick() - startTime < 2.5 and not finished do
-        task.wait()
+    if anyTool and toolData and isInfiniteItemSelected(toolData) then
+        local remotes = getRemotes()
+        local dropRemote = remotes and remotes:FindFirstChild("DropItem")
+        local drops = workspace:FindFirstChild("Drops")
 
-        if not droppedTool and drops then
-            for _, object in ipairs(drops:GetChildren()) do
-                if object.Name == selectedTool.Name then
-                    local root = object:IsA("Model") and object:GetPivot().Position or object.Position
-                    if RootPart and (root - RootPart.Position).Magnitude <= 15 then
-                        droppedTool = object
-                        break
-                    end
+        if not dropRemote or not dropRemote:IsA("RemoteEvent") or not drops then
+            firePrompt(realPrompt)
+            return
+        end
+
+        local finished = false
+        local connection
+
+        local function useDroppedTool(object)
+            if finished or not object or object.Name ~= anyTool.Name then return end
+
+            local prompt = object:FindFirstChild("ModulePrompt", true)
+                or object:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+            if not prompt then return end
+
+            finished = true
+            disconnect(connection)
+            firePrompt(prompt)
+            task.wait(0.05)
+            if realPrompt and realPrompt.Parent then
+                firePrompt(realPrompt)
+            end
+        end
+
+        connection = drops.ChildAdded:Connect(useDroppedTool)
+
+        for _, object in ipairs(drops:GetChildren()) do
+            useDroppedTool(object)
+            if finished then break end
+        end
+
+        if not finished then
+            dropRemote:FireServer(anyTool)
+
+            local deadline = tick() + 2
+            while not finished and tick() < deadline do
+                task.wait(0.03)
+                for _, object in ipairs(drops:GetChildren()) do
+                    useDroppedTool(object)
+                    if finished then break end
                 end
             end
         end
 
-        if droppedTool then
-            local dropPrompt = droppedTool:FindFirstChild("ModulePrompt", true)
-                or droppedTool:FindFirstChildWhichIsA("ProximityPrompt", true)
+        disconnect(connection)
 
-            if dropPrompt then
-                firePrompt(dropPrompt)
-                task.wait(0.05)
-                firePrompt(realPrompt)
-                finished = true
-            end
+        if not finished and realPrompt and realPrompt.Parent then
+            firePrompt(realPrompt)
         end
-    end
-
-    disconnect(dropConnection)
-
-    if not finished then
+    else
         firePrompt(realPrompt)
     end
 end
 
+local InfiniteCrucifixBusy = false
+local InfiniteCrucifixNext = 0
+
 local function tryInfiniteCrucifix()
-    if not InfiniteCrucifixEnabled or InfiniteCrucifixBusy or tick() < InfiniteCrucifixCooldown then return end
+    if not InfiniteCrucifixEnabled or InfiniteCrucifixBusy or tick() < InfiniteCrucifixNext then return end
     if not Character or not RootPart then return end
 
     local tool = Character:FindFirstChild("Crucifix")
     if not tool then return end
 
     local origin = RootPart.Position
-    local targetEntity
 
     for _, entity in ipairs(workspace:GetChildren()) do
         local maxRange = InfiniteCrucifixRanges[entity.Name]
         if maxRange and entity.PrimaryPart then
             local target = entity.PrimaryPart.Position
-            if (origin - target).Magnitude < maxRange + 40 then
+
+            if (origin - target).Magnitude <= maxRange then
                 InfiniteCrucifixRaycastParams.FilterDescendantsInstances = {Character, entity}
+
                 if not workspace:Raycast(origin, target - origin, InfiniteCrucifixRaycastParams) then
-                    targetEntity = entity
+                    InfiniteCrucifixBusy = true
+                    InfiniteCrucifixNext = tick() + 0.5
+
+                    task.spawn(function()
+                        local remotes = getRemotes()
+                        local dropRemote = remotes and remotes:FindFirstChild("DropItem")
+
+                        if dropRemote and dropRemote:IsA("RemoteEvent") then
+                            dropRemote:FireServer(tool)
+
+                            local deadline = tick() + 2.5
+                            local activated = false
+
+                            while tick() < deadline and Character and Character.Parent do
+                                local drops = workspace:FindFirstChild("Drops")
+                                local drop = drops and drops:FindFirstChild("Crucifix")
+                                local prompt = drop and drop:FindFirstChild("ModulePrompt", true)
+
+                                if not prompt then
+                                    prompt = drop and drop:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                end
+
+                                if prompt then
+                                    for _ = 1, 3 do
+                                        firePrompt(prompt)
+                                        task.wait(0.05)
+                                    end
+                                    activated = true
+                                    break
+                                end
+
+                                task.wait(0.02)
+                            end
+
+                            if not activated and Character and Character:FindFirstChild("Crucifix") then
+                                InfiniteCrucifixNext = tick() + 0.15
+                            end
+                        end
+
+                        InfiniteCrucifixBusy = false
+                    end)
+
                     break
                 end
             end
         end
     end
-
-    if not targetEntity then return end
-
-    InfiniteCrucifixBusy = true
-    InfiniteCrucifixCooldown = tick() + 0.35
-
-    task.spawn(function()
-        local remotes = getRemotes()
-        local dropRemote = remotes and remotes:FindFirstChild("DropItem")
-        if not dropRemote then
-            InfiniteCrucifixBusy = false
-            return
-        end
-
-        for attempt = 1, 3 do
-            if not Character or Character:FindFirstChild("Crucifix") == nil then
-                break
-            end
-
-            dropRemote:FireServer(tool)
-
-            local startTime = tick()
-            local activated = false
-
-            while tick() - startTime < 1.8 do
-                task.wait(0.01)
-
-                local drops = workspace:FindFirstChild("Drops")
-                local drop = drops and drops:FindFirstChild("Crucifix")
-                local prompt = drop and drop:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-                if prompt then
-                    firePrompt(prompt)
-                    activated = true
-                end
-
-                if Character:FindFirstChild("Crucifix") then
-                    break
-                end
-            end
-
-            if activated then
-                break
-            end
-
-            task.wait(0.1)
-        end
-
-        InfiniteCrucifixBusy = false
-        InfiniteCrucifixCooldown = tick() + 0.35
-    end)
 end
 
-heatDisabled = false
+local function applyCrouchSpoof()
+    local remotes = getRemotes()
+    local crouch = remotes and remotes:FindFirstChild("Crouch")
+
+    if crouch and crouch:IsA("RemoteEvent") then
+        crouch:FireServer(CrouchSpoofEnabled and true or isCrouching(), true)
+    end
+end
+
+local function setupManipulateBody()
+    if ManipulateBody then
+        pcall(function()
+            ManipulateBody:Destroy()
+        end)
+    end
+
+    ManipulateBody = Instance.new("BodyVelocity")
+    ManipulateBody.Name = "JustXDoorsVelocityManipulation"
+    ManipulateBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    ManipulateBody.Velocity = Vector3.zero
+end
+
+local function setupCollisionSpoof()
+    if not Character then
+        return
+    end
+
+    Collision = Character:FindFirstChild("Collision")
+    CollisionPart = Character:FindFirstChild("CollisionPart") or Collision
+
+    if not Collision or not Collision:IsA("BasePart") then
+        return
+    end
+
+    if CollisionClone and CollisionClone.Parent ~= Character then
+        CollisionClone = nil
+    end
+
+    if not CollisionClone then
+        CollisionClone = Collision:Clone()
+        CollisionClone.Name = "JustXDoorsCollisionClone"
+        CollisionClone.Parent = Character
+        CollisionClone.Massless = true
+    end
+
+    if CollisionPart and CollisionPart:IsA("BasePart") and not CollisionPartClone then
+        CollisionPartClone = CollisionPart:Clone()
+        CollisionPartClone.Name = "JustXDoorsCollisionPartClone"
+        CollisionPartClone.CanCollide = false
+        CollisionPartClone.Massless = true
+        CollisionPartClone.Parent = Character
+        local crouch = CollisionPartClone:FindFirstChild("CollisionCrouch")
+        if crouch then crouch:Destroy() end
+    end
+
+    local lowerTorso = Character:FindFirstChild("LowerTorso")
+    local rootMotor = lowerTorso and lowerTorso:FindFirstChild("Root")
+    if rootMotor and OriginalC1 == nil then
+        OriginalC1 = rootMotor.C1
+    end
+end
+
+local function updateCollisionSpoof()
+    if not Character or not RootPart then
+        return
+    end
+
+    setupCollisionSpoof()
+
+    if not Collision or not CollisionClone then
+        return
+    end
+
+    if getFloor() == "Fools" or getFloor() == "OldHotel" then
+        return
+    end
+
+    RootPart.CanCollide = false
+    Collision.CanCollide = false
+
+    local lowerTorso = Character:FindFirstChild("LowerTorso")
+    local rootMotor = lowerTorso and lowerTorso:FindFirstChild("Root")
+
+    if rootMotor and OriginalC1 then
+        rootMotor.C1 = OriginalC1 * CFrame.new(0, PositionSpoofEnabled and -2.346 or 0, 0)
+    end
+
+    local spoofY = PositionSpoofEnabled and 2.328 or 0.18
+    Collision.Position = RootPart.Position + Vector3.new(0, spoofY, 0)
+
+    if CollisionPart and CollisionPart:IsA("BasePart") then
+        CollisionPart.Position = RootPart.Position + Vector3.new(0, spoofY, 0)
+    end
+
+    local crouch = Collision:FindFirstChild("CollisionCrouch")
+    local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+
+    if crouch then
+        crouch.CanCollide = false
+        crouch.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 1.328 or -0.982, 0)
+    end
+
+    if cloneCrouch then
+        cloneCrouch.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 0.75 or -0.982, 0)
+    end
+
+    CollisionClone.CollisionGroup = Collision.CollisionGroup
+    CollisionClone.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 1.75 or 0.18, 0)
+
+    local crouching = isCrouching()
+    CollisionClone.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or crouching)
+    if cloneCrouch then
+        cloneCrouch.CollisionGroup = Collision.CollisionGroup
+        cloneCrouch.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or not crouching)
+    end
+end
+
+local function resetAnticheatState()
+    if AnticheatDisabled then
+        local remotes = getRemotes()
+        local climb = remotes and remotes:FindFirstChild("ClimbLadder")
+
+        if climb and climb:IsA("RemoteEvent") then
+            pcall(function()
+                climb:FireServer()
+            end)
+        end
+    end
+
+    AnticheatDisabled = false
 end
 
 getFloor = function()
@@ -1827,6 +2050,17 @@ local function setupConnections()
         if object.Name == "MainUI" then
             task.wait(0.1)
             bindInfiniteJumpButton()
+        end
+    end)
+
+    connect(workspace.DescendantRemoving, function(object)
+        if object:IsA("ProximityPrompt") then
+            local fake = InfinitePromptObjects[object]
+            if fake then
+                pcall(function() fake:Destroy() end)
+                FakePrompts[fake] = nil
+                InfinitePromptObjects[object] = nil
+            end
         end
     end)
 
