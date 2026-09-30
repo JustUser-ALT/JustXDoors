@@ -233,7 +233,15 @@ local function applyRemoveJamminMusic()
 
     if jamming and jamming:IsA("EqualizerSoundEffect") then
         JamMuffle = jamming
-        jamming.Enabled = RemoveJamminMusicEnabled and false or false
+
+        local liveModifiers = workspace:FindFirstChild("LiveModifiers")
+            or ReplicatedStorage:FindFirstChild("LiveModifiers")
+
+        jamming.Enabled =
+            liveModifiers
+            and liveModifiers:FindFirstChild("Jammin") ~= nil
+            and not RemoveJamminMusicEnabled
+            or false
     end
 end
 
