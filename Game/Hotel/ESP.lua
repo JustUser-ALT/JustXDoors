@@ -695,20 +695,27 @@ local function scanDropItems()
                 found[kind] = found[kind] or {}
                 found[kind][object] = true
                 addNamedWorkspaceObject(kind, object, nil, false)
+                local entry = ESP[kind] and ESP[kind][object]
+                if entry then
+                    entry.Drop = true
+                end
             end
         end
     end
 
-    -- Reconcile the existing entries. This is the important part:
-    -- an item moved into inventory/another container must disappear from
-    -- dropped-item ESP immediately, without requiring another ESP toggle.
+    -- Only reconcile entries that were created by the Drops scanner.
+    -- Room-spawned items live in the same ESP[kind] table, so clearing every
+    -- missing object here was deleting valid room ESP and causing the
+    -- "toggle another ESP and it suddenly appears" behavior.
     for kind in pairs(map) do
         local objects = ESP[kind]
         if objects then
-            for object in pairs(objects) do
-                local keep = found[kind] and found[kind][object]
-                if not keep then
-                    clearEntry(kind, object)
+            for object, entry in pairs(objects) do
+                if entry.Drop then
+                    local keep = found[kind] and found[kind][object]
+                    if not keep then
+                        clearEntry(kind, object)
+                    end
                 end
             end
         end
@@ -941,6 +948,10 @@ local function scanRoom(room)
         }
 
         local roomItemKind = roomItemMap[object.Name]
+
+        -- BatteryPack contains battery-named descendants, but BatteryPack is
+        -- not a Battery ESP target. Never classify nested batteries from it.
+        local insideBatteryPack = object:FindFirstAncestor("BatteryPack") ~= nil
         local decorativeBookcaseItem =
             roomItemKind == "Lighter"
             and object:FindFirstAncestor("Bookcase") ~= nil
@@ -962,6 +973,7 @@ local function scanRoom(room)
             and Enabled[roomItemKind]
             and itemRoot == object
             and not decorativeBookcaseItem
+            and not insideBatteryPack
             and object:FindFirstChild("ModulePrompt", true)
         then
             addNamedWorkspaceObject(roomItemKind, object, room, false)
