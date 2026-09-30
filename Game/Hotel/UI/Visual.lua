@@ -14,6 +14,16 @@ function VisualUI:Create(ctx)
     end
     if not pages then return false end
 
+    -- Create both Hotel MultiSections here so their containers are guaranteed
+    -- to exist before the later Entity/Anti modules populate their pages.
+    if not ctx.EntityPages then
+        ctx.EntityPages = ctx.Tab:MultiSection({
+            Pages = {"Entity", "Anti"},
+            Column = 2,
+            Icon = "shield",
+        })
+    end
+
     local page = pages:Page("Visual")
     if not page then return false end
 
