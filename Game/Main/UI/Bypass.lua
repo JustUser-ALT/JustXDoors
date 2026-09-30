@@ -1,14 +1,10 @@
 local BypassUI = {}
 
 function BypassUI:Create(ctx)
-    local Tab = ctx.Tab
-    if not Tab then return false end
+    local pages = ctx.CharacterPages
+    if not pages then return false end
 
-    local page = Tab:Section({
-        Title = "Bypass",
-        Column = 1,
-        Icon = "shield",
-    })
+    local page = pages:Page("Bypass")
     if not page then return false end
 
     local a = ctx.Actions
