@@ -2068,7 +2068,7 @@ local function setupConnections()
     end)
 end
 
-function Main:Init(core)
+function Main:Init(core, modules)
     if self.Initialized then
         return self
     end
@@ -2080,7 +2080,7 @@ function Main:Init(core)
 
     Core = core
 
-    local success, result = pcall(createUI)
+    local success, result = pcall(createUI, modules)
 
     if not success or not result then
         warn("[JustXDoors Main] Failed to create UI: " .. tostring(result))
