@@ -84,8 +84,23 @@ function Notifications:Init(context)
     if HeartbeatConnection then pcall(function() HeartbeatConnection:Disconnect() end) end
 
     Connection = workspace.DescendantAdded:Connect(function(object)
-        if Aliases[object.Name] then
-            task.defer(function() notifyEntity(object) end)
+        local valid = false
+
+        if object.Name == "Eyes" then
+            valid = object.Parent == workspace
+        elseif object.Name == "Screech" then
+            local camera = workspace:FindFirstChild("Camera")
+            valid = camera ~= nil and object.Parent == camera
+        elseif object.Name == "SallyLingering" or object.Name == "SallyMoving" then
+            valid = object.Parent == workspace
+        elseif Aliases[object.Name] then
+            valid = object:IsA("Model") or object:IsA("BasePart")
+        end
+
+        if valid then
+            task.defer(function()
+                notifyEntity(object)
+            end)
         end
     end)
 
