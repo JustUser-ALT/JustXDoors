@@ -1,53 +1,24 @@
 local BASE = "https://raw.githubusercontent.com/JustUser-ALT/JustXDoors/main/"
 
-local function loadModule(path)
-    local ok, result = pcall(function()
-        return loadstring(game:HttpGet(BASE .. path))()
-    end)
+local ok, source = pcall(function()
+    return game:HttpGet(BASE .. "Connector.lua")
+end)
 
-    if not ok then
-        warn("[JustXDoors] Failed to load " .. path .. ": " .. tostring(result))
-        return nil
-    end
-
-    return result
-end
-
-local Core = loadModule("Core.lua")
-if not Core then
+if not ok or not source or source == "" then
+    warn("[JustXDoors] Failed to download Connector.")
     return
 end
 
-local Main = loadModule("Game/Main.lua")
-local Hotel = loadModule("Game/Hotel.lua")
-
-local CoreInstance = Core:Create()
-
-if not CoreInstance then
-    warn("[JustXDoors] Failed to create Core.")
+local okLoad, connector = pcall(loadstring, source)
+if not okLoad or type(connector) ~= "function" then
+    warn("[JustXDoors] Failed to compile Connector.")
     return
 end
 
-if Main and Main.Init then
-    local ok, err = pcall(function()
-        Main:Init(CoreInstance)
-    end)
-
-    if not ok then
-        warn("[JustXDoors] Main error: " .. tostring(err))
-    end
+local okInit, module = pcall(connector)
+if not okInit or type(module) ~= "table" or not module.Load then
+    warn("[JustXDoors] Failed to initialize Connector.")
+    return
 end
 
-if Hotel and Hotel.Init then
-    local ok, err = pcall(function()
-        Hotel:Init(CoreInstance)
-    end)
-
-    if not ok then
-        warn("[JustXDoors] Hotel error: " .. tostring(err))
-    end
-end
-
-if CoreInstance.CreateSettings then
-    CoreInstance:CreateSettings()
-end
+module:Load()
