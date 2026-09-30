@@ -108,6 +108,8 @@ function Notifications:Init(context)
     -- unrelated entity spawns must not cause an old Eyes instance to notify.
     HeartbeatConnection = nil
 
+    task.defer(scan)
+
     self.Enabled = true
     self.Selected = function() return Elements and Elements.NotificationEntities and Elements.NotificationEntities:Get() end
     return self
