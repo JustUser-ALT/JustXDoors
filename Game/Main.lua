@@ -388,6 +388,8 @@ local function makeInfinitePrompt(prompt)
         prompt:SetAttribute("MaxActivationDistance_Old", prompt.MaxActivationDistance)
     end
 
+    local originalEnabled = prompt.Enabled
+
     local fake = prompt:Clone()
     fake:SetAttribute("FakePrompt", true)
 
@@ -403,13 +405,15 @@ local function makeInfinitePrompt(prompt)
     InfinitePromptObjects[prompt] = fake
 
     fake.Parent = prompt.Parent
-    prompt.Enabled = false
+    fake.Enabled = originalEnabled
 
     local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
-        if fake.Parent then
+        if fake.Parent and prompt.Enabled ~= false then
             fake.Enabled = prompt.Enabled
         end
     end)
+
+    prompt.Enabled = false
     table.insert(InfiniteItemConnections, enabledConnection)
 
     prompt:GetPropertyChangedSignal("ActionText"):Once(function()
@@ -431,10 +435,8 @@ local function makeInfinitePrompt(prompt)
 
     table.insert(InfiniteItemConnections, enabledConnection)
 
-    fake.Enabled = false
-    task.wait()
     if fake.Parent and prompt.Parent then
-        fake.Enabled = prompt.Enabled
+        fake.Enabled = originalEnabled
     end
 end
 
