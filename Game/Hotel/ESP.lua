@@ -471,6 +471,35 @@ local function buildDoorProxy(entry, object)
 end
 
 local function addHighlight(entry, object, kind)
+    -- Eyes is rendered as a 2D object in the game, so a Roblox Highlight
+    -- cannot reliably render around it. Give it a real 2D ESP box instead.
+    if kind == "Eyes" then
+        local part = getPart(object)
+        if not part then
+            return
+        end
+
+        local box = Instance.new("BillboardGui")
+        box.Name = "JustXDoorsESP2D"
+        box.AlwaysOnTop = true
+        box.LightInfluence = 0
+        box.MaxDistance = 1000
+        box.Size = UDim2.fromOffset(72, 72)
+        box.StudsOffset = Vector3.new(0, 0, 0)
+        box.Adornee = part
+        box.Parent = getHighlightContainer()
+
+        local frame = Instance.new("Frame")
+        frame.BackgroundTransparency = 1
+        frame.BorderSizePixel = 2
+        frame.BorderColor3 = Colors.Eyes
+        frame.Size = UDim2.fromScale(1, 1)
+        frame.Parent = box
+
+        entry.Highlights[#entry.Highlights + 1] = box
+        return
+    end
+
     local adornee
 
     if kind == "Doors" then
