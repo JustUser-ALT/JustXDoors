@@ -1527,129 +1527,53 @@ local function bindInfiniteJumpButton()
         end)
 end
 
-local function createUI()
-    Tab = Core:Tab({
-        Name = "Main",
-        Icon = "user",
-        Type = "Grid",
-    })
-
-    if not Tab then
+local function createUI(modules)
+    if type(modules) ~= "table" then
+        warn("[JustXDoors Main] UI modules are missing.")
         return false
     end
 
-    local characterPages = Tab:MultiSection({
-        Pages = { "Character", "Bypass" },
-        Column = 1,
-        Icon = "user",
-    })
-
-    local character = characterPages:Page("Character")
-
-    Elements.SpeedBoost = character:Slider({
-        Name = "Speed Boost",
-        Flag = "Main_SpeedBoost",
-        Min = 0,
-        Max = 100,
-        Step = 1,
-        Default = 0,
-
-        Callback = function(value)
+    local actions = {
+        SetSpeedBoost = function(value)
             CurrentSpeedBoost = value
-
-            if SpeedBoostEnabled then
-                applySpeed()
-            end
+            if SpeedBoostEnabled then applySpeed() end
         end,
-    })
 
-    Elements.FlySpeed = character:Slider({
-        Name = "Fly Speed",
-        Flag = "Main_FlySpeed",
-        Min = 0,
-        Max = 115,
-        Step = 1,
-        Default = 20,
-
-        Callback = function(value)
+        SetFlySpeed = function(value)
             CurrentFlySpeed = value
         end,
-    })
 
-    Elements.SpeedBoostToggle = character:Toggle({
-        Name = "Enable Speed Boost",
-        Flag = "Main_SpeedBoostToggle",
-        Default = false,
-
-        Callback = function(value)
+        SetSpeedBoostEnabled = function(value)
             SpeedBoostEnabled = value
             applySpeed()
             fireCrouchRemote()
         end,
-    })
 
-    Elements.RemoveAcceleration = character:Toggle({
-        Name = "Remove Acceleration",
-        Flag = "Main_RemoveAcceleration",
-        Default = false,
-
-        Callback = function(value)
+        SetRemoveAcceleration = function(value)
             RemoveAccelEnabled = value
-
             if not CustomPhysics then
                 buildCustomPhysics()
                 snapshotPartProperties()
             end
-
             applyRemoveAcceleration()
         end,
-    })
 
-    Elements.Fly = character:Toggle({
-        Name = "Fly",
-        Flag = "Main_Fly",
-        Default = false,
-
-        Callback = function(value)
-            if value then
-                enableFly()
-            else
-                disableFly()
-            end
+        SetFlyEnabled = function(value)
+            FlyEnabled = value
+            if value then enableFly() else disableFly() end
         end,
-    })
 
-    Elements.Noclip = character:Toggle({
-        Name = "Noclip",
-        Flag = "Main_Noclip",
-        Default = false,
-
-        Callback = function(value)
+        SetNoclipEnabled = function(value)
             NoclipEnabled = value
             applyNoclip()
         end,
-    })
 
-    character:Divider()
-
-    Elements.EnableJump = character:Toggle({
-        Name = "Enable Jumping",
-        Flag = "Main_EnableJump",
-        Default = false,
-
-        Callback = function(value)
+        SetJumpEnabled = function(value)
             applyJump(value)
         end,
-    })
 
-    Elements.InfiniteJump = character:Toggle({
-        Name = "Infinite Jump",
-        Flag = "Main_InfiniteJump",
-        Default = false,
-
-        Callback = function(value)
+        SetInfiniteJumpEnabled = function(value)
             InfiniteJumpEnabled = value
-
             if value then
                 bindInfiniteJumpButton()
             else
@@ -1657,399 +1581,191 @@ local function createUI()
                 InfiniteJumpButtonConnection = nil
             end
         end,
-    })
 
-    Elements.EnableSlide = character:Toggle({
-        Name = "Enable Sliding",
-        Flag = "Main_EnableSlide",
-        Default = false,
-
-        Callback = function(value)
+        SetSlideEnabled = function(value)
             applySlide(value)
         end,
-    })
 
-    local bypass = characterPages:Page("Bypass")
-
-    Elements.AnticheatBypass = bypass:Toggle({
-        Name = "Anticheat Bypass",
-        Flag = "Main_AnticheatBypass",
-        Default = false,
-
-        Callback = function(value)
+        SetAnticheatBypass = function(value)
             AnticheatBypassEnabled = value
-            if not value then
-                resetAnticheatState()
-            end
+            if not value then resetAnticheatState() end
         end,
-    })
 
-    Elements.VelocityManipulation = bypass:Toggle({
-        Name = "Velocity Manipulation",
-        Flag = "Main_VelocityManipulation",
-        Default = false,
-
-        Callback = function(value)
+        SetVelocityManipulation = function(value)
             VelocityManipulationEnabled = value
-
-            if value and not ManipulateBody then
-                setupManipulateBody()
-            end
-
+            if value and not ManipulateBody then setupManipulateBody() end
             if not value then
-                if ManipulateBody then
-                    ManipulateBody.Parent = nil
-                end
+                if ManipulateBody then ManipulateBody.Parent = nil end
                 restoreCollisionSpoof()
             end
         end,
-    })
 
-    Elements.VelocityManipulationMode = bypass:Dropdown({
-        Name = "Manipulation Method",
-        Flag = "Main_VelocityManipulationMode",
-        Options = { "Velocity", "Pivot" },
-        Default = "Velocity",
-        Search = true,
-        Callback = function(value)
+        SetVelocityMode = function(value)
             if type(value) == "table" then
                 value = value[1] or value.Value
             end
             VelocityManipulationMode = value or "Velocity"
         end,
-    })
 
-    bypass:Divider()
-
-    Elements.InfiniteItems = bypass:Toggle({
-        Name = "Infinite Items",
-        Flag = "Main_InfiniteItems",
-        Default = false,
-
-        Callback = function(value)
+        SetInfiniteItems = function(value)
             InfiniteItemsEnabled = value
             setupInfiniteItems()
         end,
-    })
 
-    Elements.InfiniteItemsList = bypass:ValueDropdown({
-        Name = "Item List",
-        Flag = "Main_InfiniteItemsList",
-        Options = {
-            "Lockpicks",
-            "Skeleton Key",
-            "Shears",
-            "Multitool",
-        },
-        MultiSelect = true,
-        MaxSelect = 4,
-        Default = {},
-        Search = true,
-        Callback = function(value)
+        SetInfiniteItemsSelection = function(value)
             InfiniteItemsSelection = value or {}
         end,
-    })
 
-    bypass:Divider()
-
-    Elements.InfiniteCrucifix = bypass:Toggle({
-        Name = "Infinite Crucifix",
-        Flag = "Main_InfiniteCrucifix",
-        Default = false,
-
-        Callback = function(value)
+        SetInfiniteCrucifix = function(value)
             InfiniteCrucifixEnabled = value
         end,
-    })
 
-    bypass:Divider()
-
-    Elements.CrouchSpoof = bypass:Toggle({
-        Name = "Crouch Spoof",
-        Flag = "Main_CrouchSpoof",
-        Default = false,
-
-        Callback = function(value)
+        SetCrouchSpoof = function(value)
             CrouchSpoofEnabled = value
             applyCrouchSpoof()
         end,
-    })
 
-    local visualPages = Tab:MultiSection({
-        Pages = { "Visual", "Audio" },
-        Column = 2,
-        Icon = "eye",
-    })
-
-    local visual = visualPages:Page("Visual")
-
-    Elements.FullBright = visual:Toggle({
-        Name = "Fullbright",
-        Flag = "Main_FullBright",
-        Default = false,
-
-        Callback = function(value)
+        SetFullBright = function(value)
             FullBrightEnabled = value
-
             if value then
                 applyFullBright()
             elseif not NoFogEnabled then
                 restoreLighting()
             end
         end,
-    })
 
-    Elements.Brightness = visual:Slider({
-        Name = "Brightness",
-        Flag = "Main_Brightness",
-        Min = 25,
-        Max = 100,
-        Step = 1,
-        Default = 35,
-
-        Callback = function(value)
+        SetBrightness = function(value)
             CurrentBrightness = value
-
-            if FullBrightEnabled then
-                applyFullBright()
-            end
+            if FullBrightEnabled then applyFullBright() end
         end,
-    })
 
-    Elements.NoFog = visual:Toggle({
-        Name = "No Fog",
-        Flag = "Main_NoFog",
-        Default = false,
-
-        Callback = function(value)
+        SetNoFog = function(value)
             NoFogEnabled = value
-
             if value then
                 applyNoFog()
-
-                if FullBrightEnabled then
-                    applyFullBright()
-                end
+                if FullBrightEnabled then applyFullBright() end
             elseif not FullBrightEnabled then
                 restoreLighting()
             end
         end,
-    })
 
-    local audio = visualPages:Page("Audio")
-
-    Elements.RemoveFootstepSounds = audio:Toggle({
-        Name = "Remove Footstep Sounds",
-        Flag = "Main_RemoveFootstepSounds",
-        Default = false,
-
-        Callback = function(value)
+        SetRemoveFootstepSounds = function(value)
             RemoveFootstepSoundsEnabled = value
             applyRemoveFootstepSounds()
         end,
-    })
 
-    Elements.RemoveInteractingSounds = audio:Toggle({
-        Name = "Remove Interacting Sounds",
-        Flag = "Main_RemoveInteractingSounds",
-        Default = false,
-
-        Callback = function(value)
+        SetRemoveInteractingSounds = function(value)
             RemoveInteractingSoundsEnabled = value
             applyRemoveInteractingSounds()
         end,
-    })
 
-    audio:Divider()
-
-    Elements.RemoveJamminMusic = audio:Toggle({
-        Name = "Remove Jammin Music",
-        Flag = "Main_RemoveJamminMusic",
-        Default = false,
-
-        Callback = function(value)
+        SetRemoveJamminMusic = function(value)
             RemoveJamminMusicEnabled = value
             applyRemoveJamminMusic()
         end,
-    })
 
-    local misc = Tab:Section({
-        Title = "Misc",
-        Column = 3,
-        Icon = "settings-2",
-    })
-
-    if not misc then
-        return false
-    end
-
-    Elements.InstantInteract = misc:Toggle({
-        Name = "Instant Interact",
-        Flag = "Main_InstantInteract",
-        Default = false,
-
-        Callback = function(value)
-            if value then
-                enableInstantInteract()
-            else
-                disableInstantInteract()
-            end
+        SetInstantInteract = function(value)
+            if value then enableInstantInteract() else disableInstantInteract() end
         end,
-    })
 
-    Elements.InteractNoclip = misc:Toggle({
-        Name = "Interact Noclip",
-        Flag = "Main_InteractNoclip",
-        Default = false,
-
-        Callback = function(value)
+        SetInteractNoclip = function(value)
             for _, prompt in ipairs(workspace:GetDescendants()) do
                 if prompt:IsA("ProximityPrompt") then
                     applyPromptClip(prompt, value)
                 end
             end
         end,
-    })
 
-    Elements.InteractReach = misc:Slider({
-        Name = "Interact Reach",
-        Flag = "Main_InteractReach",
-        Min = 1,
-        Max = 2,
-        Step = 0.1,
-        Default = 1,
-
-        Callback = function(value)
+        SetInteractReach = function(value)
             for _, prompt in ipairs(workspace:GetDescendants()) do
                 if prompt:IsA("ProximityPrompt") then
                     applyPromptReach(prompt, value)
                 end
             end
         end,
-    })
 
-    misc:Divider()
-
-    Elements.DoorReach = misc:Toggle({
-        Name = "Door Reach",
-        Flag = "Main_DoorReach",
-        Default = false,
-
-        Callback = function(value)
+        SetDoorReach = function(value)
             DoorReachEnabled = value
         end,
-    })
 
-    local gameSection = Tab:Section({
-        Title = "Game",
-        Column = 3,
-        Icon = "gamepad-2",
-    })
+        SetAutoTpNextDoor = function(value)
+            AutoTpNextDoorEnabled = value
+        end,
 
-    if not gameSection then
-        return false
-    end
-
-    gameSection:Button({
-        Name = "Play Again",
-        Callback = function()
+        PlayAgain = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local remote = remotes and remotes:FindFirstChild("PlayAgain")
-            if remote and remote:IsA("RemoteEvent") then
-                remote:FireServer()
-            end
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
         end,
-    })
 
-    gameSection:Button({
-        Name = "Return to Lobby",
-        Callback = function()
+        ReturnToLobby = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local remote = remotes and remotes:FindFirstChild("Lobby")
-            if remote and remote:IsA("RemoteEvent") then
-                remote:FireServer()
-            end
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
         end,
-    })
 
-    gameSection:Button({
-        Name = "Revive",
-        Callback = function()
+        Revive = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local remote = remotes and remotes:FindFirstChild("Revive")
-            if remote and remote:IsA("RemoteEvent") then
-                remote:FireServer()
-            end
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
         end,
-    })
 
-    gameSection:Button({
-        Name = "Reset Character",
-        Callback = function()
+        ResetCharacter = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local underwater = remotes and remotes:FindFirstChild("Underwater")
-
             if underwater and underwater:IsA("RemoteEvent") then
                 underwater:FireServer(true)
             elseif Humanoid then
                 Humanoid.Health = 0
             end
         end,
-    })
 
-    local debugSection = Tab:Section({
-        Title = "Debug",
-        Column = 3,
-        Icon = "bug",
-    })
-
-    if not debugSection then
-        return false
-    end
-
-    debugSection:Button({
-        Name = "Void",
-        Callback = function()
-            if not Character then
-                return
-            end
-
+        Void = function()
+            if not Character then return end
             local pivot = Character:GetPivot()
             local target = pivot + Vector3.new(0, -120 - pivot.Position.Y, 0)
-
-            for _ = 1, 22 do
-                Character:PivotTo(target)
-            end
+            for _ = 1, 22 do Character:PivotTo(target) end
         end,
-    })
 
-    debugSection:Button({
-        Name = "Exit Closet",
-        Callback = function()
+        ExitCloset = function()
             local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
             local camLock = remotes and remotes:FindFirstChild("CamLock")
+            if camLock and camLock:IsA("RemoteEvent") then camLock:FireServer() end
+        end,
 
-            if camLock and camLock:IsA("RemoteEvent") then
-                camLock:FireServer()
+        TeleportNextDoor = teleportNextDoor,
+    }
+
+    local ctx = {
+        Core = Core,
+        Elements = Elements,
+        Actions = actions,
+        Tab = nil,
+    }
+
+    local order = {
+        modules.Character,
+        modules.Bypass,
+        modules.Visual,
+        modules.Audio,
+        modules.Misc,
+        modules.Settings,
+    }
+
+    for _, module in ipairs(order) do
+        if module and type(module.Create) == "function" then
+            local ok, result = pcall(function()
+                return module:Create(ctx)
+            end)
+            if not ok or result == false then
+                warn("[JustXDoors Main] Failed to create UI module: " .. tostring(result))
+                return false
             end
-        end,
-    })
+        end
+    end
 
-    debugSection:Button({
-        Name = "Tp Next Door",
-        Callback = teleportNextDoor,
-    })
-
-    Elements.AutoTpNextDoor = debugSection:Toggle({
-        Name = "Auto Tp Next Door",
-        Flag = "Main_AutoTpNextDoor",
-        Default = false,
-        Callback = function(value)
-            AutoTpNextDoorEnabled = value
-        end,
-    })
-
-    return true
+    Tab = ctx.Tab
+    return Tab ~= nil
 end
 
 local function setupConnections()
