@@ -774,28 +774,53 @@ local EntityESPNames = {
 local function scanSpecialEntities()
     local found = {}
 
-    for _, object in ipairs(workspace:GetDescendants()) do
-        local kind = EntityESPNames[object.Name]
+    local function register(kind, object)
+        if not object or not object.Parent or not Enabled[kind] then
+            return
+        end
 
-        if kind and Enabled[kind]
-            and (object:IsA("Model") or object:IsA("BasePart"))
-        then
-            found[kind] = found[kind] or {}
-            found[kind][object] = true
+        found[kind] = found[kind] or {}
+        found[kind][object] = true
+        addNamedWorkspaceObject(kind, object, nil, true)
+    end
 
-            addNamedWorkspaceObject(kind, object, nil, true)
+    -- Global entities.
+    if Enabled.Eyes then
+        register("Eyes", workspace:FindFirstChild("Eyes"))
+    end
+    if Enabled.SallyLingering then
+        register("SallyLingering", workspace:FindFirstChild("SallyLingering"))
+    end
+    if Enabled.SallyMoving then
+        register("SallyMoving", workspace:FindFirstChild("SallyMoving"))
+    end
+    if Enabled.Screech then
+        local camera = workspace:FindFirstChild("Camera")
+        register("Screech", camera and camera:FindFirstChild("Screech"))
+    end
+
+    -- Room entities. Search every room, not only CurrentRoom +/- 1.
+    local rooms = getRooms()
+    if rooms then
+        for _, room in ipairs(rooms:GetChildren()) do
+            if Enabled.Dupe then
+                register("Dupe", room:FindFirstChild("SideroomDupe", true))
+            end
+            if Enabled.Seek then
+                register("Seek", room:FindFirstChild("SeekMovingNewClone", true))
+            end
+            if Enabled.Figure then
+                register("Figure", room:FindFirstChild("FigureRig", true))
+            end
+            if Enabled.Snare then
+                register("Snare", room:FindFirstChild("Snare", true))
+            end
         end
     end
 
     local enabledKinds = {
-        "Dupe",
-        "Eyes",
-        "SallyLingering",
-        "SallyMoving",
-        "Seek",
-        "Figure",
-        "Snare",
-        "Screech",
+        "Dupe","Eyes","SallyLingering","SallyMoving",
+        "Seek","Figure","Snare","Screech",
     }
 
     for _, kind in ipairs(enabledKinds) do
