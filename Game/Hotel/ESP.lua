@@ -668,50 +668,25 @@ local function scanDropItems()
         return
     end
 
+    -- Only direct children of Drops are valid dropped items.
+    -- Do not scan descendants: Candle/BatteryPack can contain nested
+    -- objects with item-like names.
     local map = {
-        Vitamins = "Vitamins",
-        Lighter = "Lighter",
-        Candle = "Candle",
-        AlarmClock = "AlarmClock",
-        Lockpick = "Lockpick",
-        SkeletonKey = "SkeletonKey",
-        Shears = "Shears",
-        Battery = "Battery",
-        Bandage = "Bandage",
-        Smoothie = "Smoothie",
-        Flashlight = "Flashlight",
-        TipJar = "TipJar",
-        RiftCandle = "RiftCandle",
-        RiftSmoothie = "RiftSmoothie",
-        RiftJar = "RiftJar",
-        Donut = "Donut",
-        Crucifix = "Crucifix",
+        Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+        AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
+        Shears="Shears", Battery="Battery", Bandage="Bandage",
+        Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
+        RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
+        Donut="Donut", Crucifix="Crucifix",
     }
 
-    local seen = {}
-
-    local function scanDropObject(object)
-        if not object or seen[object] then
-            return
-        end
-        seen[object] = true
-
+    for _, object in ipairs(drops:GetChildren()) do
         local kind = map[object.Name]
         if kind and Enabled[kind] then
             addNamedWorkspaceObject(kind, object, nil, false)
         end
     end
-
-    -- Some dropped items are themselves the direct child of Drops.
-    -- GetDescendants() does not include that root object, so scan both levels.
-    for _, object in ipairs(drops:GetChildren()) do
-        scanDropObject(object)
-        for _, descendant in ipairs(object:GetDescendants()) do
-            scanDropObject(descendant)
-        end
-    end
 end
-
 local function scanSpecialHotelItems()
     local rooms = getRooms()
     if not rooms then
