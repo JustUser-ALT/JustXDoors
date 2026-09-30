@@ -1403,300 +1403,55 @@ local function hookRooms(rooms)
 end
 
 local function createUI()
-    Tab = Core:Tab({
-        Name = "Hotel",
-        Icon = "building-2",
-        Type = "Grid",
-    })
-
-    if not Tab then
+    if not Hotel.Visual or not Hotel.Visual.CreateUI then
         return false
     end
 
-    local gameSection = Tab:Section({
-        Title = "Game",
-        Column = 1,
-        Icon = "joystick",
-    })
+    return Hotel.Visual:CreateUI({
+        Core = Core,
+        Elements = Elements,
+        Enabled = Enabled,
+        Colors = Colors,
+        ESP = ESP,
+        Display = Display,
+        ApplyInteractables = applyInteractables,
+        ApplyItems = applyItems,
+        RefreshLabels = refreshLabels,
+        SetEntities = function(selected)
+            local state = {
+                Rush=false, Ambush=false, Dupe=false, Eyes=false, Sally=false,
+                Seek=false, Figure=false, Snare=false, Screech=false,
+            }
 
-    if not gameSection then
-        return false
-    end
-
-    Elements.AutoInteract = gameSection:Dropdown({
-        Name = "Auto Interact",
-        Flag = "Hotel_AutoInteract",
-        Options = {},
-        MultiSelect = true,
-        MaxSelect = 8,
-        Default = {},
-        Search = true,
-        Callback = function()
-        end,
-    })
-
-    Elements.AutoLoot = gameSection:Dropdown({
-        Name = "Auto Loot",
-        Flag = "Hotel_AutoLoot",
-        Options = {},
-        MultiSelect = true,
-        MaxSelect = 8,
-        Default = {},
-        Search = true,
-        Callback = function()
-        end,
-    })
-
-    local visualPages = Tab:MultiSection({
-        Pages = { "Visual", "Settings" },
-        Column = 2,
-        Icon = "eye",
-    })
-
-    local visualPage = visualPages:Page("Visual")
-    local settingsPage = visualPages:Page("Settings")
-
-    Elements.Interactables = visualPage:ValueDropdown({
-        Name = "Interactables",
-        Flag = "Hotel_Interactables",
-        Options = {
-            "Doors",
-            "Drawers",
-            "Closets",
-            "Chest",
-            "LockedChest",
-            "Vent Gate",
-            "Lever",
-            "Toolshed",
-            "All",
-        },
-        MultiSelect = true,
-        MaxSelect = 8,
-        Default = {},
-        Search = true,
-        Callback = function(selected)
-            applyInteractables(selected)
-        end,
-    })
-
-    Elements.Items = visualPage:ValueDropdown({
-        Name = "Items",
-        Flag = "Hotel_Items",
-        Options = {
-            "Key",
-            "Gold",
-            "Bandage",
-            "Smoothie",
-            "Flashlight",
-            "Tip Jar",
-            "Vitamins",
-            "Lighter",
-            "Candle",
-            "AlarmClock",
-            "Lockpick",
-            "Skeleton Key",
-            "Shears",
-            "Battery",
-            "Rift Candle",
-            "Rift Smoothie",
-            "Rift Jar",
-            "Donut",
-            "Crucifix",
-            "Sally Toy",
-            "Electrical Key",
-            "Breaker Pole",
-        },
-        Values = {
-            Gold = {
-                Min = 1,
-                Max = 6,
-                Default = 1,
-            },
-        },
-        MultiSelect = true,
-        MaxSelect = 24,
-        Default = {},
-        Search = true,
-        Callback = function(selected)
-            applyItems(selected)
-        end,
-    })
-
-    Elements.DisplayName = settingsPage:Toggle({
-        Name = "Display Name",
-        Flag = "Hotel_DisplayName",
-        Default = true,
-        Callback = function(value)
-            Display.Name = value
-            refreshLabels()
-        end,
-    })
-
-    Elements.DisplayDistance = settingsPage:Toggle({
-        Name = "Display Distance",
-        Flag = "Hotel_DisplayDistance",
-        Default = false,
-        Callback = function(value)
-            Display.Distance = value
-            refreshLabels()
-        end,
-    })
-
-    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Bandage", "Smoothie", "Flashlight", "TipJar", "Vitamins", "Lighter", "Candle", "AlarmClock", "Lockpick", "SkeletonKey", "Shears", "Battery", "RiftCandle", "RiftSmoothie", "RiftJar", "Donut", "Crucifix", "SallyToy", "ElectricalKey", "BreakerPole", "VentGate", "Lever", "Rush", "Ambush", "Dupe", "Eyes", "SallyLingering", "SallyMoving", "Seek", "Figure", "Snare", "Screech", "Toolshed"}) do
-        Elements[kind .. "Color"] = settingsPage:ColorPicker({
-            Name = kind .. " ESP Color",
-            Flag = "Hotel_" .. kind .. "Color",
-            Default = Colors[kind],
-            Callback = function(value)
-                Colors[kind] = value
-                for object, entry in pairs(ESP[kind]) do
-                    for _, highlight in ipairs(entry.Highlights) do
-                        highlight.FillColor = value
-                        highlight.OutlineColor = value
-                    end
-                    local label = entry.Label and entry.Label:FindFirstChild("Text")
-                    if label then
-                        label.TextColor3 = value
-                    end
-                end
-            end,
-        })
-    end
-
-    local entityPages = Tab:MultiSection({
-        Pages = { "Entity", "Notifications", "Anti" },
-        Column = 3,
-        Icon = "shield",
-    })
-
-    local entityPage = entityPages:Page("Entity")
-
-    Elements.Entities = entityPage:Dropdown({
-        Name = "Entities",
-        Flag = "Hotel_Entities",
-        Options = {
-            "Rush",
-            "Ambush",
-            "Dupe",
-            "Eyes",
-            "Sally",
-            "Seek",
-            "Figure",
-            "Snare",
-            "Screech",
-        },
-        MultiSelect = true,
-        MaxSelect = 9,
-        Default = {},
-        Search = true,
-        Callback = function(selected)
-            local rush = false
-            local ambush = false
-            local dupe = false
-            local eyes = false
-            local sally = false
-            local seek = false
-            local figure = false
-            local snare = false
-            local screech = false
             if type(selected) == "table" then
                 if #selected > 0 then
                     for _, value in ipairs(selected) do
-                        if value == "Rush" then rush = true end
-                        if value == "Ambush" then ambush = true end
-                        if value == "Dupe" then dupe = true end
-                        if value == "Eyes" then eyes = true end
-                        if value == "Sally" then sally = true end
-                        if value == "Seek" then seek = true end
-                        if value == "Figure" then figure = true end
-                        if value == "Snare" then snare = true end
-                        if value == "Screech" then screech = true end
+                        if state[value] ~= nil then state[value] = true end
                     end
                 else
-                    rush = selected.Rush == true
-                    ambush = selected.Ambush == true
-                    dupe = selected.Dupe == true
-                    eyes = selected.Eyes == true
-                    sally = selected.Sally == true
-                    seek = selected.Seek == true
-                    figure = selected.Figure == true
-                    snare = selected.Snare == true
-                    screech = selected.Screech == true
+                    for name in pairs(state) do
+                        state[name] = selected[name] == true
+                    end
                 end
-            elseif selected == "Rush" then
-                rush = true
-            elseif selected == "Ambush" then
-                ambush = true
-            elseif selected == "Dupe" then
-                dupe = true
-            elseif selected == "Eyes" then
-                eyes = true
-            elseif selected == "Sally" then
-                sally = true
-            elseif selected == "Seek" then
-                seek = true
-            elseif selected == "Figure" then
-                figure = true
-            elseif selected == "Snare" then
-                snare = true
-            elseif selected == "Screech" then
-                screech = true
+            elseif state[selected] ~= nil then
+                state[selected] = true
             end
-            Enabled.Rush = rush
-            Enabled.Ambush = ambush
-            Enabled.Dupe = dupe
-            Enabled.Eyes = eyes
-            Enabled.SallyLingering = sally
-            Enabled.SallyMoving = sally
-            Enabled.Seek = seek
-            Enabled.Figure = figure
-            Enabled.Snare = snare
-            Enabled.Screech = screech
+
+            Enabled.Rush = state.Rush
+            Enabled.Ambush = state.Ambush
+            Enabled.Dupe = state.Dupe
+            Enabled.Eyes = state.Eyes
+            Enabled.SallyLingering = state.Sally
+            Enabled.SallyMoving = state.Sally
+            Enabled.Seek = state.Seek
+            Enabled.Figure = state.Figure
+            Enabled.Snare = state.Snare
+            Enabled.Screech = state.Screech
+
             scanEntities()
             scanSpecialEntities()
         end,
     })
-
-    entityPage:Label({
-        Text = "Entity ESP",
-    })
-
-    local notificationsPage = entityPages:Page("Notifications")
-
-    Elements.NotificationEntities = notificationsPage:Dropdown({
-        Name = "Entities",
-        Flag = "Hotel_NotificationEntities",
-        Options = {
-            "Rush",
-            "Ambush",
-            "Dupe",
-            "Eyes",
-            "Sally",
-            "Seek",
-            "Figure",
-            "Screech",
-        },
-        MultiSelect = true,
-        MaxSelect = 8,
-        Default = {},
-        Search = true,
-        Callback = function()
-        end,
-    })
-
-    Elements.NotifyEntities = notificationsPage:Toggle({
-        Name = "Notify Entities",
-        Flag = "Hotel_NotifyEntities",
-        Default = false,
-        Callback = function()
-        end,
-    })
-
-    entityPages:Page("Anti"):Label({
-        Text = "Anti features.",
-    })
-
-    return true
 end
 
 local function setupConnections()
@@ -1827,7 +1582,7 @@ local function setupConnections()
     end)
 end
 
-function Hotel:Init(core)
+function Hotel:Init(core, modules)
     if self.Initialized then
         return self
     end
@@ -1838,6 +1593,7 @@ function Hotel:Init(core)
     end
 
     Core = core
+    Hotel.Visual = modules and modules.Visual
 
     local ok, result = pcall(createUI)
 
