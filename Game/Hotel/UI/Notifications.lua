@@ -1,7 +1,7 @@
 local NotificationsUI = {}
 
 function NotificationsUI:Create(ctx)
-    local pages = ctx.EntityPages
+    local pages = ctx.VisualPages
     if not pages then return false end
 
     local page = pages:Page("Notifications")
