@@ -26,10 +26,25 @@ function Connector:Load()
     end
 
     local Main = load("Game/Main.lua")
+    local MainCharacterUI = load("Game/Main/UI/Character.lua")
+    local MainBypassUI = load("Game/Main/UI/Bypass.lua")
+    local MainVisualUI = load("Game/Main/UI/Visual.lua")
+    local MainAudioUI = load("Game/Main/UI/Audio.lua")
+    local MainMiscUI = load("Game/Main/UI/Misc.lua")
+    local MainSettingsUI = load("Game/Main/UI/Settings.lua")
 
     if Main and Main.Init then
+        local MainUIModules = {
+            Character = MainCharacterUI,
+            Bypass = MainBypassUI,
+            Visual = MainVisualUI,
+            Audio = MainAudioUI,
+            Misc = MainMiscUI,
+            Settings = MainSettingsUI,
+        }
+
         local ok, err = pcall(function()
-            Main:Init(CoreInstance)
+            Main:Init(CoreInstance, MainUIModules)
         end)
 
         if not ok then
