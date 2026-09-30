@@ -1403,20 +1403,25 @@ local function hookRooms(rooms)
 end
 
 local function createUI()
-    if not Hotel.Visual or not Hotel.Visual.CreateUI then
+    if type(Hotel.UI) ~= "table" then
         return false
     end
 
-    return Hotel.Visual:CreateUI({
+    local ctx = {
         Core = Core,
         Elements = Elements,
         Enabled = Enabled,
         Colors = Colors,
         ESP = ESP,
         Display = Display,
+        Tab = nil,
+        VisualPages = nil,
+        EntityPages = nil,
+
         ApplyInteractables = applyInteractables,
         ApplyItems = applyItems,
         RefreshLabels = refreshLabels,
+
         SetEntities = function(selected)
             local state = {
                 Rush=false, Ambush=false, Dupe=false, Eyes=false, Sally=false,
@@ -1451,7 +1456,31 @@ local function createUI()
             scanEntities()
             scanSpecialEntities()
         end,
-    })
+    }
+
+    local order = {
+        Hotel.UI.Game,
+        Hotel.UI.Visual,
+        Hotel.UI.Settings,
+        Hotel.UI.Entities,
+        Hotel.UI.Notifications,
+        Hotel.UI.Anti,
+    }
+
+    for _, module in ipairs(order) do
+        if module and type(module.Create) == "function" then
+            local ok, result = pcall(function()
+                return module:Create(ctx)
+            end)
+            if not ok or result == false then
+                warn("[JustXDoors Hotel] Failed to create UI module: " .. tostring(result))
+                return false
+            end
+        end
+    end
+
+    Tab = ctx.Tab
+    return Tab ~= nil
 end
 
 local function setupConnections()
@@ -1593,7 +1622,7 @@ function Hotel:Init(core, modules)
     end
 
     Core = core
-    Hotel.Visual = modules and modules.Visual
+    Hotel.UI = modules and modules.UI
 
     local ok, result = pcall(createUI)
 
