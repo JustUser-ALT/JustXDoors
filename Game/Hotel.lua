@@ -994,6 +994,27 @@ local function notifyEntity(entity)
     end)
 end
 
+local function scanEntityNotifications()
+    if not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then
+        return
+    end
+
+    for _, object in ipairs(workspace:GetDescendants()) do
+        local name = object.Name
+        if name == "RushMoving"
+            or name == "AmbushMoving"
+            or name == "Eyes"
+            or name == "SallyLingering"
+            or name == "SallyMoving"
+            or name == "SideroomDupe"
+            or name == "SeekMovingNewClone"
+            or name == "FigureRig"
+        then
+            notifyEntity(object)
+        end
+    end
+end
+
 local function scanEntities()
     if not Enabled.Rush and not Enabled.Ambush then
         clearKind("Rush")
@@ -1704,6 +1725,7 @@ local function setupConnections()
         then
             task.defer(function()
                 scanSpecialEntities()
+                scanEntityNotifications()
             end)
         elseif object.Parent and object.Parent.Name == "Drops" then
             task.defer(function()
@@ -1761,6 +1783,8 @@ local function setupConnections()
         then
             scanSpecialEntities()
         end
+
+        scanEntityNotifications()
 
         if Enabled.Vitamins or Enabled.Lighter or Enabled.Candle or Enabled.AlarmClock
             or Enabled.Lockpick or Enabled.SkeletonKey or Enabled.Shears
