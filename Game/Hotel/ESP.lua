@@ -783,10 +783,6 @@ local function scanSpecialEntities()
             found[kind] = found[kind] or {}
             found[kind][object] = true
 
-            if kind ~= "Snare" then
-                notifyEntity(object)
-            end
-
             addNamedWorkspaceObject(kind, object, nil, true)
         end
     end
