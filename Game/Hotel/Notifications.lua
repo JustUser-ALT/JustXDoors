@@ -89,9 +89,9 @@ function Notifications:Init(context)
         end
     end)
 
-    HeartbeatConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        scan()
-    end)
+    -- Notifications are event-driven. Do not continuously scan Workspace:
+    -- unrelated entity spawns must not cause an old Eyes instance to notify.
+    HeartbeatConnection = nil
 
     self.Enabled = true
     self.Selected = function() return Elements and Elements.NotificationEntities and Elements.NotificationEntities:Get() end
