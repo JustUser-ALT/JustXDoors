@@ -1,0 +1,629 @@
+--[[
+    JustXDoors — Game/Hotel/Hotel.lua
+
+    ESP architecture (rewrite):
+    ─────────────────────────────────────────────────────────────
+    • NO Highlight polling / no per-frame loops for ESP.
+    • ONE DescendantAdded connection on workspace (like Abyssal's
+      HandleObject pattern) + workspace.ChildAdded for entities.
+    • Highlights stored in a WeakTable-style registry keyed by the
+      adornee instance so GC cleans them if the part disappears.
+    • A Heartbeat cleaner runs every 0.5 s to prune dead refs
+      (same as Abyssal's Cleaner loop).
+    • Dropped items: watch workspace.Drops.ChildAdded and
+      Drops.ChildRemoved so pick-up / throw re-fires correctly
+      without needing toggle cycle.
+    • Eyes: detected by workspace.ChildAdded, name "Eyes" OR
+      "BackdoorEyes" — no PrimaryPart required (Eyes has none).
+    • Entity ESP uses Highlight (not BillboardGui) parented to the
+      entity model itself, auto-cleaned on Destroying.
+]]
+
+local Hotel = {}
+
+local RunService        = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+
+local Core
+local Tab
+local ESPConnList  = {}   -- {signal connection} — disconnected on Destroy
+local Elements     = {}
+
+------------------------------------------------------
+-- HIGHLIGHT REGISTRY
+-- Keyed by adornee (BasePart or Model).
+-- Value: the Highlight instance.
+------------------------------------------------------
+
+local Registry = {}   -- [adornee] = Highlight
+
+local function getHighlight(adornee)
+    return Registry[adornee]
+end
+
+local function addHighlight(adornee, color, outlineColor, fillTransparency)
+    if Registry[adornee] then return Registry[adornee] end
+
+    local hl = Instance.new("Highlight")
+    hl.FillColor         = color
+    hl.OutlineColor      = outlineColor or color
+    hl.FillTransparency  = fillTransparency or 0.5
+    hl.DepthMode         = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Adornee           = adornee
+    hl.Parent            = adornee
+
+    Registry[adornee] = hl
+
+    -- Auto-clean when the part/model is destroyed
+    adornee.Destroying:Once(function()
+        Registry[adornee] = nil
+        pcall(function() hl:Destroy() end)
+    end)
+
+    return hl
+end
+
+local function removeHighlight(adornee)
+    local hl = Registry[adornee]
+    if hl then
+        pcall(function() hl:Destroy() end)
+        Registry[adornee] = nil
+    end
+end
+
+local function clearCategory(categorySet)
+    for adornee in pairs(categorySet) do
+        removeHighlight(adornee)
+    end
+    table.clear(categorySet)
+end
+
+------------------------------------------------------
+-- ESP CATEGORY SETS
+-- Each set tracks which adornees belong to that category.
+-- Separate from Registry so we can toggle categories on/off.
+------------------------------------------------------
+
+local Sets = {
+    Doors         = {},   -- BasePart "Door" inside room Door models
+    Keys          = {},   -- KeyObtain / ElectricalKeyObtain parts
+    Items         = {},   -- collectable item Models
+    Interactables = {},   -- ChestBox, Toolbox, DrawerContainer, etc.
+    Entities      = {},   -- Rush, Ambush, Eyes, etc.
+}
+
+------------------------------------------------------
+-- ESP COLORS
+------------------------------------------------------
+
+local Colors = {
+    Doors         = { fill = Color3.fromRGB(255, 200, 50),  outline = Color3.fromRGB(255, 220, 100) },
+    Keys          = { fill = Color3.fromRGB(50, 220, 255),  outline = Color3.fromRGB(120, 240, 255) },
+    Items         = { fill = Color3.fromRGB(170, 0, 255),   outline = Color3.fromRGB(200, 80, 255)  },
+    Interactables = { fill = Color3.fromRGB(255, 255, 0),   outline = Color3.fromRGB(255, 255, 120) },
+    Entities      = { fill = Color3.fromRGB(255, 40, 40),   outline = Color3.fromRGB(255, 120, 120) },
+}
+
+------------------------------------------------------
+-- ENABLED FLAGS (set by dropdown callback)
+------------------------------------------------------
+
+local Enabled = {
+    Doors         = false,
+    Keys          = false,
+    Items         = false,
+    Interactables = false,
+    Entities      = false,
+}
+
+------------------------------------------------------
+-- ITEM NAMES (from Abyssal — complete list)
+------------------------------------------------------
+
+local ItemNames = {
+    DinkyLamp=true, BottleCrate=true, GweenSodaPack=true, BrokenMonitor=true,
+    JerryCan=true, SallyToyObtain=true, Leftovers=true, HoneyPot=true,
+    FihFlakes=true, SecretCD=true, Pizza=true, PaperPlanePickup=true,
+    Lighter=true, Flashlight=true, Lockpick=true, Vitamins=true,
+    Bandage=true, StarVial=true, StarBottle=true, StarJug=true,
+    Shakelight=true, Straplight=true, Bulklight=true, Battery=true,
+    Candle=true, Crucifix=true, CrucifixWall=true, Glowsticks=true,
+    SkeletonKey=true, Candy=true, ShieldMini=true, ShieldBig=true,
+    BandagePack=true, BatteryPack=true, RiftCandle=true, LaserPointer=true,
+    HolyGrenade=true, Shears=true, Smoothie=true, Cheese=true, Bread=true,
+    AlarmClock=true, RiftSmoothie=true, GweenSoda=true, GlitchCube=true,
+    Scanner=true, Bomb=true, Knockbomb=true, Nanner=true, BigBomb=true,
+    SnakeBox=true, GoldGun=true, StopSign=true, TipJar=true, Lantern=true,
+    IronKey=true, LotusPetal=true, Compass=true, LotusPetalPickup=true,
+    LanternLitItem=true, KeyIron=true, IronKeyForCrypt=true, LotusHolder=true,
+    Multitool=true, RiftJar=true, AloeVera=true, Donut=true, Lotus=true,
+    BoxingGloves=true, Green_Herb=true,
+}
+
+-- Items that need ModulePrompt child (in-room pickups)
+-- vs items in workspace.Drops (already dropped / floating)
+
+------------------------------------------------------
+-- INTERACTABLE NAMES (drawers, chests, etc.)
+------------------------------------------------------
+
+local InteractableNames = {
+    -- Drawers (Hotel)
+    DrawerContainer    = "Drawer",
+    -- Chests / containers
+    ChestBox           = "Chest",
+    ChestBoxLocked     = "Locked Chest",
+    Toolbox            = "Toolbox",
+    Toolbox_Locked     = "Locked Toolbox",
+    Chest_Vine         = "Vine Chest",
+    Toolshed_Small     = "Toolshed",
+    Locker_Small_Locked= "Locked Locker",
+    MouseHole          = "Mouse Hole",
+    -- Objectives
+    KeyObtain          = "Door Key",
+    ElectricalKeyObtain= "Electrical Key",
+    ShoppingCart       = "Shopping Cart",
+    StairwellFireAlarm = "Fire Alarm",
+    MinesGenerator     = "Generator",
+    FuseObtain         = "Generator Fuse",
+    LiveHintBook       = "Hint Book",
+    LiveBreakerPolePickup = "Fuse Breaker",
+    LibraryHintPaper   = "Hint Paper",
+    PickupItem         = "Hint Paper",
+    LeverForGate       = "Gate Lever",
+    MinesGateButton    = "Gate Button",
+    GardenGateButton   = "Gate Button",
+}
+
+------------------------------------------------------
+-- ENTITY NAMES (from Abyssal's Entities table)
+-- Keys are Model.Name values found in workspace.
+------------------------------------------------------
+
+local EntityNames = {
+    RushMoving         = "Rush",
+    AmbushMoving       = "Ambush",
+    Eyes               = "Eyes",
+    BackdoorEyes       = "Eyes",    -- no PrimaryPart; adornee = model
+    Lookman            = "Lookman",
+    BackdoorLookman    = "Lookman",
+    A60                = "A-60",
+    A120               = "A-120",
+    BackdoorRush       = "Blitz",
+    GloombatSwarm      = "Gloombat Swarm",
+    GlitchRush         = "RNIUSHCG==",
+    GlitchAmbush       = "AR0xMBUSH",
+    MonumentEntity     = "Monument",
+    JeffTheKiller      = "Jeff the Killer",
+    Groundskeeper      = "Groundskeeper",
+    SallyMoving        = "Sally",
+    GiggleCeiling      = "Giggle",
+    StemsEntity        = "Noise",
+    CritterEntity      = "Creak",
+    DroneStampede      = "Drones Stampede",
+    TellerEntity       = "Teller",
+    ScribblesEntity    = "Scribbles",
+    BashEntity         = "Bash",
+    HaltEntity         = "Halt",
+    CustomEntity       = "Custom Entity",
+    GloomPile          = "Gloombat Eggs",
+}
+
+------------------------------------------------------
+-- ESP APPLY HELPERS
+------------------------------------------------------
+
+local function applyESP(adornee, category)
+    if not Enabled[category] then return end
+    if not adornee or not adornee.Parent then return end
+    local c = Colors[category]
+    Sets[category][adornee] = true
+    addHighlight(adornee, c.fill, c.outline, 0.5)
+end
+
+local function removeESP(adornee, category)
+    Sets[category][adornee] = nil
+    removeHighlight(adornee)
+end
+
+local function refreshCategory(category)
+    -- Remove all existing highlights for this category
+    for adornee in pairs(Sets[category]) do
+        removeHighlight(adornee)
+    end
+    table.clear(Sets[category])
+
+    if not Enabled[category] then return end
+
+    -- Re-scan all current objects
+    if category == "Doors" then
+        local rooms = workspace:FindFirstChild("CurrentRooms")
+        if not rooms then return end
+        for _, room in rooms:GetChildren() do
+            local doorModel = room:FindFirstChild("Door")
+            if doorModel then
+                local doorPart = doorModel:FindFirstChild("Door")
+                if doorPart and doorPart:IsA("BasePart") then
+                    applyESP(doorPart, "Doors")
+                end
+            end
+        end
+
+    elseif category == "Keys" then
+        local rooms = workspace:FindFirstChild("CurrentRooms")
+        if not rooms then return end
+        for _, desc in rooms:GetDescendants() do
+            if (desc.Name == "KeyObtain" or desc.Name == "ElectricalKeyObtain")
+                and desc:IsA("BasePart")
+            then
+                applyESP(desc, "Keys")
+            end
+        end
+
+    elseif category == "Items" then
+        -- In-room items
+        local rooms = workspace:FindFirstChild("CurrentRooms")
+        if rooms then
+            for _, desc in rooms:GetDescendants() do
+                if ItemNames[desc.Name] and desc:IsA("Model") and desc:FindFirstChild("ModulePrompt") then
+                    applyESP(desc, "Items")
+                end
+                if desc.Name == "Green_Herb" and desc:IsA("Model") then
+                    applyESP(desc, "Items")
+                end
+            end
+        end
+        -- Dropped items (workspace.Drops)
+        local drops = workspace:FindFirstChild("Drops")
+        if drops then
+            for _, child in drops:GetChildren() do
+                if child:IsA("Model") and ItemNames[child.Name] then
+                    applyESP(child, "Items")
+                end
+            end
+        end
+
+    elseif category == "Interactables" then
+        local rooms = workspace:FindFirstChild("CurrentRooms")
+        if not rooms then return end
+        for _, desc in rooms:GetDescendants() do
+            if InteractableNames[desc.Name] and desc:IsA("Model") then
+                applyESP(desc, "Interactables")
+            end
+        end
+
+    elseif category == "Entities" then
+        -- Entities spawn in workspace root
+        for _, child in workspace:GetChildren() do
+            if EntityNames[child.Name] and child:IsA("Model") then
+                applyESP(child, "Entities")
+            end
+        end
+    end
+end
+
+------------------------------------------------------
+-- OBJECT HANDLER
+-- Called for every new DescendantAdded in CurrentRooms
+-- AND ChildAdded in workspace (entities).
+------------------------------------------------------
+
+local function handleRoomObject(obj)
+    local name = obj.Name
+
+    -- Doors
+    if Enabled.Doors and name == "Door" and obj:IsA("BasePart") then
+        -- Confirm it's the Door part inside a Door model
+        local parent = obj.Parent
+        if parent and parent.Name == "Door" then
+            applyESP(obj, "Doors")
+        end
+        return
+    end
+
+    -- Keys
+    if Enabled.Keys and (name == "KeyObtain" or name == "ElectricalKeyObtain") and obj:IsA("BasePart") then
+        applyESP(obj, "Keys")
+        return
+    end
+
+    -- Items (in rooms — need ModulePrompt to be a real pickup, not decoration)
+    if Enabled.Items then
+        if ItemNames[name] and obj:IsA("Model") then
+            -- Wait for ModulePrompt to replicate (brief defer)
+            task.defer(function()
+                if obj.Parent and obj:FindFirstChild("ModulePrompt") then
+                    applyESP(obj, "Items")
+                elseif obj.Name == "Green_Herb" and obj.Parent then
+                    applyESP(obj, "Items")
+                end
+            end)
+            return
+        end
+    end
+
+    -- Interactables (drawers, chests)
+    if Enabled.Interactables and InteractableNames[name] and obj:IsA("Model") then
+        -- Drawers load their children async — defer to let them replicate
+        task.defer(function()
+            if obj.Parent then
+                applyESP(obj, "Interactables")
+            end
+        end)
+        return
+    end
+end
+
+-- Entity handler — called for workspace.ChildAdded
+local function handleEntitySpawn(obj)
+    if not obj:IsA("Model") then return end
+    local alias = EntityNames[obj.Name]
+    if not alias then return end
+
+    -- Debounce (Abyssal: SetAttribute check)
+    if obj:GetAttribute("JustX_EntityHandled") then return end
+    obj:SetAttribute("JustX_EntityHandled", true)
+
+    if not Enabled.Entities then return end
+
+    -- Eyes has no PrimaryPart — use model directly
+    if obj.Name == "Eyes" or obj.Name == "BackdoorEyes" then
+        applyESP(obj, "Entities")
+        return
+    end
+
+    -- Wait for PrimaryPart (max 3 s)
+    task.spawn(function()
+        local deadline = tick() + 3
+        while not obj.PrimaryPart and tick() < deadline do task.wait() end
+        if not obj.Parent then return end  -- despawned already
+        if LocalPlayer:DistanceFromCharacter(
+            obj.PrimaryPart and obj.PrimaryPart.Position or Vector3.zero
+        ) >= 10000 then return end
+        applyESP(obj, "Entities")
+    end)
+end
+
+-- Also handles entities added as descendants (some spawn as children of existing models)
+local function handleDescendantEntity(desc)
+    if desc:IsA("Humanoid") and desc.Parent and EntityNames[desc.Parent.Name] then
+        task.defer(function() handleEntitySpawn(desc.Parent) end)
+    elseif desc:IsA("Model") and EntityNames[desc.Name] then
+        task.defer(function() handleEntitySpawn(desc) end)
+    end
+end
+
+------------------------------------------------------
+-- DROPPED ITEMS WATCHER
+-- workspace.Drops.ChildAdded / ChildRemoved
+-- Fixes the bug where picking up + throwing an item
+-- doesn't update ESP without a toggle cycle.
+------------------------------------------------------
+
+local function watchDrops()
+    local drops = workspace:FindFirstChild("Drops")
+    if not drops then return end
+
+    local function onDropAdded(child)
+        if Enabled.Items and child:IsA("Model") and ItemNames[child.Name] then
+            task.defer(function()
+                if child.Parent then applyESP(child, "Items") end
+            end)
+        end
+    end
+
+    local function onDropRemoved(child)
+        -- Item was picked up — remove ESP if it's in the Items set
+        if Sets.Items[child] then
+            removeESP(child, "Items")
+        end
+    end
+
+    local c1 = drops.ChildAdded:Connect(onDropAdded)
+    local c2 = drops.ChildRemoved:Connect(onDropRemoved)
+    table.insert(ESPConnList, c1)
+    table.insert(ESPConnList, c2)
+
+    -- Scan existing drops
+    for _, child in drops:GetChildren() do
+        onDropAdded(child)
+    end
+end
+
+------------------------------------------------------
+-- HEARTBEAT CLEANER (every 0.5 s)
+-- Prunes highlights whose adornee left workspace.
+-- Same pattern as Abyssal's Cleaner loop.
+------------------------------------------------------
+
+local LastClean = 0
+
+local function cleanerTick()
+    if tick() - LastClean < 0.5 then return end
+    LastClean = tick()
+
+    for category, set in pairs(Sets) do
+        for adornee in pairs(set) do
+            if not adornee:IsDescendantOf(workspace) then
+                removeHighlight(adornee)
+                set[adornee] = nil
+            end
+        end
+    end
+end
+
+------------------------------------------------------
+-- CONNECTIONS SETUP
+------------------------------------------------------
+
+local function setupConnections()
+    local rooms = workspace:FindFirstChild("CurrentRooms")
+    if not rooms then return end
+
+    -- New room added
+    local c1 = rooms.ChildAdded:Connect(function(room)
+        -- Watch all descendants of this room
+        local c = room.DescendantAdded:Connect(function(obj)
+            handleRoomObject(obj)
+        end)
+        table.insert(ESPConnList, c)
+        -- Scan what's already in the room (rooms replicate children over time)
+        task.defer(function()
+            for _, obj in room:GetDescendants() do
+                handleRoomObject(obj)
+            end
+        end)
+    end)
+    table.insert(ESPConnList, c1)
+
+    -- Existing rooms
+    for _, room in rooms:GetChildren() do
+        local c = room.DescendantAdded:Connect(function(obj)
+            handleRoomObject(obj)
+        end)
+        table.insert(ESPConnList, c)
+    end
+
+    -- Entity detection: workspace.ChildAdded + DescendantAdded
+    local c2 = workspace.ChildAdded:Connect(handleEntitySpawn)
+    local c3 = workspace.DescendantAdded:Connect(handleDescendantEntity)
+    table.insert(ESPConnList, c2)
+    table.insert(ESPConnList, c3)
+
+    -- Existing entities already in workspace
+    for _, child in workspace:GetChildren() do
+        if EntityNames[child.Name] then
+            task.defer(function() handleEntitySpawn(child) end)
+        end
+    end
+
+    -- Drops watcher
+    watchDrops()
+
+    -- Heartbeat cleaner
+    local c4 = RunService.Heartbeat:Connect(cleanerTick)
+    table.insert(ESPConnList, c4)
+end
+
+------------------------------------------------------
+-- UI
+------------------------------------------------------
+
+local function createUI()
+    Tab = Core:Tab({ Name = "Hotel", Icon = "building-2", Type = "Grid" })
+    if not Tab then return false end
+
+    --------------------------------------------------
+    -- Column 1 — Game | Bypass (MultiSection)
+    --------------------------------------------------
+    local msGame = Tab:MultiSection({
+        Pages  = { "Game", "Bypass" },
+        Column = 1,
+        Icon   = "joystick",
+    })
+    local gamePage   = msGame:Page("Game")
+    local bypassPage = msGame:Page("Bypass")
+
+    gamePage:Label({ Text = "Game features coming soon." })
+    bypassPage:Label({ Text = "Bypass features coming soon." })
+
+    --------------------------------------------------
+    -- Column 2 — Visual | Entity (MultiSection)
+    --------------------------------------------------
+    local msVisual = Tab:MultiSection({
+        Pages  = { "Visual", "Entity" },
+        Column = 2,
+        Icon   = "eye",
+    })
+    local visualPage = msVisual:Page("Visual")
+    local entityPage = msVisual:Page("Entity")
+
+    visualPage:Label({ Text = "Visual features coming soon." })
+
+    --------------------------------------------------
+    -- Entity page — ESP MultiSelect Dropdown
+    --------------------------------------------------
+
+    Elements.ESPDropdown = entityPage:Dropdown({
+        Name        = "ESP",
+        Flag        = "Hotel_ESP",
+        Options     = { "Doors", "Keys", "Items", "Interactables", "Entities" },
+        MultiSelect = true,
+        Default     = {},
+        Tooltip     = "Select what to highlight. Changes apply immediately.",
+        Callback    = function(selected)
+            -- Build new desired state
+            local want = {}
+            for _, v in ipairs(selected) do want[v] = true end
+
+            for _, cat in ipairs({ "Doors", "Keys", "Items", "Interactables", "Entities" }) do
+                local wasOn  = Enabled[cat]
+                local willOn = want[cat] == true
+
+                if wasOn ~= willOn then
+                    Enabled[cat] = willOn
+                    refreshCategory(cat)
+                end
+            end
+        end,
+    })
+
+    --------------------------------------------------
+    -- Column 3 — Notifications
+    --------------------------------------------------
+    local notifSec = Tab:Section({
+        Title  = "Notifications",
+        Column = 3,
+        Icon   = "bell",
+    })
+    notifSec:Label({ Text = "Notification features coming soon." })
+
+    return true
+end
+
+------------------------------------------------------
+-- LIFECYCLE
+------------------------------------------------------
+
+function Hotel:Init(core)
+    if self.Initialized then return self end
+    if type(core) ~= "table" then
+        warn("[JustXDoors Hotel] Core is missing.")
+        return self
+    end
+
+    Core = core
+
+    if not createUI() then
+        warn("[JustXDoors Hotel] Failed to create UI.")
+        return self
+    end
+
+    setupConnections()
+    self.Initialized = true
+    return self
+end
+
+function Hotel:Destroy()
+    for _, c in ipairs(ESPConnList) do pcall(function() c:Disconnect() end) end
+    table.clear(ESPConnList)
+
+    -- Destroy all highlights
+    for adornee, hl in pairs(Registry) do
+        pcall(function() hl:Destroy() end)
+    end
+    table.clear(Registry)
+
+    for _, set in pairs(Sets) do table.clear(set) end
+    table.clear(Enabled)
+
+    Elements = {}
+    Tab  = nil
+    Core = nil
+    self.Initialized = false
+end
+
+return Hotel
