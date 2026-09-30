@@ -6,7 +6,7 @@ function VisualUI:Create(ctx)
     local pages = ctx.VisualPages
     if not pages then
         pages = ctx.Tab:MultiSection({
-            Pages = {"Visual", "Settings"},
+            Pages = {"Visual", "Notifications", "Settings"},
             Column = 2,
             Icon = "eye",
         })
