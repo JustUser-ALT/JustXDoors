@@ -748,45 +748,67 @@ end
 
 local function scanDropItems()
     local drops = workspace:FindFirstChild("Drops")
+    if not drops then
+        return
+    end
+
+    -- Only direct children of Drops are considered dropped items.
+    -- This is intentional: nested parts of Candle/etc. must not create
+    -- duplicate ESP, and BatteryPack must never count as Battery.
     local map = {
-        Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
-        AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
-        Shears="Shears", Battery="Battery", Bandage="Bandage",
-        Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
-        RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
-        Donut="Donut", Crucifix="Crucifix",
+        Vitamins = "Vitamins",
+        Lighter = "Lighter",
+        Candle = "Candle",
+        AlarmClock = "AlarmClock",
+        Lockpick = "Lockpick",
+        SkeletonKey = "SkeletonKey",
+        Shears = "Shears",
+        Battery = "Battery",
+        Bandage = "Bandage",
+        Smoothie = "Smoothie",
+        Flashlight = "Flashlight",
+        TipJar = "TipJar",
+        RiftCandle = "RiftCandle",
+        RiftSmoothie = "RiftSmoothie",
+        RiftJar = "RiftJar",
+        Donut = "Donut",
+        Crucifix = "Crucifix",
     }
 
     local found = {}
 
-    if drops then
-        -- A dropped item is valid only when it is a direct child of Drops.
-        -- This deliberately excludes BatteryPack and nested batteries.
-        for _, object in ipairs(drops:GetChildren()) do
-            local kind = map[object.Name]
-            if kind and Enabled[kind] then
-                found[kind] = found[kind] or {}
-                found[kind][object] = true
-                addNamedWorkspaceObject(kind, object, nil, false)
-                local entry = ESP[kind] and ESP[kind][object]
-                if entry then
-                    entry.Drop = true
-                end
+    for _, object in ipairs(drops:GetChildren()) do
+        local kind = map[object.Name]
+        if kind and Enabled[kind] then
+            found[kind] = found[kind] or {}
+            found[kind][object] = true
+            addNamedWorkspaceObject(kind, object, nil, false)
+        elseif object.Name == "BandagePack" and Enabled.Bandage then
+            -- BandagePack is a special case: the actual dropped Bandage can
+            -- exist inside it. Do not generalize this to BatteryPack or other
+            -- packs, because those are not Battery ESP targets.
+            local bandage = object:FindFirstChild("Bandage", true)
+            if bandage then
+                found.Bandage = found.Bandage or {}
+                found.Bandage[bandage] = true
+                addNamedWorkspaceObject("Bandage", bandage, nil, false)
             end
         end
     end
 
-    -- Only reconcile entries that were created by the Drops scanner.
-    -- Room-spawned items live in the same ESP[kind] table, so clearing every
-    -- missing object here was deleting valid room ESP and causing the
-    -- "toggle another ESP and it suddenly appears" behavior.
-    for kind in pairs(map) do
-        local objects = ESP[kind]
-        if objects then
-            for object, entry in pairs(objects) do
-                if entry.Drop then
-                    local keep = found[kind] and found[kind][object]
-                    if not keep then
+    -- Remove only stale dropped-item entries. Room ESP is handled separately.
+    local kinds = {
+        "Vitamins","Lighter","Candle","AlarmClock","Lockpick","SkeletonKey",
+        "Shears","Battery","Bandage","Smoothie","Flashlight","TipJar",
+        "RiftCandle","RiftSmoothie","RiftJar","Donut","Crucifix"
+    }
+
+    for _, kind in ipairs(kinds) do
+        if Enabled[kind] then
+            for object in pairs(ESP[kind]) do
+                local parent = object and object.Parent
+                if parent == drops or (parent and parent.Name == "BandagePack" and kind == "Bandage") then
+                    if not found[kind] or not found[kind][object] then
                         clearEntry(kind, object)
                     end
                 end
@@ -1468,64 +1490,77 @@ local function setup()
 
     connect(workspace.DescendantAdded, function(object)
         if object:IsA("ProximityPrompt") then return end
-        if object.Name == "Eyes" or object.Name == "SallyLingering"
-            or object.Name == "SallyMoving" or object.Name == "SeekMovingNewClone"
-            or object.Name == "SideroomDupe" or object.Name == "FigureRig"
-            or object.Name == "Snare" or object.Name == "Screech"
-        then
-            task.defer(scanSpecialEntities)
-        elseif object.Name == "Vitamins" or object.Name == "Lighter"
-            or object.Name == "Candle" or object.Name == "AlarmClock"
-            or object.Name == "Lockpick" or object.Name == "SkeletonKey"
-            or object.Name == "Shears" or object.Name == "Battery"
-            or object.Name == "Bandage" or object.Name == "Smoothie"
-            or object.Name == "Flashlight" or object.Name == "TipJar"
-            or object.Name == "RiftCandle" or object.Name == "RiftSmoothie"
-            or object.Name == "RiftJar" or object.Name == "Donut"
-            or object.Name == "Crucifix"
-        then
+
+        local entityNames = {
+            Eyes=true, SallyLingering=true, SallyMoving=true,
+            SeekMovingNewClone=true, SideroomDupe=true, FigureRig=true,
+            Snare=true, Screech=true, RushMoving=true, AmbushMoving=true,
+        }
+
+        if entityNames[object.Name] then
+            task.defer(function()
+                scanEntities()
+                scanSpecialEntities()
+            end)
+        elseif object.Parent and object.Parent.Name == "Drops" then
             task.defer(scanDropItems)
         end
     end)
 
+    local function hookDrops(drops)
+        if not drops then
+            return
+        end
+
+        connect(drops.ChildAdded, function(drop)
+            -- Wait for the dropped object's own contents/physics to settle,
+            -- then process that exact root. No unrelated ESP toggle is needed.
+            task.defer(function()
+                if drop and drop.Parent == drops then
+                    scanDropItems()
+                end
+            end)
+            task.delay(0.05, function()
+                if drop and drop.Parent == drops then
+                    scanDropItems()
+                end
+            end)
+            task.delay(0.2, function()
+                if drop and drop.Parent == drops then
+                    scanDropItems()
+                end
+            end)
+        end)
+
+        task.defer(scanDropItems)
+    end
+
+    -- Drops can already exist when the ESP module initializes.
+    hookDrops(workspace:FindFirstChild("Drops"))
+
     connect(workspace.ChildAdded, function(object)
         if object.Name == "Drops" then
-            connect(object.ChildAdded, function(drop)
-                task.defer(function()
-                    scanDropItems()
-                    if drop and drop.Parent then
-                        local map = {
-                            Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
-                            AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
-                            Shears="Shears", Battery="Battery", Bandage="Bandage",
-                            Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
-                            RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
-                            Donut="Donut", Crucifix="Crucifix",
-                        }
-                        local kind = map[drop.Name]
-                        if kind and Enabled[kind] then
-                            addNamedWorkspaceObject(kind, drop, nil, false)
-                        end
-                    end
-                end)
-            end)
-            task.defer(scanDropItems)
+            hookDrops(object)
         elseif object.Name == "CurrentRooms" then
             task.defer(function() hookRooms(object) end)
         elseif object.Name == "RushMoving" or object.Name == "AmbushMoving"
             or object.Name == "Eyes" or object.Name == "SallyLingering"
-            or object.Name == "SallyMoving" or object.Name == "Screech"
+            or object.Name == "SallyMoving" or object.Name == "SeekMovingNewClone"
+            or object.Name == "Screech" or object.Name == "SideroomDupe"
+            or object.Name == "FigureRig" or object.Name == "Snare"
         then
             task.defer(function() scanEntities(); scanSpecialEntities() end)
             task.delay(0.05, scanSpecialEntities)
             task.delay(0.15, scanSpecialEntities)
             task.delay(0.35, scanSpecialEntities)
-        elseif object.Name == "Drops" then
-            task.defer(scanDropItems)
         end
     end)
 
     connect(Players.LocalPlayer:GetAttributeChangedSignal("CurrentRoom"), refreshRoomVisibility)
+
+    -- Do one initial pass so already-present entities/items are represented
+    -- immediately after enabling the module.
+    task.defer(scanAll)
 
     connect(RunService.Heartbeat, function(dt)
         ScanTimer += dt
