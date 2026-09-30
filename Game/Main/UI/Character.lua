@@ -1,19 +1,18 @@
 local CharacterUI = {}
 
 function CharacterUI:Create(ctx)
-    local Tab = ctx.Tab or ctx.Core:Tab({
-        Name = "Main",
-        Icon = "user",
-        Type = "Grid",
-    })
-    if not Tab then return false end
-    ctx.Tab = Tab
+    local pages = ctx.Tab and ctx.CharacterPages
+    if not pages then
+        pages = ctx.Tab:MultiSection({
+            Pages = {"Character", "Bypass"},
+            Column = 1,
+            Icon = "user",
+        })
+        ctx.CharacterPages = pages
+    end
+    if not pages then return false end
 
-    local page = Tab:Section({
-        Title = "Character",
-        Column = 1,
-        Icon = "user",
-    })
+    local page = pages:Page("Character")
     if not page then return false end
 
     local a = ctx.Actions
