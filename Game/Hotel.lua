@@ -770,12 +770,18 @@ local function scanSpecialEntities()
             if not roomNumber or not current or math.abs(roomNumber - current) <= 1 then
                 if Enabled.Dupe then
                     local dupe = room:FindFirstChild("SideroomDupe", true)
-                    if dupe then addNamedWorkspaceObject("Dupe", dupe, room, true) end
+                    if dupe then
+                        notifyEntity(dupe)
+                        addNamedWorkspaceObject("Dupe", dupe, room, true)
+                    end
                 end
 
                 if Enabled.Figure then
                     local figure = room:FindFirstChild("FigureRig", true)
-                    if figure then addNamedWorkspaceObject("Figure", figure, room, true) end
+                    if figure then
+                        notifyEntity(figure)
+                        addNamedWorkspaceObject("Figure", figure, room, true)
+                    end
                 end
 
                 if Enabled.Snare then
@@ -785,7 +791,10 @@ local function scanSpecialEntities()
 
                 if Enabled.Seek then
                     local seek = room:FindFirstChild("SeekMovingNewClone", true)
-                    if seek then addNamedWorkspaceObject("Seek", seek, room, true) end
+                    if seek then
+                        notifyEntity(seek)
+                        addNamedWorkspaceObject("Seek", seek, room, true)
+                    end
                 end
             end
         end
@@ -942,6 +951,10 @@ local function notifyEntity(entity)
         or entity.Name == "AmbushMoving" and "Ambush"
         or entity.Name == "SallyLingering" and "Sally"
         or entity.Name == "SallyMoving" and "Sally"
+        or entity.Name == "SideroomDupe" and "Dupe"
+        or entity.Name == "Eyes" and "Eyes"
+        or entity.Name == "SeekMovingNewClone" and "Seek"
+        or entity.Name == "FigureRig" and "Figure"
         or nil
     if not alias then
         return
@@ -957,7 +970,18 @@ local function notifyEntity(entity)
     if Core then
         Core:Notify({
             Title = "Entity '" .. alias .. "' has spawned.",
-            Desc = alias == "Sally" and (entity.Name == "SallyLingering" and "Sally will spawn in a few rooms." or "Sally has spawned.") or "Find a hiding spot.",
+            Desc =
+                alias == "Sally"
+                    and (entity.Name == "SallyLingering" and "Sally will spawn in a few rooms." or "Sally has spawned.")
+                    or alias == "Dupe"
+                    and "Dupe has spawned."
+                    or alias == "Eyes"
+                    and "Eyes has spawned."
+                    or alias == "Seek"
+                    and "Seek has spawned."
+                    or alias == "Figure"
+                    and "Figure has spawned."
+                    or "Find a hiding spot.",
             Type = "Warning",
             Duration = 5,
         })
@@ -1125,6 +1149,7 @@ local function applyInteractables(selected)
                 lockedChest = true
                 ventGate = true
                 lever = true
+                toolshed = true
             end
         end
     else
@@ -1611,10 +1636,14 @@ local function createUI()
         Options = {
             "Rush",
             "Ambush",
+            "Dupe",
+            "Eyes",
             "Sally",
+            "Seek",
+            "Figure",
         },
         MultiSelect = true,
-        MaxSelect = 3,
+        MaxSelect = 7,
         Default = {},
         Search = true,
         Callback = function()
