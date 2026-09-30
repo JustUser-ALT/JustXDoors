@@ -664,9 +664,9 @@ local function scanDropItems()
         Crucifix = "Crucifix",
     }
 
-    for _, object in ipairs(drops:GetChildren()) do
+    for _, object in ipairs(drops:GetDescendants()) do
         local kind = map[object.Name]
-        if kind and Enabled[kind] then
+        if kind and Enabled[kind] and object:FindFirstChild("ModulePrompt", true) then
             addNamedWorkspaceObject(kind, object, nil, false)
         end
     end
@@ -906,7 +906,9 @@ local function scanRoom(room)
         }
 
         local roomItemKind = roomItemMap[object.Name]
-        if roomItemKind and Enabled[roomItemKind] and roomVisible.Key then
+        if roomItemKind and Enabled[roomItemKind] and roomVisible.Key
+            and object:FindFirstChild("ModulePrompt", true)
+        then
             addNamedWorkspaceObject(roomItemKind, object, room, false)
         end
 
@@ -1686,6 +1688,29 @@ local function setupConnections()
             end)
         end
     end
+
+    connect(workspace.DescendantAdded, function(object)
+        if object:IsA("ProximityPrompt") then
+            return
+        end
+
+        if object.Name == "Eyes"
+            or object.Name == "SallyLingering"
+            or object.Name == "SallyMoving"
+            or object.Name == "SeekMovingNewClone"
+            or object.Name == "SideroomDupe"
+            or object.Name == "FigureRig"
+            or object.Name == "Snare"
+        then
+            task.defer(function()
+                scanSpecialEntities()
+            end)
+        elseif object.Parent and object.Parent.Name == "Drops" then
+            task.defer(function()
+                scanDropItems()
+            end)
+        end
+    end)
 
     connect(workspace.ChildAdded, function(object)
         if object.Name == "CurrentRooms" then
