@@ -35,6 +35,7 @@ local ESP = {
     SallyToy = {},
     ElectricalKey = {},
     BreakerPole = {},
+    Battery = {},
     Dupe = {},
     Eyes = {},
     SallyLingering = {},
@@ -42,6 +43,7 @@ local ESP = {
     Seek = {},
     Figure = {},
     Snare = {},
+    Screech = {},
     VentGate = {},
     Toolshed = {},
     Lever = {},
@@ -73,6 +75,7 @@ local Enabled = {
     SallyToy = false,
     ElectricalKey = false,
     BreakerPole = false,
+    Battery = false,
     Dupe = false,
     Eyes = false,
     SallyLingering = false,
@@ -80,6 +83,7 @@ local Enabled = {
     Seek = false,
     Figure = false,
     Snare = false,
+    Screech = false,
     Toolshed = false,
 }
 
@@ -116,6 +120,7 @@ local Colors = {
     SallyToy = Color3.fromRGB(255, 120, 180),
     ElectricalKey = Color3.fromRGB(80, 220, 255),
     BreakerPole = Color3.fromRGB(255, 240, 100),
+    Battery = Color3.fromRGB(120, 190, 255),
     Dupe = Color3.fromRGB(255, 130, 60),
     Eyes = Color3.fromRGB(180, 90, 255),
     SallyLingering = Color3.fromRGB(255, 120, 180),
@@ -123,6 +128,7 @@ local Colors = {
     Seek = Color3.fromRGB(70, 150, 255),
     Figure = Color3.fromRGB(255, 80, 80),
     Snare = Color3.fromRGB(100, 220, 100),
+    Screech = Color3.fromRGB(220, 220, 255),
     Toolshed = Color3.fromRGB(160, 110, 70),
     Rush = Color3.fromRGB(255, 70, 70),
     Ambush = Color3.fromRGB(190, 70, 255),
@@ -537,6 +543,19 @@ local function addObject(kind, object, room)
 
     if ESP[kind][object] then
         local entry = ESP[kind][object]
+
+        local hasLiveHighlight = false
+        for _, highlight in ipairs(entry.Highlights) do
+            if highlight and highlight.Parent then
+                hasLiveHighlight = true
+                break
+            end
+        end
+
+        if not hasLiveHighlight then
+            rebuildHighlights(entry, object, kind)
+        end
+
         updateLabel(kind, object, entry)
         return
     end
@@ -657,6 +676,11 @@ local function scanDropItems()
         Lockpick = "Lockpick",
         SkeletonKey = "SkeletonKey",
         Shears = "Shears",
+        Battery = "Battery",
+        Bandage = "Bandage",
+        Smoothie = "Smoothie",
+        Flashlight = "Flashlight",
+        TipJar = "TipJar",
         RiftCandle = "RiftCandle",
         RiftSmoothie = "RiftSmoothie",
         RiftJar = "RiftJar",
@@ -666,7 +690,7 @@ local function scanDropItems()
 
     for _, object in ipairs(drops:GetDescendants()) do
         local kind = map[object.Name]
-        if kind and Enabled[kind] and object:FindFirstChild("ModulePrompt", true) then
+        if kind and Enabled[kind] then
             addNamedWorkspaceObject(kind, object, nil, false)
         end
     end
@@ -717,86 +741,57 @@ local function scanSpecialHotelItems()
     end
 end
 
-local function scanSpecialEntities()
-    local rooms = getRooms()
-    local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
+local EntityESPNames = {
+    SideroomDupe = "Dupe",
+    Eyes = "Eyes",
+    SallyLingering = "SallyLingering",
+    SallyMoving = "SallyMoving",
+    SeekMovingNewClone = "Seek",
+    FigureRig = "Figure",
+    Snare = "Snare",
+    Screech = "Screech",
+}
 
-    local wanted = {
-        Dupe = Enabled.Dupe,
-        Figure = Enabled.Figure,
-        Snare = Enabled.Snare,
-        Seek = Enabled.Seek,
+local function scanSpecialEntities()
+    local found = {}
+
+    for _, object in ipairs(workspace:GetDescendants()) do
+        local kind = EntityESPNames[object.Name]
+
+        if kind and Enabled[kind]
+            and (object:IsA("Model") or object:IsA("BasePart"))
+        then
+            found[kind] = found[kind] or {}
+            found[kind][object] = true
+
+            if kind ~= "Snare" then
+                notifyEntity(object)
+            end
+
+            addNamedWorkspaceObject(kind, object, nil, true)
+        end
+    end
+
+    local enabledKinds = {
+        "Dupe",
+        "Eyes",
+        "SallyLingering",
+        "SallyMoving",
+        "Seek",
+        "Figure",
+        "Snare",
+        "Screech",
     }
 
-    for kind, enabled in pairs(wanted) do
-        if enabled then
-            clearKind(kind)
-        end
-    end
-
-    if Enabled.Eyes then
-        local eyes = workspace:FindFirstChild("Eyes")
-        if eyes then
-            addNamedWorkspaceObject("Eyes", eyes, nil, true)
-        end
-    end
-
-    if Enabled.SallyLingering then
-        local sally = workspace:FindFirstChild("SallyLingering")
-        if sally then
-            notifyEntity(sally)
-            addNamedWorkspaceObject("SallyLingering", sally, nil, true)
-        end
-    end
-
-    if Enabled.SallyMoving then
-        local sally = workspace:FindFirstChild("SallyMoving")
-        if sally then
-            notifyEntity(sally)
-            addNamedWorkspaceObject("SallyMoving", sally, nil, true)
-        end
-    end
-
-    if Enabled.Seek then
-        local seek = workspace:FindFirstChild("SeekMovingNewClone")
-        if seek then
-            addNamedWorkspaceObject("Seek", seek, nil, true)
-        end
-    end
-
-    if rooms then
-        for _, room in ipairs(rooms:GetChildren()) do
-            local roomNumber = tonumber(room.Name)
-            if not roomNumber or not current or math.abs(roomNumber - current) <= 1 then
-                if Enabled.Dupe then
-                    local dupe = room:FindFirstChild("SideroomDupe", true)
-                    if dupe then
-                        notifyEntity(dupe)
-                        addNamedWorkspaceObject("Dupe", dupe, room, true)
-                    end
-                end
-
-                if Enabled.Figure then
-                    local figure = room:FindFirstChild("FigureRig", true)
-                    if figure then
-                        notifyEntity(figure)
-                        addNamedWorkspaceObject("Figure", figure, room, true)
-                    end
-                end
-
-                if Enabled.Snare then
-                    local snare = room:FindFirstChild("Snare", true)
-                    if snare then addNamedWorkspaceObject("Snare", snare, room, true) end
-                end
-
-                if Enabled.Seek then
-                    local seek = room:FindFirstChild("SeekMovingNewClone", true)
-                    if seek then
-                        notifyEntity(seek)
-                        addNamedWorkspaceObject("Seek", seek, room, true)
-                    end
+    for _, kind in ipairs(enabledKinds) do
+        if Enabled[kind] then
+            for object in pairs(ESP[kind]) do
+                if not found[kind] or not found[kind][object] or not object.Parent then
+                    clearEntry(kind, object)
                 end
             end
+        else
+            clearKind(kind)
         end
     end
 end
@@ -849,11 +844,11 @@ local function scanRoom(room)
             end
         end
 
-        if Enabled.Key and roomVisible.Key and object.Name == "KeyObtain" then
+        if Enabled.Key and object.Name == "KeyObtain" then
             addObject("Key", object, room)
         end
 
-        if Enabled.Gold and roomVisible.Gold and object.Name == "GoldPile" then
+        if Enabled.Gold and object.Name == "GoldPile" then
             for _, levelObject in ipairs(object:GetChildren()) do
                 local level = tonumber(levelObject.Name)
                 if level and level >= (Hotel.GoldLevel or 1)
@@ -864,11 +859,11 @@ local function scanRoom(room)
             end
         end
 
-        if object.Name == "Bandage" and Enabled.Bandage and roomVisible.Key then
+        if object.Name == "Bandage" and Enabled.Bandage then
             addObject("Bandage", object, room)
         end
 
-        if object.Name == "Smoothie" and Enabled.Smoothie and roomVisible.Key then
+        if object.Name == "Smoothie" and Enabled.Smoothie then
             addObject("Smoothie", object, room)
         end
 
@@ -906,7 +901,13 @@ local function scanRoom(room)
         }
 
         local roomItemKind = roomItemMap[object.Name]
-        if roomItemKind and Enabled[roomItemKind] and roomVisible.Key
+        local decorativeBookcaseItem =
+            roomItemKind == "Lighter"
+            and object:FindFirstAncestor("Bookcase") ~= nil
+
+        if roomItemKind
+            and Enabled[roomItemKind]
+            and not decorativeBookcaseItem
             and object:FindFirstChild("ModulePrompt", true)
         then
             addNamedWorkspaceObject(roomItemKind, object, room, false)
@@ -934,7 +935,7 @@ local function isSelected(value, name)
         if #value > 0 then
             return table.find(value, name) ~= nil
         end
-        return value[name] ~= nil
+        return value[name] == true
     end
     return value == name
 end
@@ -957,6 +958,7 @@ local function notifyEntity(entity)
         or entity.Name == "Eyes" and "Eyes"
         or entity.Name == "SeekMovingNewClone" and "Seek"
         or entity.Name == "FigureRig" and "Figure"
+        or entity.Name == "Screech" and "Screech"
         or nil
     if not alias then
         return
@@ -983,6 +985,8 @@ local function notifyEntity(entity)
                     and "Seek has spawned."
                     or alias == "Figure"
                     and "Figure has spawned."
+                    or alias == "Screech"
+                    and "Screech has spawned."
                     or "Find a hiding spot.",
             Type = "Warning",
             Duration = 5,
@@ -1009,6 +1013,7 @@ local function scanEntityNotifications()
             or name == "SideroomDupe"
             or name == "SeekMovingNewClone"
             or name == "FigureRig"
+            or name == "Screech"
         then
             notifyEntity(object)
         end
@@ -1070,33 +1075,23 @@ local function scanEntities()
     end
 end
 local function refreshRoomVisibility()
-    local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
-    if not current then return end
-
-    for kind, objects in pairs(ESP) do
-        for object, entry in pairs(objects) do
-            if kind ~= "Rush" then
-                local room = entry.Room
-                if not room or not room.Parent or not isRoomVisible(kind, room) then
-                    clearEntry(kind, object)
-                end
-            end
-        end
-    end
-
+    -- Keep ESP for objects that still exist in Workspace.
+    -- Changing CurrentRoom must not delete previous-room ESP.
     scanAll()
 end
 
 scanAll = function()
     local rooms = getRooms()
 
-    if not rooms then
-        return
+    if rooms then
+        for _, room in ipairs(rooms:GetChildren()) do
+            scanRoom(room)
+        end
     end
 
-    for _, room in ipairs(rooms:GetChildren()) do
-        scanRoom(room)
-    end
+    scanDropItems()
+    scanSpecialHotelItems()
+    scanSpecialEntities()
 end
 
 clearKind = function(kind)
