@@ -25,22 +25,38 @@ function Connector:Load()
         return
     end
 
-    local modules = {
-        "Game/Main.lua",
-        "Game/Hotel.lua",
+    local Main = load("Game/Main.lua")
+
+    if Main and Main.Init then
+        local ok, err = pcall(function()
+            Main:Init(CoreInstance)
+        end)
+
+        if not ok then
+            warn("[JustXDoors] Game/Main.lua error: " .. tostring(err))
+        end
+    end
+
+    local HotelVisual = load("Game/Hotel/Visual.lua")
+    local HotelGame = load("Game/Hotel/Game.lua")
+    local HotelESP = load("Game/Hotel/ESP.lua")
+    local HotelNotifications = load("Game/Hotel/Notifications.lua")
+    local Hotel = load("Game/Hotel.lua")
+
+    local HotelModules = {
+        Visual = HotelVisual,
+        Game = HotelGame,
+        ESP = HotelESP,
+        Notifications = HotelNotifications,
     }
 
-    for _, path in ipairs(modules) do
-        local module = load(path)
+    if Hotel and Hotel.Init then
+        local ok, err = pcall(function()
+            Hotel:Init(CoreInstance, HotelModules)
+        end)
 
-        if module and module.Init then
-            local ok, err = pcall(function()
-                module:Init(CoreInstance)
-            end)
-
-            if not ok then
-                warn("[JustXDoors] " .. path .. " error: " .. tostring(err))
-            end
+        if not ok then
+            warn("[JustXDoors] Game/Hotel.lua error: " .. tostring(err))
         end
     end
 
