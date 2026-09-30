@@ -22,11 +22,6 @@ function Hotel:Init(core, modules)
         return self
     end
 
-    ESP:Init({ Core = Core })
-
-    self.ESP = ESP
-    self.Notifications = Notifications
-
     local hotelTab = Core:Tab({
         Name = "Hotel",
         Icon = "building-2",
@@ -36,6 +31,17 @@ function Hotel:Init(core, modules)
     if not hotelTab then
         warn("[JustXDoors Hotel] Failed to create Hotel tab.")
         return self
+    end
+
+    self.ESP = ESP
+    self.Notifications = Notifications
+
+    local espOK, espError = pcall(function()
+        ESP:Init({ Core = Core })
+    end)
+
+    if not espOK then
+        warn("[JustXDoors Hotel] ESP init failed: " .. tostring(espError))
     end
 
     local ctx = {
