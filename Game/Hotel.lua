@@ -106,7 +106,6 @@ function Hotel:Init(core, modules)
             local ok, result = pcall(function() return module:Create(ctx) end)
             if not ok or result == false then
                 warn("[JustXDoors Hotel] Failed to create UI module: " .. tostring(result))
-                return self
             end
         end
     end
