@@ -470,38 +470,54 @@ local function buildDoorProxy(entry, object)
     return proxy
 end
 
+local TwoDESP = {
+    Vitamins=true, Lighter=true, Candle=true, AlarmClock=true, Lockpick=true,
+    SkeletonKey=true, Shears=true, Battery=true, Bandage=true, Smoothie=true,
+    Flashlight=true, TipJar=true, RiftCandle=true, RiftSmoothie=true, RiftJar=true,
+    Donut=true, Crucifix=true,
+    Dupe=true, Eyes=true, SallyLingering=true, SallyMoving=true,
+    Seek=true, Figure=true, Snare=true, Screech=true,
+}
+
+local function add2DESP(entry, object, kind)
+    local part = getPart(object)
+    if not part then
+        return false
+    end
+
+    local box = Instance.new("BillboardGui")
+    box.Name = "JustXDoorsESP2D"
+    box.AlwaysOnTop = true
+    box.LightInfluence = 0
+    box.MaxDistance = 0
+    box.Size = UDim2.fromOffset(76, 76)
+    box.StudsOffset = Vector3.new(0, 0, 0)
+    box.Adornee = part
+    box.Parent = getHighlightContainer()
+
+    local frame = Instance.new("Frame")
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 2
+    frame.BorderColor3 = Colors[kind]
+    frame.Size = UDim2.fromScale(1, 1)
+    frame.Parent = box
+
+    entry.Highlights[#entry.Highlights + 1] = box
+    return true
+end
+
 local function addHighlight(entry, object, kind)
-    -- Eyes is rendered as a 2D object in the game, so a Roblox Highlight
-    -- cannot reliably render around it. Give it a real 2D ESP box instead.
-    if kind == "Eyes" then
-        local part = getPart(object)
-        if not part then
-            return
-        end
-
-        local box = Instance.new("BillboardGui")
-        box.Name = "JustXDoorsESP2D"
-        box.AlwaysOnTop = true
-        box.LightInfluence = 0
-        box.MaxDistance = 1000
-        box.Size = UDim2.fromOffset(72, 72)
-        box.StudsOffset = Vector3.new(0, 0, 0)
-        box.Adornee = part
-        box.Parent = getHighlightContainer()
-
-        local frame = Instance.new("Frame")
-        frame.BackgroundTransparency = 1
-        frame.BorderSizePixel = 2
-        frame.BorderColor3 = Colors.Eyes
-        frame.Size = UDim2.fromScale(1, 1)
-        frame.Parent = box
-
-        entry.Highlights[#entry.Highlights + 1] = box
+    -- Items and entities use BillboardGui ESP instead of Highlight.
+    -- Roblox silently stops rendering Highlight instances after the client
+    -- reaches its 255-Highlight limit; this was causing newly dropped items
+    -- and newly spawned entities to appear only after another ESP was disabled.
+    -- BillboardGui is a world-space 2D overlay and is not subject to that limit.
+    if TwoDESP[kind] then
+        add2DESP(entry, object, kind)
         return
     end
 
     local adornee
-
     if kind == "Doors" then
         adornee = buildDoorProxy(entry, object)
     else
