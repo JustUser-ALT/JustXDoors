@@ -602,6 +602,34 @@ local function addObject(kind, object, room)
 
     addHighlight(entry, object, kind)
 
+    local function ensureVisual()
+        if not object.Parent or ESP[kind][object] ~= entry then
+            return
+        end
+
+        local live = false
+        for _, visual in ipairs(entry.Highlights) do
+            if visual and visual.Parent then
+                live = true
+                break
+            end
+        end
+
+        if not live then
+            rebuildHighlights(entry, object, kind)
+        end
+
+        updateLabel(kind, object, entry)
+    end
+
+    -- Roblox can replicate the container/model before its renderable BasePart.
+    -- Retry on the next few frames instead of waiting for an unrelated ESP toggle.
+    task.defer(ensureVisual)
+    task.delay(0.05, ensureVisual)
+    task.delay(0.15, ensureVisual)
+    task.delay(0.35, ensureVisual)
+    task.delay(0.75, ensureVisual)
+
     if kind == "Doors" then
         entry.Connection = object.ChildAdded:Connect(function(child)
             if child:IsA("BasePart") and child.Name == "Door" then
@@ -1445,13 +1473,37 @@ local function setup()
     end)
 
     connect(workspace.ChildAdded, function(object)
-        if object.Name == "CurrentRooms" then
+        if object.Name == "Drops" then
+            connect(object.ChildAdded, function(drop)
+                task.defer(function()
+                    scanDropItems()
+                    if drop and drop.Parent then
+                        local map = {
+                            Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+                            AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
+                            Shears="Shears", Battery="Battery", Bandage="Bandage",
+                            Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
+                            RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
+                            Donut="Donut", Crucifix="Crucifix",
+                        }
+                        local kind = map[drop.Name]
+                        if kind and Enabled[kind] then
+                            addNamedWorkspaceObject(kind, drop, nil, false)
+                        end
+                    end
+                end)
+            end)
+            task.defer(scanDropItems)
+        elseif object.Name == "CurrentRooms" then
             task.defer(function() hookRooms(object) end)
         elseif object.Name == "RushMoving" or object.Name == "AmbushMoving"
             or object.Name == "Eyes" or object.Name == "SallyLingering"
-            or object.Name == "SallyMoving"
+            or object.Name == "SallyMoving" or object.Name == "Screech"
         then
             task.defer(function() scanEntities(); scanSpecialEntities() end)
+            task.delay(0.05, scanSpecialEntities)
+            task.delay(0.15, scanSpecialEntities)
+            task.delay(0.35, scanSpecialEntities)
         elseif object.Name == "Drops" then
             task.defer(scanDropItems)
         end
