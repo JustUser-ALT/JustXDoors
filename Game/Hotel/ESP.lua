@@ -688,10 +688,26 @@ local function scanDropItems()
         Crucifix = "Crucifix",
     }
 
-    for _, object in ipairs(drops:GetDescendants()) do
+    local seen = {}
+
+    local function scanDropObject(object)
+        if not object or seen[object] then
+            return
+        end
+        seen[object] = true
+
         local kind = map[object.Name]
         if kind and Enabled[kind] then
             addNamedWorkspaceObject(kind, object, nil, false)
+        end
+    end
+
+    -- Some dropped items are themselves the direct child of Drops.
+    -- GetDescendants() does not include that root object, so scan both levels.
+    for _, object in ipairs(drops:GetChildren()) do
+        scanDropObject(object)
+        for _, descendant in ipairs(object:GetDescendants()) do
+            scanDropObject(descendant)
         end
     end
 end
