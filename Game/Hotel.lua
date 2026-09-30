@@ -24,6 +24,9 @@ function Hotel:Init(core, modules)
 
     ESP:Init({ Core = Core })
 
+    self.ESP = ESP
+    self.Notifications = Notifications
+
     local ctx = {
         Core = Core,
         Elements = Elements,
@@ -102,6 +105,11 @@ function Hotel:Destroy()
     if self.ESP and type(self.ESP.Destroy) == "function" then
         self.ESP:Destroy()
     end
+    if self.Notifications and type(self.Notifications.Destroy) == "function" then
+        self.Notifications:Destroy()
+    end
+    self.ESP = nil
+    self.Notifications = nil
     self.Initialized = false
     table.clear(Elements)
     table.clear(Connections)
