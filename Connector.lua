@@ -52,17 +52,31 @@ function Connector:Load()
         end
     end
 
-    local HotelVisual = load("Game/Hotel/Visual.lua")
     local HotelGame = load("Game/Hotel/Game.lua")
     local HotelESP = load("Game/Hotel/ESP.lua")
     local HotelNotifications = load("Game/Hotel/Notifications.lua")
+
+    local HotelGameUI = load("Game/Hotel/UI/Game.lua")
+    local HotelVisualUI = load("Game/Hotel/UI/Visual.lua")
+    local HotelSettingsUI = load("Game/Hotel/UI/Settings.lua")
+    local HotelEntitiesUI = load("Game/Hotel/UI/Entities.lua")
+    local HotelNotificationsUI = load("Game/Hotel/UI/Notifications.lua")
+    local HotelAntiUI = load("Game/Hotel/UI/Anti.lua")
+
     local Hotel = load("Game/Hotel.lua")
 
     local HotelModules = {
-        Visual = HotelVisual,
         Game = HotelGame,
         ESP = HotelESP,
         Notifications = HotelNotifications,
+        UI = {
+            Game = HotelGameUI,
+            Visual = HotelVisualUI,
+            Settings = HotelSettingsUI,
+            Entities = HotelEntitiesUI,
+            Notifications = HotelNotificationsUI,
+            Anti = HotelAntiUI,
+        },
     }
 
     if Hotel and Hotel.Init then
