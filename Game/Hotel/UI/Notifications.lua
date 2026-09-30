@@ -15,14 +15,22 @@ function NotificationsUI:Create(ctx)
         MaxSelect = 8,
         Default = {},
         Search = true,
-        Callback = function() end,
+        Callback = function(value)
+            if ctx.Notifications and ctx.Notifications.SetSelected then
+                ctx.Notifications:SetSelected(value)
+            end
+        end,
     })
 
     ctx.Elements.NotifyEntities = page:Toggle({
         Name = "Notify Entities",
         Flag = "Hotel_NotifyEntities",
         Default = false,
-        Callback = function() end,
+        Callback = function(value)
+            if ctx.Notifications and ctx.Notifications.SetEnabled then
+                ctx.Notifications:SetEnabled(value)
+            end
+        end,
     })
 
     return true
