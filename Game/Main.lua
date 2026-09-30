@@ -60,7 +60,6 @@ local AnticheatDisabled = false
 local VelocityManipulationEnabled = false
 local VelocityManipulationMode = "Velocity"
 local ManipulateBody
-local PositionSpoofEnabled = false
 local CrouchSpoofEnabled = false
 local OldHipHeight = 2.396
 local getFloor
@@ -75,6 +74,7 @@ local CollisionClone
 local CollisionPart
 local CollisionPartClone
 local OriginalC1
+local CollisionCanCollideBackup = {}
 local InfiniteCrucifixEnabled = false
 local InfinitePromptContainer
 local InfiniteCrucifixRaycastParams = RaycastParams.new()
@@ -682,7 +682,50 @@ local function setupCollisionSpoof()
     end
 end
 
+local function restoreCollisionSpoof()
+    for part, original in pairs(CollisionCanCollideBackup) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = original
+            end)
+        end
+    end
+
+    table.clear(CollisionCanCollideBackup)
+
+    if Collision then
+        Collision.CanCollide = false
+    end
+
+    if CollisionClone then
+        CollisionClone.CanCollide = false
+        local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+        if cloneCrouch then
+            cloneCrouch.CanCollide = false
+        end
+    end
+
+    if CollisionPartClone then
+        CollisionPartClone.CanCollide = false
+    end
+
+    if Character and OriginalC1 then
+        local lowerTorso = Character:FindFirstChild("LowerTorso")
+        local rootMotor = lowerTorso and lowerTorso:FindFirstChild("Root")
+        if rootMotor then
+            pcall(function()
+                rootMotor.C1 = OriginalC1
+            end)
+        end
+    end
+end
+
 local function updateCollisionSpoof()
+    if not VelocityManipulationEnabled then
+        restoreCollisionSpoof()
+        return
+    end
+
     if not Character or not RootPart then
         return
     end
@@ -694,17 +737,17 @@ local function updateCollisionSpoof()
     end
 
     if getFloor() == "Fools" or getFloor() == "OldHotel" then
+        restoreCollisionSpoof()
         return
     end
 
     for _, part in ipairs(Character:GetChildren()) do
         if part:IsA("BasePart") then
+            if CollisionCanCollideBackup[part] == nil then
+                CollisionCanCollideBackup[part] = part.CanCollide
+            end
             part.CanCollide = false
         end
-    end
-
-    if not (PositionSpoofEnabled or VelocityManipulationEnabled) then
-        return
     end
 
     RootPart.CanCollide = false
@@ -714,14 +757,13 @@ local function updateCollisionSpoof()
     local rootMotor = lowerTorso and lowerTorso:FindFirstChild("Root")
 
     if rootMotor and OriginalC1 then
-        rootMotor.C1 = OriginalC1 * CFrame.new(0, PositionSpoofEnabled and -2.346 or 0, 0)
+        rootMotor.C1 = OriginalC1
     end
 
-    local spoofY = PositionSpoofEnabled and 2.328 or 0.18
-    Collision.Position = RootPart.Position + Vector3.new(0, spoofY, 0)
+    Collision.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
 
     if CollisionPart and CollisionPart:IsA("BasePart") then
-        CollisionPart.Position = RootPart.Position + Vector3.new(0, spoofY, 0)
+        CollisionPart.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
     end
 
     local crouch = Collision:FindFirstChild("CollisionCrouch")
@@ -729,21 +771,22 @@ local function updateCollisionSpoof()
 
     if crouch then
         crouch.CanCollide = false
-        crouch.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 1.328 or -0.982, 0)
+        crouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
     end
 
     if cloneCrouch then
-        cloneCrouch.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 0.75 or -0.982, 0)
+        cloneCrouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
     end
 
     CollisionClone.CollisionGroup = Collision.CollisionGroup
-    CollisionClone.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 1.75 or 0.18, 0)
+    CollisionClone.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
 
     local crouching = isCrouching()
-    CollisionClone.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or FlyEnabled or crouching)
+    CollisionClone.CanCollide = not (NoclipEnabled or FlyEnabled or crouching)
+
     if cloneCrouch then
         cloneCrouch.CollisionGroup = Collision.CollisionGroup
-        cloneCrouch.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or FlyEnabled or not crouching)
+        cloneCrouch.CanCollide = not (NoclipEnabled or FlyEnabled or not crouching)
     end
 end
 
@@ -976,34 +1019,35 @@ local function getFlyDirection()
     end
 
     local direction = Humanoid.MoveDirection
-
     if direction.Magnitude <= 0 then
         return Vector3.zero
     end
 
-    local cameraLook = camera.CFrame.LookVector
-    local cameraRight = camera.CFrame.RightVector
+    local look = camera.CFrame.LookVector
+    local right = camera.CFrame.RightVector
 
-    local forward = Vector3.new(cameraLook.X, 0, cameraLook.Z)
+    local flatRight = Vector3.new(right.X, 0, right.Z)
+    if flatRight.Magnitude <= 0.001 then
+        flatRight = Vector3.xAxis
+    else
+        flatRight = flatRight.Unit
+    end
 
-    if forward.Magnitude <= 0 then
+    -- Derive a stable horizontal forward vector from the camera's right vector.
+    -- The full LookVector is then used for forward/backward movement so
+    -- looking up/down makes the fly direction move vertically as well.
+    local flatForward = Vector3.yAxis:Cross(flatRight)
+    if flatForward.Magnitude <= 0.001 then
         return Vector3.zero
     end
+    flatForward = flatForward.Unit
 
-    forward = forward.Unit
+    local x = direction:Dot(flatRight)
+    local z = direction:Dot(flatForward)
 
-    local right = Vector3.new(cameraRight.X, 0, cameraRight.Z)
+    local result = flatRight * x + look * z
 
-    if right.Magnitude > 0 then
-        right = right.Unit
-    end
-
-    local x = direction:Dot(right)
-    local z = direction:Dot(forward)
-
-    local result = right * x + forward * z
-
-    if result.Magnitude <= 0 then
+    if result.Magnitude <= 0.001 then
         return Vector3.zero
     end
 
@@ -1647,11 +1691,16 @@ local function createUI()
 
         Callback = function(value)
             VelocityManipulationEnabled = value
+
             if value and not ManipulateBody then
                 setupManipulateBody()
             end
-            if not value and ManipulateBody then
-                ManipulateBody.Parent = nil
+
+            if not value then
+                if ManipulateBody then
+                    ManipulateBody.Parent = nil
+                end
+                restoreCollisionSpoof()
             end
         end,
     })
@@ -1714,17 +1763,6 @@ local function createUI()
     })
 
     bypass:Divider()
-
-    Elements.PositionSpoof = bypass:Toggle({
-        Name = "Position Spoof",
-        Flag = "Main_PositionSpoof",
-        Default = false,
-
-        Callback = function(value)
-            PositionSpoofEnabled = value
-            applyPositionSpoof(value)
-        end,
-    })
 
     Elements.CrouchSpoof = bypass:Toggle({
         Name = "Crouch Spoof",
@@ -2083,12 +2121,6 @@ local function setupConnections()
 
         setupManipulateBody()
 
-        if PositionSpoofEnabled then
-            task.defer(function()
-                applyPositionSpoof(true)
-            end)
-        end
-
         bindInfiniteJumpButton()
     end)
 
@@ -2295,7 +2327,7 @@ local function setupConnections()
             tryInfiniteCrucifix()
         end
 
-        if CrouchSpoofEnabled or PositionSpoofEnabled then
+        if CrouchSpoofEnabled then
             if tick() - CrouchThrottle > 0.1 then
                 CrouchThrottle = tick()
                 local remotes = getRemotes()
@@ -2364,7 +2396,6 @@ function Main:Destroy()
     AnticheatBypassEnabled = false
     resetAnticheatState()
     VelocityManipulationEnabled = false
-    PositionSpoofEnabled = false
     CrouchSpoofEnabled = false
     InfiniteItemsEnabled = false
     InfiniteItemsSelection = {}
