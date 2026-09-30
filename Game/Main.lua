@@ -391,9 +391,6 @@ local function makeInfinitePrompt(prompt)
     local fake = prompt:Clone()
     fake:SetAttribute("FakePrompt", true)
 
-    task.wait()
-    fake.Parent = prompt.Parent
-
     fake:SetAttribute("HoldDuration_Old", prompt:GetAttribute("HoldDuration_Old"))
     fake:SetAttribute("RequiresLineOfSight_Old", prompt:GetAttribute("RequiresLineOfSight_Old"))
     fake:SetAttribute("MaxActivationDistance_Old", prompt:GetAttribute("MaxActivationDistance_Old"))
@@ -405,15 +402,8 @@ local function makeInfinitePrompt(prompt)
     FakePrompts[fake] = prompt
     InfinitePromptObjects[prompt] = fake
 
-    if not InfinitePromptContainer then
-        InfinitePromptContainer = Instance.new("Folder")
-        InfinitePromptContainer.Name = "JustXDoorsPromptContainer"
-        InfinitePromptContainer.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player
-    end
-
-    pcall(function()
-        prompt.Parent = InfinitePromptContainer
-    end)
+    fake.Parent = prompt.Parent
+    prompt.Enabled = false
 
     local enabledConnection = prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
         if fake.Parent then
@@ -709,6 +699,10 @@ local function updateCollisionSpoof()
         if part:IsA("BasePart") then
             part.CanCollide = false
         end
+    end
+
+    if not (PositionSpoofEnabled or VelocityManipulationEnabled) then
+        return
     end
 
     RootPart.CanCollide = false
