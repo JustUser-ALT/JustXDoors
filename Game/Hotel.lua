@@ -602,7 +602,10 @@ local function isRoomVisible(kind, room)
         return number == current or number == current + 1
     end
 
-    if kind == "Key" or kind == "Gold" then
+    if kind == "Key" or kind == "Gold"
+        or kind == "Crucifix" or kind == "SallyToy"
+        or kind == "ElectricalKey" or kind == "BreakerPole"
+    then
         return number >= current - 1 and number <= current + 1
     end
 
@@ -741,6 +744,7 @@ local function scanSpecialEntities()
     if Enabled.SallyLingering then
         local sally = workspace:FindFirstChild("SallyLingering")
         if sally then
+            notifyEntity(sally)
             addNamedWorkspaceObject("SallyLingering", sally, nil, true)
         end
     end
@@ -748,7 +752,15 @@ local function scanSpecialEntities()
     if Enabled.SallyMoving then
         local sally = workspace:FindFirstChild("SallyMoving")
         if sally then
+            notifyEntity(sally)
             addNamedWorkspaceObject("SallyMoving", sally, nil, true)
+        end
+    end
+
+    if Enabled.Seek then
+        local seek = workspace:FindFirstChild("SeekMovingNewClone")
+        if seek then
+            addNamedWorkspaceObject("Seek", seek, nil, true)
         end
     end
 
@@ -867,6 +879,26 @@ local function scanRoom(room)
                     end
                 end
             end
+        end
+
+        local roomItemMap = {
+            Vitamins = "Vitamins",
+            Lighter = "Lighter",
+            Candle = "Candle",
+            AlarmClock = "AlarmClock",
+            Lockpick = "Lockpick",
+            SkeletonKey = "SkeletonKey",
+            Shears = "Shears",
+            RiftCandle = "RiftCandle",
+            RiftSmoothie = "RiftSmoothie",
+            RiftJar = "RiftJar",
+            Donut = "Donut",
+            Crucifix = "Crucifix",
+        }
+
+        local roomItemKind = roomItemMap[object.Name]
+        if roomItemKind and Enabled[roomItemKind] and roomVisible.Key then
+            addNamedWorkspaceObject(roomItemKind, object, room, false)
         end
 
         if object.Name == "VentGrate" and Enabled.VentGate and roomVisible.Drawers then
