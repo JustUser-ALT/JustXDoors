@@ -27,14 +27,25 @@ function Hotel:Init(core, modules)
     self.ESP = ESP
     self.Notifications = Notifications
 
+    local hotelTab = Core:Tab({
+        Name = "Hotel",
+        Icon = "building-2",
+        Type = "Grid",
+    })
+
+    if not hotelTab then
+        warn("[JustXDoors Hotel] Failed to create Hotel tab.")
+        return self
+    end
+
     local ctx = {
         Core = Core,
+        Tab = hotelTab,
         Elements = Elements,
         Enabled = ESP.Enabled,
         Colors = ESP.Colors,
         ESP = ESP.Objects,
         Display = ESP.Display,
-        Tab = nil,
         VisualPages = nil,
         EntityPages = nil,
         ApplyInteractables = function(selected) ESP:ApplyInteractables(selected) end,
