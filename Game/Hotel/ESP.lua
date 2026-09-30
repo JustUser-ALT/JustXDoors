@@ -907,10 +907,23 @@ local function scanRoom(room)
             roomItemKind == "Lighter"
             and object:FindFirstAncestor("Bookcase") ~= nil
 
+        -- Only the actual item container gets ESP. Nested parts/models with
+        -- the same name must never create a second label/highlight.
+        local itemRoot = object
+        if roomItemKind then
+            local parent = object.Parent
+            while parent and parent ~= room do
+                if parent.Name == object.Name and parent:FindFirstChild("ModulePrompt", true) then
+                    itemRoot = parent
+                end
+                parent = parent.Parent
+            end
+        end
+
         if roomItemKind
             and Enabled[roomItemKind]
+            and itemRoot == object
             and not decorativeBookcaseItem
-            and not hasSameItemAncestor(object, room, object.Name)
             and object:FindFirstChild("ModulePrompt", true)
         then
             addNamedWorkspaceObject(roomItemKind, object, room, false)
