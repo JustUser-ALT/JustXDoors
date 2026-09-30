@@ -1448,16 +1448,34 @@ end
 function Module:ApplyInteractables(selected) applyInteractables(selected) end
 function Module:ApplyItems(selected) applyItems(selected) end
 function Module:SetEntities(state)
-    Enabled.Rush = state.Rush == true
-    Enabled.Ambush = state.Ambush == true
-    Enabled.Dupe = state.Dupe == true
-    Enabled.Eyes = state.Eyes == true
-    Enabled.SallyLingering = state.Sally == true
-    Enabled.SallyMoving = state.Sally == true
-    Enabled.Seek = state.Seek == true
-    Enabled.Figure = state.Figure == true
-    Enabled.Snare = state.Snare == true
-    Enabled.Screech = state.Screech == true
+    local selected = {}
+    if type(state) == "table" then
+        if #state > 0 then
+            for _, name in ipairs(state) do
+                selected[name] = true
+            end
+        else
+            for name, value in pairs(state) do
+                if value == true then
+                    selected[name] = true
+                end
+            end
+        end
+    elseif type(state) == "string" then
+        selected[state] = true
+    end
+
+    Enabled.Rush = selected.Rush == true
+    Enabled.Ambush = selected.Ambush == true
+    Enabled.Dupe = selected.Dupe == true
+    Enabled.Eyes = selected.Eyes == true
+    Enabled.SallyLingering = selected.Sally == true
+    Enabled.SallyMoving = selected.Sally == true
+    Enabled.Seek = selected.Seek == true
+    Enabled.Figure = selected.Figure == true
+    Enabled.Snare = selected.Snare == true
+    Enabled.Screech = selected.Screech == true
+
     scanEntities()
     scanSpecialEntities()
 end
