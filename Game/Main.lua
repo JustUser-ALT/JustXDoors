@@ -39,6 +39,12 @@ local FullBrightEnabled = false
 local NoFogEnabled = false
 local CurrentBrightness = 35
 
+local RemoveFootstepSoundsEnabled = false
+local RemoveInteractingSoundsEnabled = false
+local RemoveJamminMusicEnabled = false
+local FootstepConnection
+local JamMuffle
+
 local LightingBackup
 local AtmosphereBackup = {}
 
@@ -112,6 +118,125 @@ end
 local function getRemotes()
     return ReplicatedStorage:FindFirstChild("RemotesFolder")
 end
+
+local function setFootstepSoundVolume(sound, muted)
+    if sound and sound:IsA("Sound") and sound.Name == "Sound" then
+        sound.Volume = muted and 0 or sound:GetAttribute("JustXDoors_FootstepVolume") or sound.Volume
+    end
+end
+
+local function applyRemoveFootstepSounds()
+    if not Character then
+        return
+    end
+
+    for _, object in ipairs(Character:GetChildren()) do
+        if object:IsA("Sound") and object.Name == "Sound" then
+            if object:GetAttribute("JustXDoors_FootstepVolume") == nil then
+                object:SetAttribute("JustXDoors_FootstepVolume", object.Volume)
+            end
+            object.Volume = RemoveFootstepSoundsEnabled and 0 or object:GetAttribute("JustXDoors_FootstepVolume")
+        end
+    end
+end
+
+local function setupFootstepSounds()
+    disconnect(FootstepConnection)
+    FootstepConnection = nil
+
+    if not Character then
+        return
+    end
+
+    FootstepConnection = Character.ChildAdded:Connect(function(object)
+        if object:IsA("Sound") and object.Name == "Sound" then
+            if object:GetAttribute("JustXDoors_FootstepVolume") == nil then
+                object:SetAttribute("JustXDoors_FootstepVolume", object.Volume)
+            end
+
+            if RemoveFootstepSoundsEnabled then
+                object.Volume = 0
+            end
+        end
+    end)
+
+    applyRemoveFootstepSounds()
+end
+
+local function applyRemoveInteractingSounds()
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+    local mainUI = playerGui and playerGui:FindFirstChild("MainUI")
+    local initiator = mainUI and mainUI:FindFirstChild("Initiator")
+    local mainGame = initiator and initiator:FindFirstChild("Main_Game")
+
+    if not mainGame then
+        return
+    end
+
+    local promptService = mainGame:FindFirstChild("PromptService")
+    if promptService then
+        local triggered = promptService:FindFirstChild("Triggered")
+        local holding = promptService:FindFirstChild("Holding")
+        local notification = promptService:FindFirstChild("Notification")
+
+        if triggered and triggered:IsA("Sound") then
+            if triggered:GetAttribute("JustXDoors_OriginalVolume") == nil then
+                triggered:SetAttribute("JustXDoors_OriginalVolume", triggered.Volume)
+            end
+            triggered.Volume = RemoveInteractingSoundsEnabled and 0 or triggered:GetAttribute("JustXDoors_OriginalVolume")
+        end
+
+        if holding and holding:IsA("Sound") then
+            if holding:GetAttribute("JustXDoors_OriginalVolume") == nil then
+                holding:SetAttribute("JustXDoors_OriginalVolume", holding.Volume)
+            end
+            holding.Volume = RemoveInteractingSoundsEnabled and 0 or holding:GetAttribute("JustXDoors_OriginalVolume")
+        end
+
+        if notification and notification:IsA("Sound") then
+            if notification:GetAttribute("JustXDoors_OriginalVolume") == nil then
+                notification:SetAttribute("JustXDoors_OriginalVolume", notification.Volume)
+            end
+            notification.Volume = RemoveInteractingSoundsEnabled and 0 or notification:GetAttribute("JustXDoors_OriginalVolume")
+        end
+    end
+
+    local reminder = mainGame:FindFirstChild("Reminder")
+    local caption = reminder and reminder:FindFirstChild("Caption")
+
+    if caption and caption:IsA("Sound") then
+        if caption:GetAttribute("JustXDoors_OriginalVolume") == nil then
+            caption:SetAttribute("JustXDoors_OriginalVolume", caption.Volume)
+        end
+        caption.Volume = RemoveInteractingSoundsEnabled and 0 or caption:GetAttribute("JustXDoors_OriginalVolume")
+    end
+end
+
+local function applyRemoveJamminMusic()
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+    local mainUI = playerGui and playerGui:FindFirstChild("MainUI")
+    local initiator = mainUI and mainUI:FindFirstChild("Initiator")
+    local mainGame = initiator and initiator:FindFirstChild("Main_Game")
+    local health = mainGame and mainGame:FindFirstChild("Health")
+    local jam = health and health:FindFirstChild("Jam")
+
+    if jam and jam:IsA("Sound") then
+        if jam:GetAttribute("JustXDoors_OriginalVolume") == nil then
+            jam:SetAttribute("JustXDoors_OriginalVolume", jam.Volume)
+        end
+        jam.Volume = RemoveJamminMusicEnabled and 0 or jam:GetAttribute("JustXDoors_OriginalVolume")
+    end
+
+    local soundService = game:GetService("SoundService")
+    local main = soundService:FindFirstChild("Main")
+    local jamming = main and main:FindFirstChild("Jamming")
+
+    if jamming and jamming:IsA("EqualizerSoundEffect") then
+        JamMuffle = jamming
+        jamming.Enabled = RemoveJamminMusicEnabled and false or false
+    end
+end
+
 
 local function isInfiniteItemSelected(name)
     if type(InfiniteItemsSelection) ~= "table" then
@@ -1671,8 +1796,39 @@ local function createUI()
 
     local audio = visualPages:Page("Audio")
 
-    audio:Label({
-        Text = "Audio features.",
+    Elements.RemoveFootstepSounds = audio:Toggle({
+        Name = "Remove Footstep Sounds",
+        Flag = "Main_RemoveFootstepSounds",
+        Default = false,
+
+        Callback = function(value)
+            RemoveFootstepSoundsEnabled = value
+            applyRemoveFootstepSounds()
+        end,
+    })
+
+    Elements.RemoveInteractingSounds = audio:Toggle({
+        Name = "Remove Interacting Sounds",
+        Flag = "Main_RemoveInteractingSounds",
+        Default = false,
+
+        Callback = function(value)
+            RemoveInteractingSoundsEnabled = value
+            applyRemoveInteractingSounds()
+        end,
+    })
+
+    audio:Divider()
+
+    Elements.RemoveJamminMusic = audio:Toggle({
+        Name = "Remove Jammin Music",
+        Flag = "Main_RemoveJamminMusic",
+        Default = false,
+
+        Callback = function(value)
+            RemoveJamminMusicEnabled = value
+            applyRemoveJamminMusic()
+        end,
     })
 
     local misc = Tab:Section({
@@ -1868,6 +2024,9 @@ local function setupConnections()
     snapshotPartProperties()
     setupFlyBody()
     setupCollisionSpoof()
+    setupFootstepSounds()
+    applyRemoveInteractingSounds()
+    applyRemoveJamminMusic()
 
     connect(Player.CharacterAdded, function(character)
         Character = character
@@ -1889,6 +2048,9 @@ local function setupConnections()
         CollisionPartClone = nil
         OriginalC1 = nil
         setupCollisionSpoof()
+        setupFootstepSounds()
+        applyRemoveInteractingSounds()
+        applyRemoveJamminMusic()
 
         if FlyEnabled then
             disableFly()
@@ -2016,6 +2178,8 @@ local function setupConnections()
         if object.Name == "MainUI" then
             task.wait(0.1)
             bindInfiniteJumpButton()
+            applyRemoveInteractingSounds()
+            applyRemoveJamminMusic()
         end
     end)
 
@@ -2219,6 +2383,12 @@ function Main:Destroy()
 
     FullBrightEnabled = false
     NoFogEnabled = false
+    RemoveFootstepSoundsEnabled = false
+    RemoveInteractingSoundsEnabled = false
+    RemoveJamminMusicEnabled = false
+
+    disconnect(FootstepConnection)
+    FootstepConnection = nil
 
     restoreLighting()
 
