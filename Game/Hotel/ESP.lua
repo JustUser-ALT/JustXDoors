@@ -609,6 +609,17 @@ local function hasDrawerContainer(object)
     return object and object:FindFirstChild("DrawerContainer", true) ~= nil
 end
 
+local function hasSameItemAncestor(object, room, itemName)
+    local parent = object.Parent
+    while parent and parent ~= room do
+        if parent.Name == itemName and parent:FindFirstChild("ModulePrompt", true) then
+            return true
+        end
+        parent = parent.Parent
+    end
+    return false
+end
+
 local function isRoomVisible(kind, room)
     local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
     local number = tonumber(room and room.Name)
@@ -899,6 +910,7 @@ local function scanRoom(room)
         if roomItemKind
             and Enabled[roomItemKind]
             and not decorativeBookcaseItem
+            and not hasSameItemAncestor(object, room, object.Name)
             and object:FindFirstChild("ModulePrompt", true)
         then
             addNamedWorkspaceObject(roomItemKind, object, room, false)
