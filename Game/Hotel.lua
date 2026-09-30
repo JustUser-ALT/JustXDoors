@@ -1,23 +1,4 @@
---[[
-    JustXDoors — Game/Hotel/Hotel.lua
 
-    ESP architecture (rewrite):
-    ─────────────────────────────────────────────────────────────
-    • NO Highlight polling / no per-frame loops for ESP.
-    • ONE DescendantAdded connection on workspace (like Abyssal's
-      HandleObject pattern) + workspace.ChildAdded for entities.
-    • Highlights stored in a WeakTable-style registry keyed by the
-      adornee instance so GC cleans them if the part disappears.
-    • A Heartbeat cleaner runs every 0.5 s to prune dead refs
-      (same as Abyssal's Cleaner loop).
-    • Dropped items: watch workspace.Drops.ChildAdded and
-      Drops.ChildRemoved so pick-up / throw re-fires correctly
-      without needing toggle cycle.
-    • Eyes: detected by workspace.ChildAdded, name "Eyes" OR
-      "BackdoorEyes" — no PrimaryPart required (Eyes has none).
-    • Entity ESP uses Highlight (not BillboardGui) parented to the
-      entity model itself, auto-cleaned on Destroying.
-]]
 
 local Hotel = {}
 
