@@ -738,10 +738,10 @@ local function updateCollisionSpoof()
     CollisionClone.Position = RootPart.Position + Vector3.new(0, PositionSpoofEnabled and 1.75 or 0.18, 0)
 
     local crouching = isCrouching()
-    CollisionClone.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or crouching)
+    CollisionClone.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or FlyEnabled or crouching)
     if cloneCrouch then
         cloneCrouch.CollisionGroup = Collision.CollisionGroup
-        cloneCrouch.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or not crouching)
+        cloneCrouch.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or FlyEnabled or not crouching)
     end
 end
 
