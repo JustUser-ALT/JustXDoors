@@ -675,13 +675,6 @@ end
 
 local function scanDropItems()
     local drops = workspace:FindFirstChild("Drops")
-    if not drops then
-        return
-    end
-
-    -- Only direct children of Drops are valid dropped items.
-    -- Do not scan descendants: Candle/BatteryPack can contain nested
-    -- objects with item-like names.
     local map = {
         Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
         AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
@@ -691,13 +684,37 @@ local function scanDropItems()
         Donut="Donut", Crucifix="Crucifix",
     }
 
-    for _, object in ipairs(drops:GetChildren()) do
-        local kind = map[object.Name]
-        if kind and Enabled[kind] then
-            addNamedWorkspaceObject(kind, object, nil, false)
+    local found = {}
+
+    if drops then
+        -- A dropped item is valid only when it is a direct child of Drops.
+        -- This deliberately excludes BatteryPack and nested batteries.
+        for _, object in ipairs(drops:GetChildren()) do
+            local kind = map[object.Name]
+            if kind and Enabled[kind] then
+                found[kind] = found[kind] or {}
+                found[kind][object] = true
+                addNamedWorkspaceObject(kind, object, nil, false)
+            end
+        end
+    end
+
+    -- Reconcile the existing entries. This is the important part:
+    -- an item moved into inventory/another container must disappear from
+    -- dropped-item ESP immediately, without requiring another ESP toggle.
+    for kind in pairs(map) do
+        local objects = ESP[kind]
+        if objects then
+            for object in pairs(objects) do
+                local keep = found[kind] and found[kind][object]
+                if not keep then
+                    clearEntry(kind, object)
+                end
+            end
         end
     end
 end
+
 local function scanSpecialHotelItems()
     local rooms = getRooms()
     if not rooms then
