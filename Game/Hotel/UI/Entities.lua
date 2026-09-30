@@ -7,7 +7,7 @@ function EntitiesUI:Create(ctx)
     if not pages then
         pages = ctx.Tab:MultiSection({
             Pages = {"Entity", "Anti"},
-            Column = 2,
+            Column = 3,
             Icon = "shield",
         })
         ctx.EntityPages = pages
