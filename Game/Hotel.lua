@@ -20,7 +20,30 @@ local ESP = {
     Flashlight = {},
     TipJar = {},
     Ambush = {},
+    Vitamins = {},
+    Lighter = {},
+    Candle = {},
+    AlarmClock = {},
+    Lockpick = {},
+    SkeletonKey = {},
+    Shears = {},
+    RiftCandle = {},
+    RiftSmoothie = {},
+    RiftJar = {},
+    Donut = {},
+    Crucifix = {},
+    SallyToy = {},
+    ElectricalKey = {},
+    BreakerPole = {},
+    Dupe = {},
+    Eyes = {},
+    SallyLingering = {},
+    SallyMoving = {},
+    Seek = {},
+    Figure = {},
+    Snare = {},
     VentGate = {},
+    Toolshed = {},
     Lever = {},
     Rush = {},
 }
@@ -34,6 +57,30 @@ local Enabled = {
     Chest = false,
     LockedChest = false,
     Rush = false,
+    Ambush = false,
+    Vitamins = false,
+    Lighter = false,
+    Candle = false,
+    AlarmClock = false,
+    Lockpick = false,
+    SkeletonKey = false,
+    Shears = false,
+    RiftCandle = false,
+    RiftSmoothie = false,
+    RiftJar = false,
+    Donut = false,
+    Crucifix = false,
+    SallyToy = false,
+    ElectricalKey = false,
+    BreakerPole = false,
+    Dupe = false,
+    Eyes = false,
+    SallyLingering = false,
+    SallyMoving = false,
+    Seek = false,
+    Figure = false,
+    Snare = false,
+    Toolshed = false,
 }
 
 Hotel.GoldLevel = 1
@@ -54,6 +101,29 @@ local Colors = {
     Smoothie = Color3.fromRGB(190, 100, 255),
     Flashlight = Color3.fromRGB(255, 245, 170),
     TipJar = Color3.fromRGB(255, 190, 90),
+    Vitamins = Color3.fromRGB(80, 255, 120),
+    Lighter = Color3.fromRGB(255, 170, 70),
+    Candle = Color3.fromRGB(255, 220, 150),
+    AlarmClock = Color3.fromRGB(255, 90, 120),
+    Lockpick = Color3.fromRGB(150, 150, 160),
+    SkeletonKey = Color3.fromRGB(210, 210, 220),
+    Shears = Color3.fromRGB(180, 220, 255),
+    RiftCandle = Color3.fromRGB(180, 100, 255),
+    RiftSmoothie = Color3.fromRGB(210, 100, 255),
+    RiftJar = Color3.fromRGB(255, 130, 220),
+    Donut = Color3.fromRGB(255, 150, 190),
+    Crucifix = Color3.fromRGB(240, 240, 255),
+    SallyToy = Color3.fromRGB(255, 120, 180),
+    ElectricalKey = Color3.fromRGB(80, 220, 255),
+    BreakerPole = Color3.fromRGB(255, 240, 100),
+    Dupe = Color3.fromRGB(255, 130, 60),
+    Eyes = Color3.fromRGB(180, 90, 255),
+    SallyLingering = Color3.fromRGB(255, 120, 180),
+    SallyMoving = Color3.fromRGB(255, 70, 150),
+    Seek = Color3.fromRGB(70, 150, 255),
+    Figure = Color3.fromRGB(255, 80, 80),
+    Snare = Color3.fromRGB(100, 220, 100),
+    Toolshed = Color3.fromRGB(160, 110, 70),
     Rush = Color3.fromRGB(255, 70, 70),
     Ambush = Color3.fromRGB(190, 70, 255),
     VentGate = Color3.fromRGB(100, 190, 255),
@@ -181,12 +251,44 @@ local function getLabel(kind, object)
                 text[#text + 1] = "Flashlight"
             elseif kind == "TipJar" then
                 text[#text + 1] = "Tip Jar"
+            elseif kind == "RiftCandle" then
+                text[#text + 1] = "Rift Candle"
+            elseif kind == "RiftSmoothie" then
+                text[#text + 1] = "Rift Smoothie"
+            elseif kind == "RiftJar" then
+                text[#text + 1] = "Rift Jar"
+            elseif kind == "SkeletonKey" then
+                text[#text + 1] = "Skeleton Key"
+            elseif kind == "SallyToy" then
+                text[#text + 1] = "Sally Toy"
+            elseif kind == "ElectricalKey" then
+                text[#text + 1] = "Electrical Key"
+            elseif kind == "BreakerPole" then
+                text[#text + 1] = "Breaker Pole"
+            elseif kind == "SallyLingering" then
+                text[#text + 1] = "Sally"
+            elseif kind == "SallyMoving" then
+                text[#text + 1] = "Sally"
             elseif kind == "VentGate" then
                 text[#text + 1] = "Vent Gate"
             elseif kind == "Lever" then
                 text[#text + 1] = "Lever"
             elseif kind == "Rush" then
                 text[#text + 1] = "Rush"
+            elseif kind == "Ambush" then
+                text[#text + 1] = "Ambush"
+            elseif kind == "Dupe" then
+                text[#text + 1] = "Dupe"
+            elseif kind == "Eyes" then
+                text[#text + 1] = "Eyes"
+            elseif kind == "Seek" then
+                text[#text + 1] = "Seek"
+            elseif kind == "Figure" then
+                text[#text + 1] = "Figure"
+            elseif kind == "Snare" then
+                text[#text + 1] = "Snare"
+            elseif kind == "Toolshed" then
+                text[#text + 1] = "Toolshed"
             else
                 text[#text + 1] = kind
             end
@@ -507,6 +609,177 @@ local function isRoomVisible(kind, room)
     return number == current
 end
 
+local function isInsidePlayerInventory(object)
+    local backpack = Players.LocalPlayer:FindFirstChildOfClass("Backpack")
+    if backpack and object:IsDescendantOf(backpack) then
+        return true
+    end
+
+    local character = Players.LocalPlayer.Character
+    if character and object:IsDescendantOf(character) then
+        return true
+    end
+
+    local playerModel = workspace:FindFirstChild(Players.LocalPlayer.Name)
+    if playerModel and object:IsDescendantOf(playerModel) then
+        return true
+    end
+
+    return false
+end
+
+local function addNamedWorkspaceObject(kind, object, room, allowInventory)
+    if not object or not object.Parent then
+        return
+    end
+
+    if not allowInventory and isInsidePlayerInventory(object) then
+        return
+    end
+
+    addObject(kind, object, room)
+end
+
+local function scanDropItems()
+    local drops = workspace:FindFirstChild("Drops")
+    if not drops then
+        return
+    end
+
+    local map = {
+        Vitamins = "Vitamins",
+        Lighter = "Lighter",
+        Candle = "Candle",
+        AlarmClock = "AlarmClock",
+        Lockpick = "Lockpick",
+        SkeletonKey = "SkeletonKey",
+        Shears = "Shears",
+        RiftCandle = "RiftCandle",
+        RiftSmoothie = "RiftSmoothie",
+        RiftJar = "RiftJar",
+        Donut = "Donut",
+        Crucifix = "Crucifix",
+    }
+
+    for _, object in ipairs(drops:GetChildren()) do
+        local kind = map[object.Name]
+        if kind and Enabled[kind] then
+            addNamedWorkspaceObject(kind, object, nil, false)
+        end
+    end
+end
+
+local function scanSpecialHotelItems()
+    local rooms = getRooms()
+    if not rooms then
+        return
+    end
+
+    local room1 = rooms:FindFirstChild("1")
+    if Enabled.Crucifix and room1 and isRoomVisible("Crucifix", room1) then
+        local wall = room1:FindFirstChild("CrucifixWall", true)
+        if wall then
+            addNamedWorkspaceObject("Crucifix", wall, room1, false)
+        end
+    end
+
+    local room28 = rooms:FindFirstChild("28")
+    if Enabled.SallyToy and room28 and isRoomVisible("SallyToy", room28) then
+        local toy = room28:FindFirstChild("SallyToyObtain", true)
+        if toy then
+            addNamedWorkspaceObject("SallyToy", toy, room28, false)
+        end
+    end
+
+    local room100 = rooms:FindFirstChild("100")
+    if Enabled.ElectricalKey and room100 and isRoomVisible("ElectricalKey", room100) then
+        local key = room100:FindFirstChild("ElectricalKeyObtain", true)
+        if key then
+            addNamedWorkspaceObject("ElectricalKey", key, room100, false)
+        end
+    end
+
+    if Enabled.BreakerPole then
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object.Name == "LiveBreakerPolePickup" then
+                local room = object:FindFirstAncestorWhichIsA("Model")
+                while room and tonumber(room.Name) == nil and room.Parent do
+                    room = room.Parent
+                end
+                if room and isRoomVisible("BreakerPole", room) then
+                    addNamedWorkspaceObject("BreakerPole", object, room, false)
+                end
+            end
+        end
+    end
+end
+
+local function scanSpecialEntities()
+    local rooms = getRooms()
+    local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
+
+    local wanted = {
+        Dupe = Enabled.Dupe,
+        Figure = Enabled.Figure,
+        Snare = Enabled.Snare,
+        Seek = Enabled.Seek,
+    }
+
+    for kind, enabled in pairs(wanted) do
+        if enabled then
+            clearKind(kind)
+        end
+    end
+
+    if Enabled.Eyes then
+        local eyes = workspace:FindFirstChild("Eyes")
+        if eyes then
+            addNamedWorkspaceObject("Eyes", eyes, nil, true)
+        end
+    end
+
+    if Enabled.SallyLingering then
+        local sally = workspace:FindFirstChild("SallyLingering")
+        if sally then
+            addNamedWorkspaceObject("SallyLingering", sally, nil, true)
+        end
+    end
+
+    if Enabled.SallyMoving then
+        local sally = workspace:FindFirstChild("SallyMoving")
+        if sally then
+            addNamedWorkspaceObject("SallyMoving", sally, nil, true)
+        end
+    end
+
+    if rooms then
+        for _, room in ipairs(rooms:GetChildren()) do
+            local roomNumber = tonumber(room.Name)
+            if not roomNumber or not current or math.abs(roomNumber - current) <= 1 then
+                if Enabled.Dupe then
+                    local dupe = room:FindFirstChild("SideroomDupe", true)
+                    if dupe then addNamedWorkspaceObject("Dupe", dupe, room, true) end
+                end
+
+                if Enabled.Figure then
+                    local figure = room:FindFirstChild("FigureRig", true)
+                    if figure then addNamedWorkspaceObject("Figure", figure, room, true) end
+                end
+
+                if Enabled.Snare then
+                    local snare = room:FindFirstChild("Snare", true)
+                    if snare then addNamedWorkspaceObject("Snare", snare, room, true) end
+                end
+
+                if Enabled.Seek then
+                    local seek = room:FindFirstChild("SeekMovingNewClone", true)
+                    if seek then addNamedWorkspaceObject("Seek", seek, room, true) end
+                end
+            end
+        end
+    end
+end
+
 local function scanRoom(room)
     if not room or not room.Parent then
         return
@@ -537,8 +810,14 @@ local function scanRoom(room)
             addObject("Drawers", object, room)
         end
 
-        if Enabled.Closets and roomVisible.Closets and object.Name == "Wardrobe" then
+        if Enabled.Closets and roomVisible.Closets
+            and (object.Name == "Wardrobe" or object.Name == "Toolshed")
+        then
             addObject("Closets", object, room)
+        end
+
+        if Enabled.Toolshed and roomVisible.Closets and object.Name == "Toolshed_Small" then
+            addObject("Toolshed", object, room)
         end
 
         if (Enabled.Chest or Enabled.LockedChest) and roomVisible.Drawers then
@@ -626,7 +905,12 @@ local function notifyEntity(entity)
         return
     end
 
-    local alias = entity.Name == "RushMoving" and "Rush" or entity.Name == "AmbushMoving" and "Ambush" or nil
+    local alias =
+        entity.Name == "RushMoving" and "Rush"
+        or entity.Name == "AmbushMoving" and "Ambush"
+        or entity.Name == "SallyLingering" and "Sally"
+        or entity.Name == "SallyMoving" and "Sally"
+        or nil
     if not alias then
         return
     end
@@ -641,7 +925,7 @@ local function notifyEntity(entity)
     if Core then
         Core:Notify({
             Title = "Entity '" .. alias .. "' has spawned.",
-            Desc = "Find a hiding spot.",
+            Desc = alias == "Sally" and (entity.Name == "SallyLingering" and "Sally will spawn in a few rooms." or "Sally has spawned.") or "Find a hiding spot.",
             Type = "Warning",
             Duration = 5,
         })
@@ -764,6 +1048,7 @@ local function applyInteractables(selected)
     local lockedChest = false
     local ventGate = false
     local lever = false
+    local toolshed = false
 
     local function enable(value)
         if value == "Doors" then doors = true
@@ -773,6 +1058,7 @@ local function applyInteractables(selected)
         elseif value == "LockedChest" then lockedChest = true
         elseif value == "Vent Gate" then ventGate = true
         elseif value == "Lever" then lever = true
+        elseif value == "Toolshed" then toolshed = true
         elseif value == "All" then
             doors = true
             drawers = true
@@ -781,6 +1067,7 @@ local function applyInteractables(selected)
             lockedChest = true
             ventGate = true
             lever = true
+            toolshed = true
         end
     end
 
@@ -797,6 +1084,7 @@ local function applyInteractables(selected)
             if selected.LockedChest == true then lockedChest = true end
             if selected["Vent Gate"] == true then ventGate = true end
             if selected.Lever == true then lever = true end
+            if selected.Toolshed == true then toolshed = true end
             if selected.All == true then
                 doors = true
                 drawers = true
@@ -818,6 +1106,7 @@ local function applyInteractables(selected)
     Enabled.LockedChest = lockedChest
     Enabled.VentGate = ventGate
     Enabled.Lever = lever
+    Enabled.Toolshed = toolshed
 
     setKind("Doors", doors)
     setKind("Drawers", drawers)
@@ -825,8 +1114,9 @@ local function applyInteractables(selected)
     clearKind("Chest")
     clearKind("VentGate")
     clearKind("Lever")
+    clearKind("Toolshed")
 
-    if chest or lockedChest or ventGate or lever then
+    if chest or lockedChest or ventGate or lever or toolshed then
         scanAll()
     end
 end
@@ -838,6 +1128,12 @@ local function applyItems(selected)
     local smoothie = false
     local flashlight = false
     local tipJar = false
+    local itemFlags = {
+        Vitamins=false, Lighter=false, Candle=false, AlarmClock=false,
+        Lockpick=false, SkeletonKey=false, Shears=false,
+        RiftCandle=false, RiftSmoothie=false, RiftJar=false, Donut=false,
+        Crucifix=false, SallyToy=false, ElectricalKey=false, BreakerPole=false,
+    }
 
     local function enable(value)
         if value == "Key" then
@@ -852,6 +1148,18 @@ local function applyItems(selected)
             flashlight = true
         elseif value == "Tip Jar" then
             tipJar = true
+        else
+            local map = {
+                Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+                AlarmClock="AlarmClock", Lockpick="Lockpick",
+                ["Skeleton Key"]="SkeletonKey", Shears="Shears",
+                ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
+                ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
+                ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
+                ["Breaker Pole"]="BreakerPole",
+            }
+            local key = map[value]
+            if key then itemFlags[key] = true end
         end
     end
 
@@ -869,6 +1177,18 @@ local function applyItems(selected)
             if selected.Smoothie == true then smoothie = true end
             if selected.Flashlight == true then flashlight = true end
             if selected["Tip Jar"] == true then tipJar = true end
+            local map = {
+                Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+                AlarmClock="AlarmClock", Lockpick="Lockpick",
+                ["Skeleton Key"]="SkeletonKey", Shears="Shears",
+                ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
+                ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
+                ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
+                ["Breaker Pole"]="BreakerPole",
+            }
+            for label, key in pairs(map) do
+                if selected[label] == true then itemFlags[key] = true end
+            end
         end
     else
         enable(selected)
@@ -880,6 +1200,9 @@ local function applyItems(selected)
     Enabled.Smoothie = smoothie
     Enabled.Flashlight = flashlight
     Enabled.TipJar = tipJar
+    for key, value in pairs(itemFlags) do
+        Enabled[key] = value
+    end
     Hotel.GoldLevel = goldLevel or 1
 
     clearKind("Key")
@@ -969,6 +1292,16 @@ local function hookRooms(rooms)
             or object.Name == "GoldPile"
             or object.Name == "Bandage"
             or object.Name == "Smoothie"
+            or object.Name == "Toolshed"
+            or object.Name == "Toolshed_Small"
+            or object.Name == "SideroomDupe"
+            or object.Name == "FigureRig"
+            or object.Name == "Snare"
+            or object.Name == "SeekMovingNewClone"
+            or object.Name == "CrucifixWall"
+            or object.Name == "SallyToyObtain"
+            or object.Name == "ElectricalKeyObtain"
+            or object.Name == "LiveBreakerPolePickup"
             or object.Name == "VentGrate"
             or object.Name == "LeverForGate"
         then
@@ -1052,6 +1385,7 @@ local function createUI()
             "LockedChest",
             "Vent Gate",
             "Lever",
+            "Toolshed",
             "All",
         },
         MultiSelect = true,
@@ -1073,6 +1407,21 @@ local function createUI()
             "Smoothie",
             "Flashlight",
             "Tip Jar",
+            "Vitamins",
+            "Lighter",
+            "Candle",
+            "AlarmClock",
+            "Lockpick",
+            "Skeleton Key",
+            "Shears",
+            "Rift Candle",
+            "Rift Smoothie",
+            "Rift Jar",
+            "Donut",
+            "Crucifix",
+            "Sally Toy",
+            "Electrical Key",
+            "Breaker Pole",
         },
         Values = {
             Gold = {
@@ -1082,7 +1431,7 @@ local function createUI()
             },
         },
         MultiSelect = true,
-        MaxSelect = 4,
+        MaxSelect = 24,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -1110,7 +1459,7 @@ local function createUI()
         end,
     })
 
-    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Bandage", "Smoothie", "VentGate", "Lever", "Rush"}) do
+    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Bandage", "Smoothie", "Flashlight", "TipJar", "Vitamins", "Lighter", "Candle", "AlarmClock", "Lockpick", "SkeletonKey", "Shears", "RiftCandle", "RiftSmoothie", "RiftJar", "Donut", "Crucifix", "SallyToy", "ElectricalKey", "BreakerPole", "VentGate", "Lever", "Rush", "Ambush", "Dupe", "Eyes", "SallyLingering", "SallyMoving", "Seek", "Figure", "Snare", "Toolshed"}) do
         Elements[kind .. "Color"] = settingsPage:ColorPicker({
             Name = kind .. " ESP Color",
             Flag = "Hotel_" .. kind .. "Color",
@@ -1145,32 +1494,76 @@ local function createUI()
         Options = {
             "Rush",
             "Ambush",
+            "Dupe",
+            "Eyes",
+            "Sally",
+            "Seek",
+            "Figure",
+            "Snare",
         },
         MultiSelect = true,
-        MaxSelect = 2,
+        MaxSelect = 8,
         Default = {},
         Search = true,
         Callback = function(selected)
             local rush = false
             local ambush = false
+            local dupe = false
+            local eyes = false
+            local sally = false
+            local seek = false
+            local figure = false
+            local snare = false
             if type(selected) == "table" then
                 if #selected > 0 then
                     for _, value in ipairs(selected) do
                         if value == "Rush" then rush = true end
                         if value == "Ambush" then ambush = true end
+                        if value == "Dupe" then dupe = true end
+                        if value == "Eyes" then eyes = true end
+                        if value == "Sally" then sally = true end
+                        if value == "Seek" then seek = true end
+                        if value == "Figure" then figure = true end
+                        if value == "Snare" then snare = true end
                     end
                 else
                     rush = selected.Rush == true
                     ambush = selected.Ambush == true
+                    dupe = selected.Dupe == true
+                    eyes = selected.Eyes == true
+                    sally = selected.Sally == true
+                    seek = selected.Seek == true
+                    figure = selected.Figure == true
+                    snare = selected.Snare == true
                 end
             elseif selected == "Rush" then
                 rush = true
             elseif selected == "Ambush" then
                 ambush = true
+            elseif selected == "Dupe" then
+                dupe = true
+            elseif selected == "Eyes" then
+                eyes = true
+            elseif selected == "Sally" then
+                sally = true
+            elseif selected == "Seek" then
+                seek = true
+            elseif selected == "Figure" then
+                figure = true
+            elseif selected == "Snare" then
+                snare = true
             end
             Enabled.Rush = rush
             Enabled.Ambush = ambush
+            Enabled.Dupe = dupe
+            Enabled.Eyes = eyes
+            Enabled.SallyLingering = sally
+            Enabled.SallyMoving = sally
+            Enabled.Seek = seek
+            Enabled.Figure = figure
+            Enabled.Snare = snare
             scanEntities()
+            scanSpecialEntities()
         end,
     })
 
@@ -1186,9 +1579,10 @@ local function createUI()
         Options = {
             "Rush",
             "Ambush",
+            "Sally",
         },
         MultiSelect = true,
-        MaxSelect = 2,
+        MaxSelect = 3,
         Default = {},
         Search = true,
         Callback = function()
@@ -1237,9 +1631,17 @@ local function setupConnections()
             task.defer(function()
                 hookRooms(object)
             end)
-        elseif object.Name == "RushMoving" then
+        elseif object.Name == "RushMoving" or object.Name == "AmbushMoving"
+            or object.Name == "Eyes" or object.Name == "SallyLingering"
+            or object.Name == "SallyMoving"
+        then
             task.defer(function()
                 scanEntities()
+                scanSpecialEntities()
+            end)
+        elseif object.Name == "Drops" then
+            task.defer(function()
+                scanDropItems()
             end)
         end
     end)
@@ -1258,12 +1660,30 @@ local function setupConnections()
         ScanTimer = 0
 
         if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold or Enabled.Chest
-            or Enabled.Bandage or Enabled.Smoothie or Enabled.VentGate or Enabled.Lever then
+            or Enabled.Bandage or Enabled.Smoothie or Enabled.Flashlight or Enabled.TipJar
+            or Enabled.Crucifix or Enabled.SallyToy or Enabled.ElectricalKey or Enabled.BreakerPole
+            or Enabled.Toolshed or Enabled.VentGate or Enabled.Lever then
             scanAll()
             refreshLabels()
         end
-        if Enabled.Rush then
+        if Enabled.Rush or Enabled.Ambush then
             scanEntities()
+        end
+
+        if Enabled.Dupe or Enabled.Eyes or Enabled.SallyLingering or Enabled.SallyMoving
+            or Enabled.Seek or Enabled.Figure or Enabled.Snare
+        then
+            scanSpecialEntities()
+        end
+
+        if Enabled.Vitamins or Enabled.Lighter or Enabled.Candle or Enabled.AlarmClock
+            or Enabled.Lockpick or Enabled.SkeletonKey or Enabled.Shears
+            or Enabled.RiftCandle or Enabled.RiftSmoothie or Enabled.RiftJar
+            or Enabled.Donut or Enabled.Crucifix or Enabled.SallyToy
+            or Enabled.ElectricalKey or Enabled.BreakerPole
+        then
+            scanDropItems()
+            scanSpecialHotelItems()
         end
     end)
 end
@@ -1308,6 +1728,29 @@ function Hotel:Destroy()
     clearKind("Lever")
     clearKind("Rush")
     clearKind("Ambush")
+    clearKind("Vitamins")
+    clearKind("Lighter")
+    clearKind("Candle")
+    clearKind("AlarmClock")
+    clearKind("Lockpick")
+    clearKind("SkeletonKey")
+    clearKind("Shears")
+    clearKind("RiftCandle")
+    clearKind("RiftSmoothie")
+    clearKind("RiftJar")
+    clearKind("Donut")
+    clearKind("Crucifix")
+    clearKind("SallyToy")
+    clearKind("ElectricalKey")
+    clearKind("BreakerPole")
+    clearKind("Dupe")
+    clearKind("Eyes")
+    clearKind("SallyLingering")
+    clearKind("SallyMoving")
+    clearKind("Seek")
+    clearKind("Figure")
+    clearKind("Snare")
+    clearKind("Toolshed")
     table.clear(NotifiedEntities)
     if HighlightContainer then
         pcall(function()
@@ -1333,6 +1776,29 @@ function Hotel:Destroy()
     Enabled.Lever = false
     Enabled.Rush = false
     Enabled.Ambush = false
+    Enabled.Vitamins = false
+    Enabled.Lighter = false
+    Enabled.Candle = false
+    Enabled.AlarmClock = false
+    Enabled.Lockpick = false
+    Enabled.SkeletonKey = false
+    Enabled.Shears = false
+    Enabled.RiftCandle = false
+    Enabled.RiftSmoothie = false
+    Enabled.RiftJar = false
+    Enabled.Donut = false
+    Enabled.Crucifix = false
+    Enabled.SallyToy = false
+    Enabled.ElectricalKey = false
+    Enabled.BreakerPole = false
+    Enabled.Dupe = false
+    Enabled.Eyes = false
+    Enabled.SallyLingering = false
+    Enabled.SallyMoving = false
+    Enabled.Seek = false
+    Enabled.Figure = false
+    Enabled.Snare = false
+    Enabled.Toolshed = false
 
     table.clear(Elements)
     Tab = nil
