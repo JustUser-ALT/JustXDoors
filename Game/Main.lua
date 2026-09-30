@@ -75,6 +75,7 @@ local CollisionPart
 local CollisionPartClone
 local OriginalC1
 local CollisionCanCollideBackup = {}
+local CollisionOriginalCanCollide = nil
 local InfiniteCrucifixEnabled = false
 local InfinitePromptContainer
 local InfiniteCrucifixRaycastParams = RaycastParams.new()
@@ -654,6 +655,10 @@ local function setupCollisionSpoof()
         return
     end
 
+    if CollisionOriginalCanCollide == nil then
+        CollisionOriginalCanCollide = Collision.CanCollide
+    end
+
     if CollisionClone and CollisionClone.Parent ~= Character then
         CollisionClone = nil
     end
@@ -663,6 +668,7 @@ local function setupCollisionSpoof()
         CollisionClone.Name = "JustXDoorsCollisionClone"
         CollisionClone.Parent = Character
         CollisionClone.Massless = true
+        CollisionClone.CanCollide = false
     end
 
     if CollisionPart and CollisionPart:IsA("BasePart") and not CollisionPartClone then
@@ -671,6 +677,7 @@ local function setupCollisionSpoof()
         CollisionPartClone.CanCollide = false
         CollisionPartClone.Massless = true
         CollisionPartClone.Parent = Character
+        CollisionPartClone.CanCollide = false
         local crouch = CollisionPartClone:FindFirstChild("CollisionCrouch")
         if crouch then crouch:Destroy() end
     end
@@ -694,7 +701,7 @@ local function restoreCollisionSpoof()
     table.clear(CollisionCanCollideBackup)
 
     if Collision then
-        Collision.CanCollide = false
+        Collision.CanCollide = CollisionOriginalCanCollide == nil and false or CollisionOriginalCanCollide
     end
 
     if CollisionClone then
@@ -707,6 +714,12 @@ local function restoreCollisionSpoof()
 
     if CollisionPartClone then
         CollisionPartClone.CanCollide = false
+    end
+
+    if CollisionPart and CollisionPart:IsA("BasePart") and CollisionPart ~= Collision then
+        if CollisionCanCollideBackup[CollisionPart] ~= nil then
+            CollisionPart.CanCollide = CollisionCanCollideBackup[CollisionPart]
+        end
     end
 
     if Character and OriginalC1 then
@@ -722,7 +735,13 @@ end
 
 local function updateCollisionSpoof()
     if not VelocityManipulationEnabled then
-        restoreCollisionSpoof()
+        if CollisionClone then
+            CollisionClone.CanCollide = false
+            local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+            if cloneCrouch then
+                cloneCrouch.CanCollide = false
+            end
+        end
         return
     end
 
@@ -1805,6 +1824,7 @@ local function setupConnections()
         CollisionPart = nil
         CollisionPartClone = nil
         OriginalC1 = nil
+        CollisionOriginalCanCollide = nil
         setupCollisionSpoof()
         setupFootstepSounds()
         applyRemoveInteractingSounds()
@@ -2107,6 +2127,7 @@ function Main:Destroy()
     restorePromptProperties()
     NoclipEnabled = false
     table.clear(NoclipProperties)
+    CollisionOriginalCanCollide = nil
     DoorReachEnabled = false
     AutoTpNextDoorEnabled = false
     AnticheatBypassEnabled = false
