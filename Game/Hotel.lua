@@ -1205,7 +1205,7 @@ local function applyItems(selected)
     local tipJar = false
     local itemFlags = {
         Vitamins=false, Lighter=false, Candle=false, AlarmClock=false,
-        Lockpick=false, SkeletonKey=false, Shears=false,
+        Lockpick=false, SkeletonKey=false, Shears=false, Battery=false,
         RiftCandle=false, RiftSmoothie=false, RiftJar=false, Donut=false,
         Crucifix=false, SallyToy=false, ElectricalKey=false, BreakerPole=false,
     }
@@ -1227,7 +1227,7 @@ local function applyItems(selected)
             local map = {
                 Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
                 AlarmClock="AlarmClock", Lockpick="Lockpick",
-                ["Skeleton Key"]="SkeletonKey", Shears="Shears",
+                ["Skeleton Key"]="SkeletonKey", Shears="Shears", Battery="Battery",
                 ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
                 ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
                 ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
@@ -1255,7 +1255,7 @@ local function applyItems(selected)
             local map = {
                 Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
                 AlarmClock="AlarmClock", Lockpick="Lockpick",
-                ["Skeleton Key"]="SkeletonKey", Shears="Shears",
+                ["Skeleton Key"]="SkeletonKey", Shears="Shears", Battery="Battery",
                 ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
                 ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
                 ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
@@ -1280,14 +1280,21 @@ local function applyItems(selected)
     end
     Hotel.GoldLevel = goldLevel or 1
 
-    clearKind("Key")
-    clearKind("Gold")
-    clearKind("Bandage")
-    clearKind("Smoothie")
+    local itemKinds = {
+        "Key", "Gold", "Bandage", "Smoothie", "Flashlight", "TipJar",
+        "Vitamins", "Lighter", "Candle", "AlarmClock", "Lockpick",
+        "SkeletonKey", "Shears", "Battery", "RiftCandle", "RiftSmoothie",
+        "RiftJar", "Donut", "Crucifix", "SallyToy", "ElectricalKey",
+        "BreakerPole",
+    }
 
-    if key or goldLevel ~= nil or bandage or smoothie then
-        scanAll()
+    for _, kind in ipairs(itemKinds) do
+        if not Enabled[kind] then
+            clearKind(kind)
+        end
     end
+
+    scanAll()
 end
 
 local function refreshLabels()
@@ -1489,6 +1496,7 @@ local function createUI()
             "Lockpick",
             "Skeleton Key",
             "Shears",
+            "Battery",
             "Rift Candle",
             "Rift Smoothie",
             "Rift Jar",
@@ -1534,7 +1542,7 @@ local function createUI()
         end,
     })
 
-    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Bandage", "Smoothie", "Flashlight", "TipJar", "Vitamins", "Lighter", "Candle", "AlarmClock", "Lockpick", "SkeletonKey", "Shears", "RiftCandle", "RiftSmoothie", "RiftJar", "Donut", "Crucifix", "SallyToy", "ElectricalKey", "BreakerPole", "VentGate", "Lever", "Rush", "Ambush", "Dupe", "Eyes", "SallyLingering", "SallyMoving", "Seek", "Figure", "Snare", "Toolshed"}) do
+    for _, kind in ipairs({"Doors", "Drawers", "Closets", "Key", "Gold", "Chest", "Bandage", "Smoothie", "Flashlight", "TipJar", "Vitamins", "Lighter", "Candle", "AlarmClock", "Lockpick", "SkeletonKey", "Shears", "Battery", "RiftCandle", "RiftSmoothie", "RiftJar", "Donut", "Crucifix", "SallyToy", "ElectricalKey", "BreakerPole", "VentGate", "Lever", "Rush", "Ambush", "Dupe", "Eyes", "SallyLingering", "SallyMoving", "Seek", "Figure", "Snare", "Screech", "Toolshed"}) do
         Elements[kind .. "Color"] = settingsPage:ColorPicker({
             Name = kind .. " ESP Color",
             Flag = "Hotel_" .. kind .. "Color",
@@ -1575,9 +1583,10 @@ local function createUI()
             "Seek",
             "Figure",
             "Snare",
+            "Screech",
         },
         MultiSelect = true,
-        MaxSelect = 8,
+        MaxSelect = 9,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -1589,6 +1598,7 @@ local function createUI()
             local seek = false
             local figure = false
             local snare = false
+            local screech = false
             if type(selected) == "table" then
                 if #selected > 0 then
                     for _, value in ipairs(selected) do
@@ -1600,6 +1610,7 @@ local function createUI()
                         if value == "Seek" then seek = true end
                         if value == "Figure" then figure = true end
                         if value == "Snare" then snare = true end
+                        if value == "Screech" then screech = true end
                     end
                 else
                     rush = selected.Rush == true
@@ -1610,6 +1621,7 @@ local function createUI()
                     seek = selected.Seek == true
                     figure = selected.Figure == true
                     snare = selected.Snare == true
+                    screech = selected.Screech == true
                 end
             elseif selected == "Rush" then
                 rush = true
@@ -1627,6 +1639,8 @@ local function createUI()
                 figure = true
             elseif selected == "Snare" then
                 snare = true
+            elseif selected == "Screech" then
+                screech = true
             end
             Enabled.Rush = rush
             Enabled.Ambush = ambush
@@ -1637,6 +1651,7 @@ local function createUI()
             Enabled.Seek = seek
             Enabled.Figure = figure
             Enabled.Snare = snare
+            Enabled.Screech = screech
             scanEntities()
             scanSpecialEntities()
         end,
@@ -1659,9 +1674,10 @@ local function createUI()
             "Sally",
             "Seek",
             "Figure",
+            "Screech",
         },
         MultiSelect = true,
-        MaxSelect = 7,
+        MaxSelect = 8,
         Default = {},
         Search = true,
         Callback = function()
@@ -1717,12 +1733,30 @@ local function setupConnections()
             or object.Name == "SideroomDupe"
             or object.Name == "FigureRig"
             or object.Name == "Snare"
+            or object.Name == "Screech"
         then
             task.defer(function()
                 scanSpecialEntities()
                 scanEntityNotifications()
             end)
-        elseif object.Parent and object.Parent.Name == "Drops" then
+        elseif object.Name == "Vitamins"
+            or object.Name == "Lighter"
+            or object.Name == "Candle"
+            or object.Name == "AlarmClock"
+            or object.Name == "Lockpick"
+            or object.Name == "SkeletonKey"
+            or object.Name == "Shears"
+            or object.Name == "Battery"
+            or object.Name == "Bandage"
+            or object.Name == "Smoothie"
+            or object.Name == "Flashlight"
+            or object.Name == "TipJar"
+            or object.Name == "RiftCandle"
+            or object.Name == "RiftSmoothie"
+            or object.Name == "RiftJar"
+            or object.Name == "Donut"
+            or object.Name == "Crucifix"
+        then
             task.defer(function()
                 scanDropItems()
             end)
@@ -1765,7 +1799,7 @@ local function setupConnections()
         if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold or Enabled.Chest
             or Enabled.Bandage or Enabled.Smoothie or Enabled.Flashlight or Enabled.TipJar
             or Enabled.Crucifix or Enabled.SallyToy or Enabled.ElectricalKey or Enabled.BreakerPole
-            or Enabled.Toolshed or Enabled.VentGate or Enabled.Lever then
+            or Enabled.Battery or Enabled.Toolshed or Enabled.VentGate or Enabled.Lever then
             scanAll()
             refreshLabels()
         end
@@ -1774,7 +1808,7 @@ local function setupConnections()
         end
 
         if Enabled.Dupe or Enabled.Eyes or Enabled.SallyLingering or Enabled.SallyMoving
-            or Enabled.Seek or Enabled.Figure or Enabled.Snare
+            or Enabled.Seek or Enabled.Figure or Enabled.Snare or Enabled.Screech
         then
             scanSpecialEntities()
         end
@@ -1782,7 +1816,7 @@ local function setupConnections()
         scanEntityNotifications()
 
         if Enabled.Vitamins or Enabled.Lighter or Enabled.Candle or Enabled.AlarmClock
-            or Enabled.Lockpick or Enabled.SkeletonKey or Enabled.Shears
+            or Enabled.Lockpick or Enabled.SkeletonKey or Enabled.Shears or Enabled.Battery
             or Enabled.RiftCandle or Enabled.RiftSmoothie or Enabled.RiftJar
             or Enabled.Donut or Enabled.Crucifix or Enabled.SallyToy
             or Enabled.ElectricalKey or Enabled.BreakerPole
