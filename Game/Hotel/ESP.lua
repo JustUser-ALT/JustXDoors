@@ -272,6 +272,10 @@ local function destroyVisual(entry)
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
     end
+    if entry.Box then
+        pcall(function() entry.Box:Destroy() end)
+        entry.Box = nil
+    end
     if entry.Label then
         pcall(function() entry.Label:Destroy() end)
         entry.Label = nil
@@ -280,29 +284,58 @@ end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
-    if entry.Highlight and entry.Highlight.Parent then return true end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "JustXDoorsESP"
-    highlight.Adornee = object
-    highlight.DepthMode = INTERACTABLES[kind]
-        and Enum.HighlightDepthMode.Occluded
-        or Enum.HighlightDepthMode.AlwaysOnTop
-
-    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-
-    if INTERACTABLES[kind] then
-        -- Interactables never tint objects underneath them.
-        highlight.FillTransparency = 1
-        highlight.OutlineTransparency = 0
-    else
-        highlight.FillTransparency = 0.55
-        highlight.OutlineTransparency = 0
+    if (entry.Highlight and entry.Highlight.Parent)
+        or (entry.Box and entry.Box.Parent)
+    then
+        return true
     end
 
-    highlight.Parent = VisualContainer
-    entry.Highlight = highlight
+    if ITEM_KINDS[kind] then
+        local part = getPart(object)
+        if not part then return false end
+
+        -- Items use a BillboardGui box instead of Highlight so a large
+        -- amount of item ESP can never consume the 255 Highlight slots.
+        local box = Instance.new("BillboardGui")
+        box.Name = "JustXDoorsESP2D"
+        box.AlwaysOnTop = true
+        box.LightInfluence = 0
+        box.MaxDistance = 1500
+        box.Size = UDim2.fromOffset(78, 78)
+        box.Adornee = part
+        box.Parent = VisualContainer
+
+        local frame = Instance.new("Frame")
+        frame.BackgroundTransparency = 1
+        frame.BorderSizePixel = 2
+        frame.BorderColor3 = Colors[kind] or Color3.new(1,1,1)
+        frame.Size = UDim2.fromScale(1, 1)
+        frame.Parent = box
+
+        entry.Box = box
+    else
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsESP"
+        highlight.Adornee = object
+        highlight.DepthMode = INTERACTABLES[kind]
+            and Enum.HighlightDepthMode.Occluded
+            or Enum.HighlightDepthMode.AlwaysOnTop
+
+        highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+        highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+
+        if INTERACTABLES[kind] then
+            -- Interactables never tint objects underneath them.
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = 0
+        else
+            highlight.FillTransparency = 0.55
+            highlight.OutlineTransparency = 0
+        end
+
+        highlight.Parent = VisualContainer
+        entry.Highlight = highlight
+    end
 
     updateLabel(kind, object, entry)
     return true
@@ -366,12 +399,16 @@ local function clearStale(kind, seen, domain)
 
         local shouldClear = true
         if domain == "Drops" then
-            shouldClear = object.Parent == Drops
-                or (object.Parent and object.Parent.Name == "BandagePack")
+            shouldClear = Drops
+                and (object:IsDescendantOf(Drops)
+                    or (object.Parent and object.Parent.Name == "BandagePack"))
         elseif domain == "Rooms" then
-            shouldClear = object:IsDescendantOf(workspace)
-                and not isInventoryObject(object)
+            shouldClear = Rooms and object:IsDescendantOf(Rooms)
         elseif domain == "Global" then
+            shouldClear = true
+        end
+
+        if ITEM_KINDS[kind] and isInventoryObject(object) then
             shouldClear = true
         end
 
@@ -456,7 +493,9 @@ local function registerRoom(room, seen)
             end
         end
 
-        if Enabled.Key and roomVisible("Key", room) and name == "KeyObtain" then
+        if Enabled.Key and roomVisible("Key", room) and name == "KeyObtain"
+            and object:FindFirstChild("ModulePrompt", true)
+        then
             seen.Key[object] = true
             addObject("Key", object, room)
         end
