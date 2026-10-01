@@ -22,6 +22,7 @@ local LabelClock = 0
 local Rooms
 local Drops
 local VisualContainer
+local RoomsContainerConnection
 
 local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
@@ -779,7 +780,9 @@ local function hookRoom(room)
 end
 
 local function hookRooms(container)
-    disconnectList(RoomConnections[container] or {})
+    disconnect(RoomsContainerConnection)
+    RoomsContainerConnection = nil
+
     for room, list in pairs(RoomConnections) do
         if room ~= container then
             disconnectList(list)
@@ -790,16 +793,18 @@ local function hookRooms(container)
     Rooms = container
     if not container then return end
 
-    connect(container.ChildAdded, function(room)
+    RoomsContainerConnection = container.ChildAdded:Connect(function(room)
         if tonumber(room.Name) then
             hookRoom(room)
             requestRoom(room)
         end
     end)
+    table.insert(Connections, RoomsContainerConnection)
 
-    connect(container.ChildRemoved, function()
+    local removedConnection = container.ChildRemoved:Connect(function()
         requestScan()
     end)
+    table.insert(Connections, removedConnection)
 
     for _, room in ipairs(container:GetChildren()) do
         if tonumber(room.Name) then hookRoom(room) end
@@ -843,6 +848,39 @@ local function setup()
 
     hookRooms(getRooms())
     hookDrops(workspace:FindFirstChild("Drops"))
+
+    local function hookInventory(container)
+        if not container then return end
+        connect(container.ChildAdded, function()
+            requestScan()
+        end)
+        connect(container.ChildRemoved, function()
+            requestScan()
+        end)
+        connect(container.DescendantAdded, function()
+            requestScan()
+        end)
+        connect(container.DescendantRemoving, function()
+            requestScan()
+        end)
+    end
+
+    hookInventory(LocalPlayer:FindFirstChildOfClass("Backpack"))
+    if LocalPlayer.Character then
+        hookInventory(LocalPlayer.Character)
+    end
+
+    connect(LocalPlayer.CharacterAdded, function(character)
+        hookInventory(character)
+        requestScan()
+    end)
+
+    connect(LocalPlayer.ChildAdded, function(object)
+        if object:IsA("Backpack") then
+            hookInventory(object)
+            requestScan()
+        end
+    end)
 
     connect(workspace.ChildAdded, function(object)
         if object.Name == "CurrentRooms" then
@@ -1104,6 +1142,8 @@ function Module:Destroy()
         VisualContainer = nil
     end
 
+    disconnect(RoomsContainerConnection)
+    RoomsContainerConnection = nil
     Rooms = nil
     Drops = nil
 end
