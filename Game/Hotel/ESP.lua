@@ -400,11 +400,14 @@ local function clearStale(kind, seen, domain)
 
         local shouldClear = true
         if domain == "Drops" then
-            shouldClear = Drops
-                and (object:IsDescendantOf(Drops)
-                    or (object.Parent and object.Parent.Name == "BandagePack"))
+            shouldClear = not Drops
+                or not object:IsDescendantOf(Drops)
         elseif domain == "Rooms" then
-            shouldClear = Rooms and object:IsDescendantOf(Rooms)
+            local entry = Objects[kind][object]
+            local room = entry and entry.Room
+            shouldClear = not Rooms
+                or not object:IsDescendantOf(Rooms)
+                or (room and (not room.Parent or not roomVisible(kind, room)))
         elseif domain == "Global" then
             shouldClear = true
         end
