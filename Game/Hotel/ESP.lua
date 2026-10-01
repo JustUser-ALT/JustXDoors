@@ -24,6 +24,10 @@ local Drops
 local VisualContainer
 local RoomsContainerConnection
 
+-- Hotel ESP visibility limit. Objects beyond this distance are removed
+-- from the ESP registry instead of continuing to display stale labels.
+local MAX_ESP_DISTANCE = 300
+
 local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
@@ -160,10 +164,8 @@ local function roomVisible(kind, room)
         return number == current or number == current + 1
     end
 
-    if kind == "Key" or kind == "Gold" or kind == "Crucifix"
-        or kind == "SallyToy" or kind == "ElectricalKey"
-        or kind == "BreakerPole"
-    then
+    -- Items persist across previous/current/next rooms.
+    if ITEM_KINDS[kind] then
         return number >= current - 1 and number <= current + 1
     end
 
@@ -291,52 +293,29 @@ local function createVisual(kind, object, entry)
         return true
     end
 
-    if ITEM_KINDS[kind] then
-        local part = getPart(object)
-        if not part then return false end
+    local highlight = Instance.new("Highlight")
+    highlight.Name = ITEM_KINDS[kind] and "JustXDoorsItemESP" or "JustXDoorsESP"
+    highlight.Adornee = object
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 
-        -- Items use a BillboardGui box instead of Highlight so a large
-        -- amount of item ESP can never consume the 255 Highlight slots.
-        local box = Instance.new("BillboardGui")
-        box.Name = "JustXDoorsESP2D"
-        box.AlwaysOnTop = true
-        box.LightInfluence = 0
-        box.MaxDistance = 1500
-        box.Size = UDim2.fromOffset(78, 78)
-        box.Adornee = part
-        box.Parent = VisualContainer
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
 
-        local frame = Instance.new("Frame")
-        frame.BackgroundTransparency = 1
-        frame.BorderSizePixel = 2
-        frame.BorderColor3 = Colors[kind] or Color3.new(1,1,1)
-        frame.Size = UDim2.fromScale(1, 1)
-        frame.Parent = box
-
-        entry.Box = box
+    if INTERACTABLES[kind] then
+        -- Outline only, but still visible through walls.
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+    elseif ITEM_KINDS[kind] then
+        -- Items now use a real Highlight rather than a 2D box.
+        highlight.FillTransparency = 0.82
+        highlight.OutlineTransparency = 0
     else
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsESP"
-        highlight.Adornee = object
-        highlight.DepthMode = INTERACTABLES[kind]
-            and Enum.HighlightDepthMode.Occluded
-            or Enum.HighlightDepthMode.AlwaysOnTop
-
-        highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-        highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-
-        if INTERACTABLES[kind] then
-            -- Interactables never tint objects underneath them.
-            highlight.FillTransparency = 1
-            highlight.OutlineTransparency = 0
-        else
-            highlight.FillTransparency = 0.55
-            highlight.OutlineTransparency = 0
-        end
-
-        highlight.Parent = VisualContainer
-        entry.Highlight = highlight
+        highlight.FillTransparency = 0.55
+        highlight.OutlineTransparency = 0
     end
+
+    highlight.Parent = VisualContainer
+    entry.Highlight = highlight
 
     updateLabel(kind, object, entry)
     return true
@@ -362,6 +341,15 @@ local function addObject(kind, object, room)
     end
 
     if ITEM_KINDS[kind] and isInventoryObject(object) then
+        return
+    end
+
+    local part = getPart(object)
+    local root = getRoot()
+    if part and root
+        and (root.Position - part.Position).Magnitude > MAX_ESP_DISTANCE
+    then
+        clearEntry(kind, object)
         return
     end
 
@@ -394,7 +382,14 @@ local function clearStale(kind, seen, domain)
     for object in pairs(Objects[kind]) do
         local keep = seen[object] and object.Parent
 
-        if keep == true then
+        local tooFar = false
+        local part = getPart(object)
+        local root = getRoot()
+        if part and root then
+            tooFar = (root.Position - part.Position).Magnitude > MAX_ESP_DISTANCE
+        end
+
+        if keep == true and not tooFar then
             continue
         end
 
@@ -690,6 +685,28 @@ local function scanEntities()
         if not Enabled[kind] or not object or not object.Parent then return end
         seen[kind][object] = true
         addObject(kind, object, getRoom(object))
+    end
+
+    local entityNames = {
+        RushMoving = "Rush",
+        AmbushMoving = "Ambush",
+        Eyes = "Eyes",
+        SallyLingering = "SallyLingering",
+        SallyMoving = "SallyMoving",
+        Screech = "Screech",
+        SideroomDupe = "Dupe",
+        SeekMovingNewClone = "Seek",
+        FigureRig = "Figure",
+        Snare = "Snare",
+    }
+
+    -- Entity instances are not guaranteed to be direct children of Workspace.
+    -- Scan descendants so nested/replicated entity models receive ESP too.
+    for _, object in ipairs(workspace:GetDescendants()) do
+        local kind = entityNames[object.Name]
+        if kind and Enabled[kind] then
+            register(kind, object)
+        end
     end
 
     if Enabled.Rush or Enabled.Ambush then
