@@ -399,15 +399,27 @@ local function clearStale(kind, seen, domain)
         end
 
         local shouldClear = true
+        local entry = Objects[kind][object]
+
         if domain == "Drops" then
-            shouldClear = not Drops
-                or not object:IsDescendantOf(Drops)
+            -- Only reconcile entries that originated from Drops.
+            if entry and entry.Room == nil then
+                shouldClear = not Drops or not object:IsDescendantOf(Drops)
+            else
+                shouldClear = false
+            end
         elseif domain == "Rooms" then
-            local entry = Objects[kind][object]
+            -- Room entries and dropped entries can share the same kind
+            -- (for example Key/Crucifix). Never let one scanner delete the other.
             local room = entry and entry.Room
-            shouldClear = not Rooms
-                or not object:IsDescendantOf(Rooms)
-                or (room and (not room.Parent or not roomVisible(kind, room)))
+            if room ~= nil then
+                shouldClear = not Rooms
+                    or not object:IsDescendantOf(Rooms)
+                    or not room.Parent
+                    or not roomVisible(kind, room)
+            else
+                shouldClear = false
+            end
         elseif domain == "Global" then
             shouldClear = true
         end
