@@ -1,162 +1,80 @@
 local Module = {}
 
-local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Connections = {}
+local RoomConnections = {}
+local DropConnections = {}
 
 local Context
-local Tab
-local Connections = {}
-local Elements = {}
+local Enabled = {}
+local Colors = {}
+local Display = {Name = true, Distance = false}
 
-local ESP = {
-    Doors = {},
-    Drawers = {},
-    Closets = {},
-    Key = {},
-    Gold = {},
-    Chest = {},
-    Bandage = {},
-    Smoothie = {},
-    Flashlight = {},
-    TipJar = {},
-    Ambush = {},
-    Vitamins = {},
-    Lighter = {},
-    Candle = {},
-    AlarmClock = {},
-    Lockpick = {},
-    SkeletonKey = {},
-    Shears = {},
-    RiftCandle = {},
-    RiftSmoothie = {},
-    RiftJar = {},
-    Donut = {},
-    Crucifix = {},
-    SallyToy = {},
-    ElectricalKey = {},
-    BreakerPole = {},
-    Battery = {},
-    Dupe = {},
-    Eyes = {},
-    SallyLingering = {},
-    SallyMoving = {},
-    Seek = {},
-    Figure = {},
-    Snare = {},
-    Screech = {},
-    VentGate = {},
-    Toolshed = {},
-    Lever = {},
-    Rush = {},
+local Objects = {}
+local PendingRooms = {}
+local PendingDrops = false
+local ScanRequested = false
+local ScanClock = 0
+local LabelClock = 0
+local Rooms
+local Drops
+local VisualContainer
+
+local KINDS = {
+    "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
+    "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
+    "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
+    "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
+    "Dupe","Eyes","SallyLingering","SallyMoving","Seek","Figure","Snare",
+    "Screech","VentGate","Toolshed","Lever","Rush","Ambush"
 }
 
-local Enabled = {
-    Doors = false,
-    Drawers = false,
-    Closets = false,
-    Key = false,
-    Gold = false,
-    Chest = false,
-    LockedChest = false,
-    Rush = false,
-    Ambush = false,
-    Vitamins = false,
-    Lighter = false,
-    Candle = false,
-    AlarmClock = false,
-    Lockpick = false,
-    SkeletonKey = false,
-    Shears = false,
-    RiftCandle = false,
-    RiftSmoothie = false,
-    RiftJar = false,
-    Donut = false,
-    Crucifix = false,
-    SallyToy = false,
-    ElectricalKey = false,
-    BreakerPole = false,
-    Battery = false,
-    Dupe = false,
-    Eyes = false,
-    SallyLingering = false,
-    SallyMoving = false,
-    Seek = false,
-    Figure = false,
-    Snare = false,
-    Screech = false,
-    Toolshed = false,
-}
-
-Module.GoldLevel = 1
-
-local Display = {
-    Name = true,
-    Distance = false,
-}
-
-local Colors = {
-    Doors = Color3.fromRGB(80, 170, 255),
-    Drawers = Color3.fromRGB(255, 150, 60),
-    Closets = Color3.fromRGB(165, 105, 55),
-    Key = Color3.fromRGB(70, 235, 220),
-    Gold = Color3.fromRGB(255, 215, 50),
-    Chest = Color3.fromRGB(255, 230, 80),
-    Bandage = Color3.fromRGB(235, 235, 235),
-    Smoothie = Color3.fromRGB(190, 100, 255),
-    Flashlight = Color3.fromRGB(255, 245, 170),
-    TipJar = Color3.fromRGB(255, 190, 90),
-    Vitamins = Color3.fromRGB(80, 255, 120),
-    Lighter = Color3.fromRGB(255, 170, 70),
-    Candle = Color3.fromRGB(255, 220, 150),
-    AlarmClock = Color3.fromRGB(255, 90, 120),
-    Lockpick = Color3.fromRGB(150, 150, 160),
-    SkeletonKey = Color3.fromRGB(210, 210, 220),
-    Shears = Color3.fromRGB(180, 220, 255),
-    RiftCandle = Color3.fromRGB(180, 100, 255),
-    RiftSmoothie = Color3.fromRGB(210, 100, 255),
-    RiftJar = Color3.fromRGB(255, 130, 220),
-    Donut = Color3.fromRGB(255, 150, 190),
-    Crucifix = Color3.fromRGB(240, 240, 255),
-    SallyToy = Color3.fromRGB(255, 120, 180),
-    ElectricalKey = Color3.fromRGB(80, 220, 255),
-    BreakerPole = Color3.fromRGB(255, 240, 100),
-    Battery = Color3.fromRGB(120, 190, 255),
-    Dupe = Color3.fromRGB(255, 130, 60),
-    Eyes = Color3.fromRGB(180, 90, 255),
-    SallyLingering = Color3.fromRGB(255, 120, 180),
-    SallyMoving = Color3.fromRGB(255, 70, 150),
-    Seek = Color3.fromRGB(70, 150, 255),
-    Figure = Color3.fromRGB(255, 80, 80),
-    Snare = Color3.fromRGB(100, 220, 100),
-    Screech = Color3.fromRGB(220, 220, 255),
-    Toolshed = Color3.fromRGB(160, 110, 70),
-    Rush = Color3.fromRGB(255, 70, 70),
-    Ambush = Color3.fromRGB(190, 70, 255),
-    VentGate = Color3.fromRGB(100, 190, 255),
-    Lever = Color3.fromRGB(255, 190, 70),
-    Rush = Color3.fromRGB(255, 70, 70),
-}
-
-local ScanTimer = 0
-local RoomsConnection
-local RoomScanQueued = {}
-local HighlightContainer
-local NotifiedEntities = {}
-
-local function connect(signal, callback)
-    local c = signal:Connect(callback)
-    table.insert(Connections, c)
-    return c
+for _, kind in ipairs(KINDS) do
+    Objects[kind] = {}
 end
 
-local function disconnectAll()
-    for _, c in ipairs(Connections) do
-        pcall(function()
-            c:Disconnect()
-        end)
-    end
+local INTERACTABLES = {
+    Doors=true, Drawers=true, Closets=true, Chest=true, VentGate=true,
+    Lever=true, Toolshed=true, LockedChest=true,
+}
 
-    table.clear(Connections)
+local ENTITY_KINDS = {
+    Rush=true, Ambush=true, Dupe=true, Eyes=true, SallyLingering=true,
+    SallyMoving=true, Seek=true, Figure=true, Snare=true, Screech=true,
+}
+
+local ITEM_KINDS = {
+    Key=true, Gold=true, Bandage=true, Smoothie=true, Flashlight=true,
+    TipJar=true, Vitamins=true, Lighter=true, Candle=true, AlarmClock=true,
+    Lockpick=true, SkeletonKey=true, Shears=true, RiftCandle=true,
+    RiftSmoothie=true, RiftJar=true, Donut=true, Crucifix=true,
+    SallyToy=true, ElectricalKey=true, BreakerPole=true, Battery=true,
+}
+
+local function connect(signal, callback)
+    local ok, connection = pcall(function()
+        return signal:Connect(callback)
+    end)
+    if ok and connection then
+        table.insert(Connections, connection)
+        return connection
+    end
+end
+
+local function disconnect(connection)
+    if connection then
+        pcall(function() connection:Disconnect() end)
+    end
+end
+
+local function disconnectList(list)
+    for _, connection in ipairs(list) do
+        disconnect(connection)
+    end
+    table.clear(list)
 end
 
 local function getRooms()
@@ -164,550 +82,86 @@ local function getRooms()
 end
 
 local function getRoot()
-    local character = Players.LocalPlayer.Character
+    local character = LocalPlayer.Character
     return character and character:FindFirstChild("HumanoidRootPart")
 end
 
-local function getPart(object)
-    if not object then
-        return nil
+local function isInventoryObject(object)
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if backpack and object:IsDescendantOf(backpack) then
+        return true
     end
+
+    local character = LocalPlayer.Character
+    if character and object:IsDescendantOf(character) then
+        return true
+    end
+
+    local playerModel = workspace:FindFirstChild(LocalPlayer.Name)
+    return playerModel and object:IsDescendantOf(playerModel) or false
+end
+
+local function getPart(object)
+    if not object then return nil end
 
     if object:IsA("BasePart") then
         return object
     end
 
     if object:IsA("Model") then
-        if object.PrimaryPart then
-            return object.PrimaryPart
+        local primary = object.PrimaryPart
+        if primary and primary:IsA("BasePart") then
+            return primary
         end
 
-        local hitbox = object:FindFirstChild("Hitbox", true)
-        if hitbox and hitbox:IsA("BasePart") then
-            return hitbox
+        for _, name in ipairs({"Handle","Main","Root","Hitbox","Key","Mesh","RushNew"}) do
+            local part = object:FindFirstChild(name, true)
+            if part and part:IsA("BasePart") then
+                return part
+            end
         end
-
-        local handle = object:FindFirstChild("Handle", true)
-        if handle and handle:IsA("BasePart") then
-            return handle
-        end
-
-        return object:FindFirstChildWhichIsA("BasePart", true)
     end
 
     return object:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function getDoorNumber(room)
-    local door = room and room:FindFirstChild("Door")
-    local sign = door and door:FindFirstChild("Sign")
-    local stinker = sign and sign:FindFirstChild("Stinker")
+local function getRoom(object)
+    if not object then return nil end
 
-    if stinker then
-        local ok, value = pcall(function()
-            return stinker.Text
-        end)
+    local room = object:FindFirstAncestorWhichIsA("Model")
+    while room and room.Parent ~= Rooms do
+        room = room.Parent and room:FindFirstAncestorWhichIsA("Model")
+    end
 
-        if ok and type(value) == "string" then
-            local number = tonumber(value:match("%d+"))
-            if number then
-                return string.format("%04d", number)
-            end
+    if room and Rooms and room.Parent == Rooms and tonumber(room.Name) then
+        return room
+    end
+
+    local current = object
+    while current and current ~= workspace do
+        if current.Parent == Rooms and tonumber(current.Name) then
+            return current
         end
+        current = current.Parent
     end
 
-    local roomNumber = room and tonumber(room.Name)
-
-    if roomNumber then
-        return string.format("%04d", roomNumber + 1)
-    end
-
-    return "????"
+    return nil
 end
 
-local function getLabel(kind, object)
-    local text = {}
-
-    if Display.Name then
-        if kind == "Doors" then
-            local room = object:GetAttribute("JustXDoorsRoom")
-            local rooms = getRooms()
-            local roomObject = rooms and rooms:FindFirstChild(tostring(room))
-
-            text[#text + 1] = "Door • " .. getDoorNumber(roomObject)
-        else
-            if kind == "Key" then
-                text[#text + 1] = "Key"
-            elseif kind == "Gold" then
-                text[#text + 1] = "Gold"
-            elseif kind == "Drawers" then
-                text[#text + 1] = "Drawer"
-            elseif kind == "Closets" then
-                text[#text + 1] = "Closet"
-            elseif kind == "Chest" then
-                text[#text + 1] = "LockedChest"
-                if object.Name == "ChestBox" then
-                    text[#text] = "Chest"
-                end
-                    elseif kind == "Bandage" then
-                text[#text + 1] = "Bandage"
-            elseif kind == "Smoothie" then
-                text[#text + 1] = "Smoothie"
-            elseif kind == "Flashlight" then
-                text[#text + 1] = "Flashlight"
-            elseif kind == "TipJar" then
-                text[#text + 1] = "Tip Jar"
-            elseif kind == "RiftCandle" then
-                text[#text + 1] = "Rift Candle"
-            elseif kind == "RiftSmoothie" then
-                text[#text + 1] = "Rift Smoothie"
-            elseif kind == "RiftJar" then
-                text[#text + 1] = "Rift Jar"
-            elseif kind == "SkeletonKey" then
-                text[#text + 1] = "Skeleton Key"
-            elseif kind == "SallyToy" then
-                text[#text + 1] = "Sally Toy"
-            elseif kind == "ElectricalKey" then
-                text[#text + 1] = "Electrical Key"
-            elseif kind == "BreakerPole" then
-                text[#text + 1] = "Breaker Pole"
-            elseif kind == "SallyLingering" then
-                text[#text + 1] = "Sally"
-            elseif kind == "SallyMoving" then
-                text[#text + 1] = "Sally"
-            elseif kind == "VentGate" then
-                text[#text + 1] = "Vent Gate"
-            elseif kind == "Lever" then
-                text[#text + 1] = "Lever"
-            elseif kind == "Rush" then
-                text[#text + 1] = "Rush"
-            elseif kind == "Ambush" then
-                text[#text + 1] = "Ambush"
-            elseif kind == "Dupe" then
-                text[#text + 1] = "Dupe"
-            elseif kind == "Eyes" then
-                text[#text + 1] = "Eyes"
-            elseif kind == "Seek" then
-                text[#text + 1] = "Seek"
-            elseif kind == "Figure" then
-                text[#text + 1] = "Figure"
-            elseif kind == "Snare" then
-                text[#text + 1] = "Snare"
-            elseif kind == "Toolshed" then
-                text[#text + 1] = "Toolshed"
-            else
-                text[#text + 1] = kind
-            end
-        end
-    end
-
-    if Display.Distance then
-        local root = getRoot()
-        local part = getPart(object)
-
-        if root and part then
-            text[#text + 1] = tostring(math.floor((root.Position - part.Position).Magnitude + 0.5))
-        end
-    end
-
-    return table.concat(text, " • ")
-end
-
-local function destroyLabel(entry)
-    if entry.Label then
-        pcall(function()
-            entry.Label:Destroy()
-        end)
-        entry.Label = nil
-    end
-end
-
-local function updateLabel(kind, object, entry)
-    if not object or not object.Parent then
-        return
-    end
-
-    local part = getPart(object)
-
-    if not part then
-        destroyLabel(entry)
-        return
-    end
-
-    if not Display.Name and not Display.Distance then
-        if entry.Label then
-            entry.Label.Enabled = false
-        end
-        return
-    end
-
-    if not entry.Label then
-        local gui = Instance.new("BillboardGui")
-        gui.Name = "JustXDoorsESPLabel"
-        gui.AlwaysOnTop = true
-        gui.LightInfluence = 0
-        gui.MaxDistance = 1000
-        gui.Size = UDim2.fromOffset(180, 26)
-        gui.StudsOffset = Vector3.new(0, 2.5, 0)
-        gui.Adornee = part
-        gui.Parent = part
-
-        local label = Instance.new("TextLabel")
-        label.Name = "Text"
-        label.BackgroundTransparency = 1
-        label.Size = UDim2.fromScale(1, 1)
-        label.Font = Enum.Font.GothamBold
-        label.TextSize = 13
-        label.TextColor3 = Colors[kind]
-        label.TextStrokeTransparency = 0.35
-        label.Parent = gui
-
-        entry.Label = gui
-    else
-        entry.Label.Adornee = part
-    end
-
-    entry.Label.Enabled = true
-
-    local label = entry.Label:FindFirstChild("Text")
-    if label then
-        label.Text = getLabel(kind, object)
-    end
-end
-
-local function destroyProxy(entry)
-    if entry.Proxy then
-        pcall(function()
-            entry.Proxy:Destroy()
-        end)
-        entry.Proxy = nil
-    end
-end
-
-local function getHighlightContainer()
-    if HighlightContainer and HighlightContainer.Parent then
-        return HighlightContainer
-    end
-
-    HighlightContainer = Instance.new("Folder")
-    HighlightContainer.Name = "JustXDoors_HotelESP"
-    HighlightContainer.Parent = workspace
-    return HighlightContainer
-end
-
-local function isIgnoredPart(part)
-    local n = part.Name:lower()
-    return n:find("hitbox", 1, true)
-        or n:find("collision", 1, true)
-        or n:find("prompt", 1, true)
-        or n == "primarypart"
-end
-
-local function getVisiblePart(object)
-    local preferred = {"Handle", "Main", "Key", "Mesh", "Root"}
-    for _, name in ipairs(preferred) do
-        local p = object:FindFirstChild(name, true)
-        if p and p:IsA("BasePart") and p.Transparency < 1 and not isIgnoredPart(p) then
-            return p
-        end
-    end
-
-    local best
-    local bestVolume = math.huge
-    for _, p in ipairs(object:GetDescendants()) do
-        if p:IsA("BasePart") and p.Transparency < 1 and not isIgnoredPart(p) then
-            local volume = p.Size.X * p.Size.Y * p.Size.Z
-            if volume > 0 and volume < bestVolume then
-                best = p
-                bestVolume = volume
-            end
-        end
-    end
-    return best
-end
-
-local function buildDoorProxy(entry, object)
-    destroyProxy(entry)
-
-    local proxy = Instance.new("Model")
-    proxy.Name = "HighlightModel"
-    proxy.Parent = workspace
-
-    local humanoid = Instance.new("Humanoid")
-    humanoid.Name = "HighlightHumanoid"
-    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-    humanoid.Parent = proxy
-
-    local count = 0
-    for _, source in ipairs(object:GetChildren()) do
-        if source:IsA("BasePart") and source.Name == "Door" then
-            local part = Instance.new("Part")
-            part.Name = "HighlightPart"
-            part.Transparency = 0.999
-            part.Size = source.Size
-            part.CFrame = source.CFrame
-            part.CanCollide = false
-            part.CanTouch = false
-            part.CanQuery = false
-            part.Material = Enum.Material.Glass
-            part.Parent = proxy
-
-            local weld = Instance.new("WeldConstraint")
-            weld.Part0 = part
-            weld.Part1 = source
-            weld.Parent = part
-
-            count += 1
-        end
-    end
-
-    if count == 0 then
-        proxy:Destroy()
-        return nil
-    end
-
-    entry.Proxy = proxy
-    return proxy
-end
-
-local TwoDESP = {
-    Vitamins=true, Lighter=true, Candle=true, AlarmClock=true, Lockpick=true,
-    SkeletonKey=true, Shears=true, Battery=true, Bandage=true, Smoothie=true,
-    Flashlight=true, TipJar=true, RiftCandle=true, RiftSmoothie=true, RiftJar=true,
-    Donut=true, Crucifix=true,
-    Dupe=true, Eyes=true, SallyLingering=true, SallyMoving=true,
-    Seek=true, Figure=true, Snare=true, Screech=true,
-}
-
-local function add2DESP(entry, object, kind)
-    local part = getPart(object)
-    if not part then
-        return false
-    end
-
-    local box = Instance.new("BillboardGui")
-    box.Name = "JustXDoorsESP2D"
-    box.AlwaysOnTop = true
-    box.LightInfluence = 0
-    box.MaxDistance = 0
-    box.Size = UDim2.fromOffset(76, 76)
-    box.StudsOffset = Vector3.new(0, 0, 0)
-    box.Adornee = part
-    box.Parent = getHighlightContainer()
-
-    local frame = Instance.new("Frame")
-    frame.BackgroundTransparency = 1
-    frame.BorderSizePixel = 2
-    frame.BorderColor3 = Colors[kind]
-    frame.Size = UDim2.fromScale(1, 1)
-    frame.Parent = box
-
-    entry.Highlights[#entry.Highlights + 1] = box
-    return true
-end
-
-local function addHighlight(entry, object, kind)
-    -- Items and entities use BillboardGui ESP instead of Highlight.
-    -- Roblox silently stops rendering Highlight instances after the client
-    -- reaches its 255-Highlight limit; this was causing newly dropped items
-    -- and newly spawned entities to appear only after another ESP was disabled.
-    -- BillboardGui is a world-space 2D overlay and is not subject to that limit.
-    if TwoDESP[kind] then
-        add2DESP(entry, object, kind)
-        return
-    end
-
-    local adornee
-    if kind == "Doors" then
-        adornee = buildDoorProxy(entry, object)
-    else
-        adornee = object
-    end
-
-    if not adornee then
-        return
-    end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "JustXDoorsESP"
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = Colors[kind]
-    highlight.OutlineColor = Colors[kind]
-    highlight.FillTransparency = (kind == "Drawers" or kind == "Closets" or kind == "Chest") and 1 or 0.55
-    highlight.OutlineTransparency = 0
-    highlight.Adornee = adornee
-    highlight.Parent = getHighlightContainer()
-
-    entry.Highlights[#entry.Highlights + 1] = highlight
-end
-
-local function rebuildHighlights(entry, object, kind)
-    for _, highlight in ipairs(entry.Highlights) do
-        pcall(function()
-            highlight:Destroy()
-        end)
-    end
-    table.clear(entry.Highlights)
-    addHighlight(entry, object, kind)
-end
-
-local function clearEntry(kind, object)
-    local entry = ESP[kind][object]
-
-    if not entry then
-        return
-    end
-
-    for _, highlight in ipairs(entry.Highlights) do
-        pcall(function()
-            highlight:Destroy()
-        end)
-    end
-
-    destroyLabel(entry)
-    destroyProxy(entry)
-    if entry.Connection then
-        pcall(function()
-            entry.Connection:Disconnect()
-        end)
-        entry.Connection = nil
-    end
-    if entry.RemovingConnection then
-        pcall(function()
-            entry.RemovingConnection:Disconnect()
-        end)
-        entry.RemovingConnection = nil
-    end
-    ESP[kind][object] = nil
-end
-
-local function addObject(kind, object, room)
-    if not object or not object.Parent then
-        return
-    end
-
-    if ESP[kind][object] then
-        local entry = ESP[kind][object]
-
-        local hasLiveHighlight = false
-        for _, highlight in ipairs(entry.Highlights) do
-            if highlight and highlight.Parent then
-                hasLiveHighlight = true
-                break
-            end
-        end
-
-        if not hasLiveHighlight then
-            rebuildHighlights(entry, object, kind)
-        end
-
-        updateLabel(kind, object, entry)
-        return
-    end
-
-    local entry = {
-        Highlights = {},
-        Room = room,
-    }
-
-    ESP[kind][object] = entry
-
-    if kind == "Doors" and room then
-        object:SetAttribute("JustXDoorsRoom", tonumber(room.Name))
-    end
-
-    addHighlight(entry, object, kind)
-
-    local function ensureVisual()
-        if not object.Parent or ESP[kind][object] ~= entry then
-            return
-        end
-
-        local live = false
-        for _, visual in ipairs(entry.Highlights) do
-            if visual and visual.Parent then
-                live = true
-                break
-            end
-        end
-
-        if not live then
-            rebuildHighlights(entry, object, kind)
-        end
-
-        updateLabel(kind, object, entry)
-    end
-
-    -- Roblox can replicate the container/model before its renderable BasePart.
-    -- Retry on the next few frames instead of waiting for an unrelated ESP toggle.
-    task.defer(ensureVisual)
-    task.delay(0.05, ensureVisual)
-    task.delay(0.15, ensureVisual)
-    task.delay(0.35, ensureVisual)
-    task.delay(0.75, ensureVisual)
-
-    if kind == "Doors" then
-        entry.Connection = object.ChildAdded:Connect(function(child)
-            if child:IsA("BasePart") and child.Name == "Door" then
-                task.defer(function()
-                    if object.Parent and ESP[kind][object] == entry then
-                        rebuildHighlights(entry, object, kind)
-                    end
-                end)
-            end
-        end)
-
-        entry.RemovingConnection = object.ChildRemoved:Connect(function(child)
-            if child:IsA("BasePart") and child.Name == "Door" then
-                task.defer(function()
-                    if object.Parent and ESP[kind][object] == entry then
-                        rebuildHighlights(entry, object, kind)
-                    end
-                end)
-            end
-        end)
-
-        table.insert(Connections, entry.Connection)
-        table.insert(Connections, entry.RemovingConnection)
-    end
-
-    object.Destroying:Once(function()
-        clearEntry(kind, object)
-    end)
-
-    updateLabel(kind, object, entry)
-end
-
-local function hasDrawerContainer(object)
-    return object and object:FindFirstChild("DrawerContainer", true) ~= nil
-end
-
-local function hasSameItemAncestor(object, room, itemName)
-    local parent = object.Parent
-    while parent and parent ~= room do
-        if parent.Name == itemName and parent:FindFirstChild("ModulePrompt", true) then
-            return true
-        end
-        parent = parent.Parent
-    end
-    return false
-end
-
-local function isRoomVisible(kind, room)
-    local current = tonumber(Players.LocalPlayer:GetAttribute("CurrentRoom"))
-    local number = tonumber(room and room.Name)
-
-    if not current or not number then
-        return true
-    end
+local function roomVisible(kind, room)
+    if not room then return true end
+
+    local current = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
+    local number = tonumber(room.Name)
+    if not current or not number then return true end
 
     if kind == "Doors" then
         return number == current or number == current + 1
     end
 
-    if kind == "Key" or kind == "Gold"
-        or kind == "Crucifix" or kind == "SallyToy"
-        or kind == "ElectricalKey" or kind == "BreakerPole"
+    if kind == "Key" or kind == "Gold" or kind == "Crucifix"
+        or kind == "SallyToy" or kind == "ElectricalKey"
+        or kind == "BreakerPole"
     then
         return number >= current - 1 and number <= current + 1
     end
@@ -715,88 +169,452 @@ local function isRoomVisible(kind, room)
     return number == current
 end
 
-local function isInsidePlayerInventory(object)
-    local backpack = Players.LocalPlayer:FindFirstChildOfClass("Backpack")
-    if backpack and object:IsDescendantOf(backpack) then
-        return true
+local function doorNumber(room)
+    local door = room and room:FindFirstChild("Door")
+    local sign = door and door:FindFirstChild("Sign")
+    local stinker = sign and sign:FindFirstChild("Stinker")
+
+    if stinker then
+        local ok, value = pcall(function() return stinker.Text end)
+        if ok and type(value) == "string" then
+            local number = tonumber(value:match("%d+"))
+            if number then return string.format("%04d", number) end
+        end
     end
 
-    local character = Players.LocalPlayer.Character
-    if character and object:IsDescendantOf(character) then
-        return true
-    end
-
-    local playerModel = workspace:FindFirstChild(Players.LocalPlayer.Name)
-    if playerModel and object:IsDescendantOf(playerModel) then
-        return true
-    end
-
-    return false
+    local number = room and tonumber(room.Name)
+    return number and string.format("%04d", number + 1) or "????"
 end
 
-local function addNamedWorkspaceObject(kind, object, room, allowInventory)
-    if not object or not object.Parent then
-        return
-    end
-
-    if not allowInventory and isInsidePlayerInventory(object) then
-        return
-    end
-
-    addObject(kind, object, room)
-end
-
-local function scanDropItems()
-    local drops = workspace:FindFirstChild("Drops")
-    if not drops then
-        return
-    end
-
-    -- Only direct children of Drops are considered dropped items.
-    -- This is intentional: nested parts of Candle/etc. must not create
-    -- duplicate ESP, and BatteryPack must never count as Battery.
-    local map = {
-        Vitamins = "Vitamins",
-        Lighter = "Lighter",
-        Candle = "Candle",
-        AlarmClock = "AlarmClock",
-        Lockpick = "Lockpick",
-        SkeletonKey = "SkeletonKey",
-        Shears = "Shears",
-        Battery = "Battery",
-        Bandage = "Bandage",
-        Smoothie = "Smoothie",
-        Flashlight = "Flashlight",
-        TipJar = "TipJar",
-        RiftCandle = "RiftCandle",
-        RiftSmoothie = "RiftSmoothie",
-        RiftJar = "RiftJar",
-        Donut = "Donut",
-        Crucifix = "Crucifix",
+local function labelName(kind, object)
+    local names = {
+        Doors="Door", Drawers="Drawer", Closets="Closet", Key="Key",
+        Gold="Gold", Chest="Chest", Bandage="Bandage", Smoothie="Smoothie",
+        Flashlight="Flashlight", TipJar="Tip Jar", Vitamins="Vitamins",
+        Lighter="Lighter", Candle="Candle", AlarmClock="Alarm Clock",
+        Lockpick="Lockpick", SkeletonKey="Skeleton Key", Shears="Shears",
+        RiftCandle="Rift Candle", RiftSmoothie="Rift Smoothie", RiftJar="Rift Jar",
+        Donut="Donut", Crucifix="Crucifix", SallyToy="Sally Toy",
+        ElectricalKey="Electrical Key", BreakerPole="Breaker Pole",
+        Battery="Battery", Dupe="Dupe", Eyes="Eyes", SallyLingering="Sally",
+        SallyMoving="Sally", Seek="Seek", Figure="Figure", Snare="Snare",
+        Screech="Screech", VentGate="Vent Gate", Toolshed="Toolshed",
+        Lever="Lever", Rush="Rush", Ambush="Ambush"
     }
 
-    local found = {}
+    if kind == "Doors" then
+        local room = object:GetAttribute("JustXDoorsRoom")
+        local roomObject = Rooms and Rooms:FindFirstChild(tostring(room))
+        return "Door • " .. doorNumber(roomObject)
+    end
 
-    for _, object in ipairs(drops:GetChildren()) do
-        local kind = map[object.Name]
-        if kind and Enabled[kind] then
-            found[kind] = found[kind] or {}
-            found[kind][object] = true
-            addNamedWorkspaceObject(kind, object, nil, false)
-        elseif object.Name == "BandagePack" and Enabled.Bandage then
-            -- BandagePack is a special case: the actual dropped Bandage can
-            -- exist inside it. Do not generalize this to BatteryPack or other
-            -- packs, because those are not Battery ESP targets.
-            local bandage = object:FindFirstChild("Bandage", true)
-            if bandage then
-                found.Bandage = found.Bandage or {}
-                found.Bandage[bandage] = true
-                addNamedWorkspaceObject("Bandage", bandage, nil, false)
+    return names[kind] or kind
+end
+
+local function updateLabel(kind, object, entry)
+    local part = getPart(object)
+    if not part then return end
+
+    if not Display.Name and not Display.Distance then
+        if entry.Label then entry.Label.Enabled = false end
+        return
+    end
+
+    local label = entry.Label
+    if not label or not label.Parent then
+        label = Instance.new("BillboardGui")
+        label.Name = "JustXDoorsESPLabel"
+        label.AlwaysOnTop = true
+        label.LightInfluence = 0
+        label.MaxDistance = 1500
+        label.Size = UDim2.fromOffset(190, 26)
+        label.StudsOffset = Vector3.new(0, 2.5, 0)
+        label.Adornee = part
+        label.Parent = VisualContainer
+        entry.Label = label
+
+        local text = Instance.new("TextLabel")
+        text.Name = "Text"
+        text.BackgroundTransparency = 1
+        text.Size = UDim2.fromScale(1, 1)
+        text.Font = Enum.Font.GothamBold
+        text.TextSize = 13
+        text.TextStrokeTransparency = 0.35
+        text.TextColor3 = Colors[kind] or Color3.new(1,1,1)
+        text.Parent = label
+    else
+        label.Adornee = part
+    end
+
+    label.Enabled = true
+
+    local text = label:FindFirstChild("Text")
+    if not text then return end
+
+    local parts = {}
+    if Display.Name then
+        parts[#parts + 1] = labelName(kind, object)
+    end
+
+    if Display.Distance then
+        local root = getRoot()
+        if root then
+            local distance = (root.Position - part.Position).Magnitude
+            parts[#parts + 1] = tostring(math.floor(distance + 0.5))
+        end
+    end
+
+    text.Text = table.concat(parts, " • ")
+end
+
+local function destroyVisual(entry)
+    if entry.Highlight then
+        pcall(function() entry.Highlight:Destroy() end)
+        entry.Highlight = nil
+    end
+    if entry.Label then
+        pcall(function() entry.Label:Destroy() end)
+        entry.Label = nil
+    end
+end
+
+local function createVisual(kind, object, entry)
+    if not object or not object.Parent then return false end
+    if entry.Highlight and entry.Highlight.Parent then return true end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsESP"
+    highlight.Adornee = object
+    highlight.DepthMode = INTERACTABLES[kind]
+        and Enum.HighlightDepthMode.Occluded
+        or Enum.HighlightDepthMode.AlwaysOnTop
+
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+
+    if INTERACTABLES[kind] then
+        -- Interactables never tint objects underneath them.
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+    else
+        highlight.FillTransparency = 0.55
+        highlight.OutlineTransparency = 0
+    end
+
+    highlight.Parent = VisualContainer
+    entry.Highlight = highlight
+
+    updateLabel(kind, object, entry)
+    return true
+end
+
+local function clearEntry(kind, object)
+    local entry = Objects[kind] and Objects[kind][object]
+    if not entry then return end
+
+    destroyVisual(entry)
+    Objects[kind][object] = nil
+end
+
+local function addObject(kind, object, room)
+    if not object or not object.Parent or not Enabled[kind] then
+        return
+    end
+
+    if not ITEM_KINDS[kind] and not ENTITY_KINDS[kind]
+        and not roomVisible(kind, room)
+    then
+        return
+    end
+
+    if ITEM_KINDS[kind] and isInventoryObject(object) then
+        return
+    end
+
+    local entry = Objects[kind][object]
+    if not entry then
+        entry = {Room = room}
+        Objects[kind][object] = entry
+    else
+        entry.Room = room or entry.Room
+    end
+
+    if kind == "Doors" and room then
+        object:SetAttribute("JustXDoorsRoom", tonumber(room.Name))
+    end
+
+    if not createVisual(kind, object, entry) then
+        return
+    end
+
+    updateLabel(kind, object, entry)
+end
+
+local function clearKind(kind)
+    for object in pairs(Objects[kind]) do
+        clearEntry(kind, object)
+    end
+end
+
+local function clearStale(kind, seen, domain)
+    for object in pairs(Objects[kind]) do
+        local keep = seen[object] and object.Parent
+
+        if keep == true then
+            continue
+        end
+
+        local shouldClear = true
+        if domain == "Drops" then
+            shouldClear = object.Parent == Drops
+                or (object.Parent and object.Parent.Name == "BandagePack")
+        elseif domain == "Rooms" then
+            shouldClear = object:IsDescendantOf(workspace)
+                and not isInventoryObject(object)
+        elseif domain == "Global" then
+            shouldClear = true
+        end
+
+        if shouldClear then
+            clearEntry(kind, object)
+        end
+    end
+end
+
+local function hasDrawerContainer(object)
+    return object and object:FindFirstChild("DrawerContainer", true) ~= nil
+end
+
+local function findItemRoot(object, room)
+    local root = object
+    local parent = object.Parent
+
+    while parent and parent ~= room do
+        if parent.Name == object.Name
+            and parent:FindFirstChild("ModulePrompt", true)
+        then
+            root = parent
+        end
+        parent = parent.Parent
+    end
+
+    return root
+end
+
+local function registerRoom(room, seen)
+    if not room or not room.Parent then return end
+
+    local door = room:FindFirstChild("Door")
+    if Enabled.Doors and door and roomVisible("Doors", room) then
+        seen.Doors[door] = true
+        addObject("Doors", door, room)
+    end
+
+    local itemMap = {
+        Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+        AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
+        Shears="Shears", RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie",
+        RiftJar="RiftJar", Donut="Donut", Crucifix="Crucifix",
+    }
+
+    for _, object in ipairs(room:GetDescendants()) do
+        if not object:IsA("Model") and not object:IsA("BasePart") then
+            continue
+        end
+
+        local name = object.Name
+
+        if Enabled.Drawers and roomVisible("Drawers", room)
+            and (name == "Dresser" or name == "Table" or name == "Rolltop_Desk")
+            and (name == "Rolltop_Desk" or hasDrawerContainer(object))
+        then
+            seen.Drawers[object] = true
+            addObject("Drawers", object, room)
+        end
+
+        if Enabled.Closets and roomVisible("Closets", room)
+            and (name == "Wardrobe" or name == "Toolshed")
+        then
+            seen.Closets[object] = true
+            addObject("Closets", object, room)
+        end
+
+        if Enabled.Toolshed and roomVisible("Toolshed", room)
+            and name == "Toolshed_Small"
+        then
+            seen.Toolshed[object] = true
+            addObject("Toolshed", object, room)
+        end
+
+        if roomVisible("Chest", room) then
+            if Enabled.Chest and (name == "ChestBox" or name == "ChestBoxLocked") then
+                seen.Chest[object] = true
+                addObject("Chest", object, room)
+            elseif Enabled.LockedChest and name == "LockedChestBox" then
+                seen.Chest[object] = true
+                addObject("Chest", object, room)
+            end
+        end
+
+        if Enabled.Key and roomVisible("Key", room) and name == "KeyObtain" then
+            seen.Key[object] = true
+            addObject("Key", object, room)
+        end
+
+        if Enabled.Gold and roomVisible("Gold", room) and name == "GoldPile" then
+            for _, levelObject in ipairs(object:GetChildren()) do
+                local level = tonumber(levelObject.Name)
+                if level and level >= (Module.GoldLevel or 1)
+                    and (levelObject:IsA("Model") or levelObject:IsA("BasePart"))
+                then
+                    seen.Gold[levelObject] = true
+                    addObject("Gold", levelObject, room)
+                end
+            end
+        end
+
+        if Enabled.Bandage and name == "Bandage" then
+            seen.Bandage[object] = true
+            addObject("Bandage", object, room)
+        elseif Enabled.Smoothie and name == "Smoothie" then
+            seen.Smoothie[object] = true
+            addObject("Smoothie", object, room)
+        end
+
+        if room.Name == "9" and (Enabled.Flashlight or Enabled.TipJar) then
+            local shop = room:FindFirstChild("RiftRoom_JeffShop")
+            if shop then
+                local flashlight = shop:FindFirstChild("Flashlight")
+                local tipJar = shop:FindFirstChild("TipJar")
+                if Enabled.Flashlight and flashlight then
+                    seen.Flashlight[flashlight] = true
+                    addObject("Flashlight", flashlight, room)
+                end
+                if Enabled.TipJar and tipJar then
+                    seen.TipJar[tipJar] = true
+                    addObject("TipJar", tipJar, room)
+                end
+            end
+        end
+
+        local kind = itemMap[name]
+        local insideBatteryPack = object:FindFirstAncestor("BatteryPack") ~= nil
+        local decorativeBookcaseLighter =
+            kind == "Lighter" and object:FindFirstAncestor("Bookcase") ~= nil
+        local itemRoot = kind and findItemRoot(object, room) or object
+
+        if kind and Enabled[kind] and itemRoot == object
+            and not insideBatteryPack
+            and not decorativeBookcaseLighter
+            and object:FindFirstChild("ModulePrompt", true)
+            and roomVisible(kind, room)
+        then
+            seen[kind][object] = true
+            addObject(kind, object, room)
+        end
+
+        if Enabled.VentGate and name == "VentGrate" and roomVisible("VentGate", room) then
+            seen.VentGate[object] = true
+            addObject("VentGate", object, room)
+        end
+
+        if Enabled.Lever and name == "LeverForGate" and roomVisible("Lever", room) then
+            seen.Lever[object] = true
+            addObject("Lever", object, room)
+        end
+
+        if Enabled.BreakerPole and name == "LiveBreakerPolePickup" then
+            seen.BreakerPole[object] = true
+            addObject("BreakerPole", object, room)
+        end
+
+        if Enabled.SallyToy and name == "SallyToyObtain" and room.Name == "28" then
+            seen.SallyToy[object] = true
+            addObject("SallyToy", object, room)
+        end
+
+        if Enabled.ElectricalKey and name == "ElectricalKeyObtain" and room.Name == "100" then
+            seen.ElectricalKey[object] = true
+            addObject("ElectricalKey", object, room)
+        end
+    end
+
+    if Enabled.Crucifix and room.Name == "1" then
+        local wall = room:FindFirstChild("CrucifixWall", true)
+        if wall then
+            seen.Crucifix[wall] = true
+            addObject("Crucifix", wall, room)
+        end
+    end
+end
+
+local function newSeen()
+    local seen = {}
+    for _, kind in ipairs(KINDS) do
+        seen[kind] = {}
+    end
+    return seen
+end
+
+local function scanRooms()
+    Rooms = getRooms()
+    local seen = newSeen()
+
+    if Rooms then
+        for _, room in ipairs(Rooms:GetChildren()) do
+            if tonumber(room.Name) then
+                registerRoom(room, seen)
             end
         end
     end
 
-    -- Remove only stale dropped-item entries. Room ESP is handled separately.
+    local roomKinds = {
+        "Doors","Drawers","Closets","Toolshed","Chest","Key","Gold",
+        "Bandage","Smoothie","Flashlight","TipJar","Vitamins","Lighter",
+        "Candle","AlarmClock","Lockpick","SkeletonKey","Shears","RiftCandle",
+        "RiftSmoothie","RiftJar","Donut","Crucifix","SallyToy","ElectricalKey",
+        "BreakerPole","VentGate","Lever"
+    }
+
+    for _, kind in ipairs(roomKinds) do
+        if Enabled[kind] then
+            clearStale(kind, seen[kind], "Rooms")
+        else
+            clearKind(kind)
+        end
+    end
+end
+
+local DROP_MAP = {
+    Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+    AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
+    Shears="Shears", Battery="Battery", Bandage="Bandage",
+    Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
+    RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
+    Donut="Donut", Crucifix="Crucifix",
+}
+
+local function scanDrops()
+    Drops = workspace:FindFirstChild("Drops")
+    local seen = newSeen()
+
+    if Drops then
+        for _, object in ipairs(Drops:GetChildren()) do
+            local kind = DROP_MAP[object.Name]
+
+            if kind and Enabled[kind] then
+                seen[kind][object] = true
+                addObject(kind, object, nil)
+            elseif object.Name == "BandagePack" and Enabled.Bandage then
+                local bandage = object:FindFirstChild("Bandage", true)
+                if bandage then
+                    seen.Bandage[bandage] = true
+                    addObject("Bandage", bandage, nil)
+                end
+            end
+        end
+    end
+
     local kinds = {
         "Vitamins","Lighter","Candle","AlarmClock","Lockpick","SkeletonKey",
         "Shears","Battery","Bandage","Smoothie","Flashlight","TipJar",
@@ -805,864 +623,450 @@ local function scanDropItems()
 
     for _, kind in ipairs(kinds) do
         if Enabled[kind] then
-            for object in pairs(ESP[kind]) do
-                local parent = object and object.Parent
-                if parent == drops or (parent and parent.Name == "BandagePack" and kind == "Bandage") then
-                    if not found[kind] or not found[kind][object] then
-                        clearEntry(kind, object)
-                    end
-                end
-            end
+            clearStale(kind, seen[kind], "Drops")
         end
     end
 end
 
-local function scanSpecialHotelItems()
-    local rooms = getRooms()
-    if not rooms then
-        return
-    end
-
-    local room1 = rooms:FindFirstChild("1")
-    if Enabled.Crucifix and room1 and isRoomVisible("Crucifix", room1) then
-        local wall = room1:FindFirstChild("CrucifixWall", true)
-        if wall then
-            addNamedWorkspaceObject("Crucifix", wall, room1, false)
-        end
-    end
-
-    local room28 = rooms:FindFirstChild("28")
-    if Enabled.SallyToy and room28 and isRoomVisible("SallyToy", room28) then
-        local toy = room28:FindFirstChild("SallyToyObtain", true)
-        if toy then
-            addNamedWorkspaceObject("SallyToy", toy, room28, false)
-        end
-    end
-
-    local room100 = rooms:FindFirstChild("100")
-    if Enabled.ElectricalKey and room100 and isRoomVisible("ElectricalKey", room100) then
-        local key = room100:FindFirstChild("ElectricalKeyObtain", true)
-        if key then
-            addNamedWorkspaceObject("ElectricalKey", key, room100, false)
-        end
-    end
-
-    if Enabled.BreakerPole then
-        for _, object in ipairs(workspace:GetDescendants()) do
-            if object.Name == "LiveBreakerPolePickup" then
-                local room = object:FindFirstAncestorWhichIsA("Model")
-                while room and tonumber(room.Name) == nil and room.Parent do
-                    room = room.Parent
-                end
-                if room and isRoomVisible("BreakerPole", room) then
-                    addNamedWorkspaceObject("BreakerPole", object, room, false)
-                end
-            end
-        end
-    end
-end
-
-local EntityESPNames = {
-    SideroomDupe = "Dupe",
-    Eyes = "Eyes",
-    SallyLingering = "SallyLingering",
-    SallyMoving = "SallyMoving",
-    SeekMovingNewClone = "Seek",
-    FigureRig = "Figure",
-    Snare = "Snare",
-    Screech = "Screech",
-}
-
-local function scanSpecialEntities()
-    local found = {}
+local function scanEntities()
+    local seen = newSeen()
 
     local function register(kind, object)
-        if not object or not object.Parent or not Enabled[kind] then
-            return
+        if not Enabled[kind] or not object or not object.Parent then return end
+        seen[kind][object] = true
+        addObject(kind, object, getRoom(object))
+    end
+
+    if Enabled.Rush or Enabled.Ambush then
+        for _, object in ipairs(workspace:GetChildren()) do
+            if object.Name == "RushMoving" and Enabled.Rush then
+                register("Rush", object)
+            elseif object.Name == "AmbushMoving" and Enabled.Ambush then
+                register("Ambush", object)
+            end
         end
-
-        found[kind] = found[kind] or {}
-        found[kind][object] = true
-        addNamedWorkspaceObject(kind, object, nil, true)
     end
 
-    -- Global entities.
-    if Enabled.Eyes then
-        register("Eyes", workspace:FindFirstChild("Eyes"))
-    end
-    if Enabled.SallyLingering then
-        register("SallyLingering", workspace:FindFirstChild("SallyLingering"))
-    end
-    if Enabled.SallyMoving then
-        register("SallyMoving", workspace:FindFirstChild("SallyMoving"))
-    end
+    if Enabled.Eyes then register("Eyes", workspace:FindFirstChild("Eyes")) end
+    if Enabled.SallyLingering then register("SallyLingering", workspace:FindFirstChild("SallyLingering")) end
+    if Enabled.SallyMoving then register("SallyMoving", workspace:FindFirstChild("SallyMoving")) end
+
     if Enabled.Screech then
         local camera = workspace:FindFirstChild("Camera")
         register("Screech", camera and camera:FindFirstChild("Screech"))
     end
 
-    -- Room entities. Search every room, not only CurrentRoom +/- 1.
-    local rooms = getRooms()
-    if rooms then
-        for _, room in ipairs(rooms:GetChildren()) do
-            if Enabled.Dupe then
-                register("Dupe", room:FindFirstChild("SideroomDupe", true))
-            end
-            if Enabled.Seek then
-                register("Seek", room:FindFirstChild("SeekMovingNewClone", true))
-            end
-            if Enabled.Figure then
-                register("Figure", room:FindFirstChild("FigureRig", true))
-            end
-            if Enabled.Snare then
-                register("Snare", room:FindFirstChild("Snare", true))
-            end
+    if Rooms then
+        for _, room in ipairs(Rooms:GetChildren()) do
+            if Enabled.Dupe then register("Dupe", room:FindFirstChild("SideroomDupe", true)) end
+            if Enabled.Seek then register("Seek", room:FindFirstChild("SeekMovingNewClone", true)) end
+            if Enabled.Figure then register("Figure", room:FindFirstChild("FigureRig", true)) end
+            if Enabled.Snare then register("Snare", room:FindFirstChild("Snare", true)) end
         end
     end
 
-    local enabledKinds = {
-        "Dupe","Eyes","SallyLingering","SallyMoving",
-        "Seek","Figure","Snare","Screech",
-    }
-
-    for _, kind in ipairs(enabledKinds) do
+    for _, kind in ipairs({"Rush","Ambush","Dupe","Eyes","SallyLingering","SallyMoving","Seek","Figure","Snare","Screech"}) do
         if Enabled[kind] then
-            for object in pairs(ESP[kind]) do
-                if not found[kind] or not found[kind][object] or not object.Parent then
-                    clearEntry(kind, object)
-                end
-            end
+            clearStale(kind, seen[kind], "Global")
         else
             clearKind(kind)
         end
     end
 end
 
-local function scanRoom(room)
-    if not room or not room.Parent then
-        return
-    end
-
-    local roomVisible = {
-        Doors = isRoomVisible("Doors", room),
-        Drawers = isRoomVisible("Drawers", room),
-        Closets = isRoomVisible("Closets", room),
-        Key = isRoomVisible("Key", room),
-        Gold = isRoomVisible("Gold", room),
-    }
-
-    local door = room:FindFirstChild("Door")
-    if Enabled.Doors and roomVisible.Doors and door then
-        addObject("Doors", door, room)
-    end
-
-    for _, object in ipairs(room:GetDescendants()) do
-        if not object:IsA("Model") and not object:IsA("BasePart") then
-            continue
-        end
-
-        if Enabled.Drawers and roomVisible.Drawers
-            and (object.Name == "Dresser" or object.Name == "Table" or object.Name == "Rolltop_Desk")
-            and (object.Name == "Rolltop_Desk" or hasDrawerContainer(object))
-        then
-            addObject("Drawers", object, room)
-        end
-
-        if Enabled.Closets and roomVisible.Closets
-            and (object.Name == "Wardrobe" or object.Name == "Toolshed")
-        then
-            addObject("Closets", object, room)
-        end
-
-        if Enabled.Toolshed and roomVisible.Closets and object.Name == "Toolshed_Small" then
-            addObject("Toolshed", object, room)
-        end
-
-        if (Enabled.Chest or Enabled.LockedChest) and roomVisible.Drawers then
-            if Enabled.Chest and (object.Name == "ChestBox" or object.Name == "ChestBoxLocked") then
-                addObject("Chest", object, room)
-            elseif Enabled.LockedChest and object.Name == "LockedChestBox" then
-                addObject("Chest", object, room)
-            end
-        end
-
-        if Enabled.Key and object.Name == "KeyObtain" then
-            addObject("Key", object, room)
-        end
-
-        if Enabled.Gold and object.Name == "GoldPile" then
-            for _, levelObject in ipairs(object:GetChildren()) do
-                local level = tonumber(levelObject.Name)
-                if level and level >= (Module.GoldLevel or 1)
-                    and (levelObject:IsA("Model") or levelObject:IsA("BasePart"))
-                then
-                    addObject("Gold", levelObject, room)
-                end
-            end
-        end
-
-        if object.Name == "Bandage" and Enabled.Bandage then
-            addObject("Bandage", object, room)
-        end
-
-        if object.Name == "Smoothie" and Enabled.Smoothie then
-            addObject("Smoothie", object, room)
-        end
-
-        if room.Name == "9" and (Enabled.Flashlight or Enabled.TipJar) then
-            local shop = room:FindFirstChild("RiftRoom_JeffShop")
-            if shop then
-                if Enabled.Flashlight then
-                    local flashlight = shop:FindFirstChild("Flashlight")
-                    if flashlight then
-                        addObject("Flashlight", flashlight, room)
-                    end
-                end
-                if Enabled.TipJar then
-                    local tipJar = shop:FindFirstChild("TipJar")
-                    if tipJar then
-                        addObject("TipJar", tipJar, room)
-                    end
-                end
-            end
-        end
-
-        local roomItemMap = {
-            Vitamins = "Vitamins",
-            Lighter = "Lighter",
-            Candle = "Candle",
-            AlarmClock = "AlarmClock",
-            Lockpick = "Lockpick",
-            SkeletonKey = "SkeletonKey",
-            Shears = "Shears",
-            RiftCandle = "RiftCandle",
-            RiftSmoothie = "RiftSmoothie",
-            RiftJar = "RiftJar",
-            Donut = "Donut",
-            Crucifix = "Crucifix",
-        }
-
-        local roomItemKind = roomItemMap[object.Name]
-
-        -- BatteryPack contains battery-named descendants, but BatteryPack is
-        -- not a Battery ESP target. Never classify nested batteries from it.
-        local insideBatteryPack = object:FindFirstAncestor("BatteryPack") ~= nil
-        local decorativeBookcaseItem =
-            roomItemKind == "Lighter"
-            and object:FindFirstAncestor("Bookcase") ~= nil
-
-        -- Only the actual item container gets ESP. Nested parts/models with
-        -- the same name must never create a second label/highlight.
-        local itemRoot = object
-        if roomItemKind then
-            local parent = object.Parent
-            while parent and parent ~= room do
-                if parent.Name == object.Name and parent:FindFirstChild("ModulePrompt", true) then
-                    itemRoot = parent
-                end
-                parent = parent.Parent
-            end
-        end
-
-        if roomItemKind
-            and Enabled[roomItemKind]
-            and itemRoot == object
-            and not decorativeBookcaseItem
-            and not insideBatteryPack
-            and object:FindFirstChild("ModulePrompt", true)
-        then
-            addNamedWorkspaceObject(roomItemKind, object, room, false)
-        end
-
-        if object.Name == "VentGrate" and Enabled.VentGate and roomVisible.Drawers then
-            addObject("VentGate", object, room)
-        end
-
-        if object.Name == "LeverForGate" and Enabled.Lever and roomVisible.Drawers then
-            addObject("Lever", object, room)
-        end
-    end
+local function scanAll()
+    scanRooms()
+    scanDrops()
+    scanEntities()
+    ScanRequested = false
 end
 
-local clearKind
-local scanAll
-
-local function clearEntityESP()
-    clearKind("Rush")
+local function requestScan()
+    ScanRequested = true
 end
 
-local function notifyEntity(_) end
-
-local function scanEntities()
-    if not Enabled.Rush and not Enabled.Ambush then
-        clearKind("Rush")
-        clearKind("Ambush")
-        return
+local function requestRoom(room)
+    if room and room.Parent then
+        PendingRooms[room] = true
     end
-
-    local foundRush = {}
-    local foundAmbush = {}
-
-    for _, entity in ipairs(workspace:GetChildren()) do
-        local isRush = entity.Name == "RushMoving"
-        local isAmbush = entity.Name == "AmbushMoving"
-
-        if (isRush and Enabled.Rush) or (isAmbush and Enabled.Ambush) then
-            local root = entity:FindFirstChild("RushNew") or entity.PrimaryPart or entity:FindFirstChildWhichIsA("BasePart", true)
-            if root and root:IsA("BasePart") then
-                entity.PrimaryPart = root
-
-                local humanoid = entity:FindFirstChild("HighlightHumanoid")
-                if not humanoid then
-                    humanoid = Instance.new("Humanoid")
-                    humanoid.Name = "HighlightHumanoid"
-                    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-                    humanoid.Parent = entity
-                end
-
-                root.Transparency = 0.999
-                root.Material = Enum.Material.Glass
-
-                local kind = isRush and "Rush" or "Ambush"
-                addObject(kind, entity, nil)
-                if isRush then
-                    foundRush[entity] = true
-                else
-                    foundAmbush[entity] = true
-                end
-            end
-        end
-    end
-
-    for entity in pairs(ESP.Rush) do
-        if not foundRush[entity] or not entity.Parent then
-            clearEntry("Rush", entity)
-        end
-    end
-
-    for entity in pairs(ESP.Ambush) do
-        if not foundAmbush[entity] or not entity.Parent then
-            clearEntry("Ambush", entity)
-        end
-    end
-end
-local function refreshRoomVisibility()
-    -- Keep ESP for objects that still exist in Workspace.
-    -- Changing CurrentRoom must not delete previous-room ESP.
-    scanAll()
+    ScanRequested = true
 end
 
-scanAll = function()
-    local rooms = getRooms()
-
-    if rooms then
-        for _, room in ipairs(rooms:GetChildren()) do
-            scanRoom(room)
-        end
-    end
-
-    scanDropItems()
-    scanSpecialHotelItems()
-    scanSpecialEntities()
-end
-
-clearKind = function(kind)
-    local copy = {}
-
-    for object in pairs(ESP[kind]) do
-        copy[#copy + 1] = object
-    end
-
-    for _, object in ipairs(copy) do
-        clearEntry(kind, object)
-    end
-end
-
-local function setKind(kind, enabled)
-    if enabled then
-        scanAll()
-    else
-        clearKind(kind)
-    end
-end
-
-local function applyInteractables(selected)
-    local doors = false
-    local drawers = false
-    local closets = false
-    local chest = false
-    local lockedChest = false
-    local ventGate = false
-    local lever = false
-    local toolshed = false
-
-    local function enable(value)
-        if value == "Doors" then doors = true
-        elseif value == "Drawers" then drawers = true
-        elseif value == "Closets" then closets = true
-        elseif value == "Chest" then chest = true
-        elseif value == "LockedChest" then lockedChest = true
-        elseif value == "Vent Gate" then ventGate = true
-        elseif value == "Lever" then lever = true
-        elseif value == "Toolshed" then toolshed = true
-        elseif value == "All" then
-            doors = true
-            drawers = true
-            closets = true
-            chest = true
-            lockedChest = true
-            ventGate = true
-            lever = true
-            toolshed = true
-        end
-    end
-
-    if type(selected) == "table" then
-        if #selected > 0 then
-            for _, value in ipairs(selected) do
-                enable(value)
-            end
-        else
-            if selected.Doors == true then doors = true end
-            if selected.Drawers == true then drawers = true end
-            if selected.Closets == true then closets = true end
-            if selected.Chest == true then chest = true end
-            if selected.LockedChest == true then lockedChest = true end
-            if selected["Vent Gate"] == true then ventGate = true end
-            if selected.Lever == true then lever = true end
-            if selected.Toolshed == true then toolshed = true end
-            if selected.All == true then
-                doors = true
-                drawers = true
-                closets = true
-                chest = true
-                lockedChest = true
-                ventGate = true
-                lever = true
-                toolshed = true
-            end
-        end
-    else
-        enable(selected)
-    end
-
-    Enabled.Doors = doors
-    Enabled.Drawers = drawers
-    Enabled.Closets = closets
-    Enabled.Chest = chest
-    Enabled.LockedChest = lockedChest
-    Enabled.VentGate = ventGate
-    Enabled.Lever = lever
-    Enabled.Toolshed = toolshed
-
-    setKind("Doors", doors)
-    setKind("Drawers", drawers)
-    setKind("Closets", closets)
-    clearKind("Chest")
-    clearKind("VentGate")
-    clearKind("Lever")
-    clearKind("Toolshed")
-
-    if chest or lockedChest or ventGate or lever or toolshed then
-        scanAll()
-    end
-end
-
-local function applyItems(selected)
-    local key = false
-    local goldLevel = nil
-    local bandage = false
-    local smoothie = false
-    local flashlight = false
-    local tipJar = false
-    local itemFlags = {
-        Vitamins=false, Lighter=false, Candle=false, AlarmClock=false,
-        Lockpick=false, SkeletonKey=false, Shears=false, Battery=false,
-        RiftCandle=false, RiftSmoothie=false, RiftJar=false, Donut=false,
-        Crucifix=false, SallyToy=false, ElectricalKey=false, BreakerPole=false,
-    }
-
-    local function enable(value)
-        if value == "Key" then
-            key = true
-        elseif value == "Gold" then
-            goldLevel = 1
-        elseif value == "Bandage" then
-            bandage = true
-        elseif value == "Smoothie" then
-            smoothie = true
-        elseif value == "Flashlight" then
-            flashlight = true
-        elseif value == "Tip Jar" then
-            tipJar = true
-        else
-            local map = {
-                Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
-                AlarmClock="AlarmClock", Lockpick="Lockpick",
-                ["Skeleton Key"]="SkeletonKey", Shears="Shears", Battery="Battery",
-                ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
-                ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
-                ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
-                ["Breaker Pole"]="BreakerPole",
-            }
-            local key = map[value]
-            if key then itemFlags[key] = true end
-        end
-    end
-
-    if type(selected) == "table" then
-        if #selected > 0 then
-            for _, value in ipairs(selected) do
-                enable(value)
-            end
-        else
-            if selected.Key == true then key = true end
-            if selected.Gold ~= nil and selected.Gold ~= false then
-                goldLevel = tonumber(selected.Gold) or 1
-            end
-            if selected.Bandage == true then bandage = true end
-            if selected.Smoothie == true then smoothie = true end
-            if selected.Flashlight == true then flashlight = true end
-            if selected["Tip Jar"] == true then tipJar = true end
-            local map = {
-                Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
-                AlarmClock="AlarmClock", Lockpick="Lockpick",
-                ["Skeleton Key"]="SkeletonKey", Shears="Shears", Battery="Battery",
-                ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
-                ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
-                ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
-                ["Breaker Pole"]="BreakerPole",
-            }
-            for label, key in pairs(map) do
-                if selected[label] == true then itemFlags[key] = true end
-            end
-        end
-    else
-        enable(selected)
-    end
-
-    Enabled.Key = key
-    Enabled.Gold = goldLevel ~= nil
-    Enabled.Bandage = bandage
-    Enabled.Smoothie = smoothie
-    Enabled.Flashlight = flashlight
-    Enabled.TipJar = tipJar
-    for key, value in pairs(itemFlags) do
-        Enabled[key] = value
-    end
-    Module.GoldLevel = goldLevel or 1
-
-    local itemKinds = {
-        "Key", "Gold", "Bandage", "Smoothie", "Flashlight", "TipJar",
-        "Vitamins", "Lighter", "Candle", "AlarmClock", "Lockpick",
-        "SkeletonKey", "Shears", "Battery", "RiftCandle", "RiftSmoothie",
-        "RiftJar", "Donut", "Crucifix", "SallyToy", "ElectricalKey",
-        "BreakerPole",
-    }
-
-    for _, kind in ipairs(itemKinds) do
-        if not Enabled[kind] then
-            clearKind(kind)
-        end
-    end
-
-    scanAll()
-end
-
-local function refreshLabels()
-    for kind, objects in pairs(ESP) do
-        if type(objects) == "table" then
-            for object, entry in pairs(objects) do
-                if typeof(object) == "Instance" and object.Parent then
-                    updateLabel(kind, object, entry)
-                end
-            end
-        end
-    end
-end
-
-local function queueRoomScan(room)
-    if not room or not room.Parent or RoomScanQueued[room] then
-        return
-    end
-
-    RoomScanQueued[room] = true
-
-    task.defer(function()
-        RoomScanQueued[room] = nil
+local function refreshPendingRooms()
+    for room in pairs(PendingRooms) do
+        PendingRooms[room] = nil
         if room.Parent then
-            scanRoom(room)
+            -- Full reconciliation is intentionally used for room changes:
+            -- CurrentRooms can replace several descendants in one replication step.
+            scanRooms()
         end
-    end)
+    end
 end
 
-local function hookRooms(rooms)
-    if RoomsConnection then
-        pcall(function()
-            RoomsConnection:Disconnect()
-        end)
-        RoomsConnection = nil
+local function hookRoom(room)
+    if not room or not room.Parent then return end
+
+    local list = {}
+    RoomConnections[room] = list
+
+    table.insert(list, room.DescendantAdded:Connect(function(object)
+        local interesting = {
+            Door=true, Dresser=true, Table=true, Rolltop_Desk=true,
+            Wardrobe=true, DrawerContainer=true, KeyObtain=true, GoldPile=true,
+            Bandage=true, Smoothie=true, Toolshed=true, Toolshed_Small=true,
+            CrucifixWall=true, SallyToyObtain=true, ElectricalKeyObtain=true,
+            LiveBreakerPolePickup=true, VentGrate=true, LeverForGate=true,
+            Vitamins=true, Lighter=true, Candle=true, AlarmClock=true,
+            Lockpick=true, SkeletonKey=true, Shears=true, RiftCandle=true,
+            RiftSmoothie=true, RiftJar=true, Donut=true, SideroomDupe=true,
+            SeekMovingNewClone=true, FigureRig=true, Snare=true,
+        }
+        if interesting[object.Name] then
+            requestRoom(room)
+        end
+    end))
+
+    table.insert(list, room.DescendantRemoving:Connect(function()
+        requestRoom(room)
+    end))
+
+    table.insert(list, room.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            RoomConnections[room] = nil
+            table.clear(list)
+            requestScan()
+        end
+    end))
+end
+
+local function hookRooms(container)
+    disconnectList(RoomConnections[container] or {})
+    for room, list in pairs(RoomConnections) do
+        if room ~= container then
+            disconnectList(list)
+            RoomConnections[room] = nil
+        end
     end
 
-    if not rooms then
-        return
-    end
+    Rooms = container
+    if not container then return end
 
-    RoomsConnection = rooms.ChildAdded:Connect(function(room)
-        queueRoomScan(room)
-
-        local roomConnection
-        roomConnection = room.DescendantAdded:Connect(function()
-            queueRoomScan(room)
-        end)
-
-        table.insert(Connections, roomConnection)
-
-        task.delay(0.15, function()
-            if room.Parent then
-                queueRoomScan(room)
-            end
-        end)
-    end)
-
-    table.insert(Connections, RoomsConnection)
-
-    for _, room in ipairs(rooms:GetChildren()) do
-        local roomConnection = room.DescendantAdded:Connect(function()
-            queueRoomScan(room)
-        end)
-        table.insert(Connections, roomConnection)
-        queueRoomScan(room)
-    end
-
-    connect(rooms.DescendantAdded, function(object)
-        if object.Name == "KeyObtain"
-            or object.Name == "Door"
-            or object.Name == "Dresser"
-            or object.Name == "Table"
-            or object.Name == "Wardrobe"
-            or object.Name == "DrawerContainer"
-            or object.Name == "Stinker"
-            or object.Name == "GoldPile"
-            or object.Name == "Bandage"
-            or object.Name == "Smoothie"
-            or object.Name == "Toolshed"
-            or object.Name == "Toolshed_Small"
-            or object.Name == "SideroomDupe"
-            or object.Name == "FigureRig"
-            or object.Name == "Snare"
-            or object.Name == "SeekMovingNewClone"
-            or object.Name == "CrucifixWall"
-            or object.Name == "SallyToyObtain"
-            or object.Name == "ElectricalKeyObtain"
-            or object.Name == "LiveBreakerPolePickup"
-            or object.Name == "VentGrate"
-            or object.Name == "LeverForGate"
-        then
-            local room = object:FindFirstAncestorWhichIsA("Model")
-            while room and tonumber(room.Name) == nil and room.Parent do
-                room = room.Parent
-            end
-            if room then
-                queueRoomScan(room)
-            else
-                scanAll()
-            end
+    connect(container.ChildAdded, function(room)
+        if tonumber(room.Name) then
+            hookRoom(room)
+            requestRoom(room)
         end
     end)
 
-    scanAll()
+    connect(container.ChildRemoved, function()
+        requestScan()
+    end)
+
+    for _, room in ipairs(container:GetChildren()) do
+        if tonumber(room.Name) then hookRoom(room) end
+    end
+
+    requestScan()
 end
 
+local function hookDrops(container)
+    disconnectList(DropConnections)
+    Drops = container
+    if not container then return end
+
+    table.insert(DropConnections, container.ChildAdded:Connect(function()
+        PendingDrops = true
+        ScanRequested = true
+    end))
+
+    table.insert(DropConnections, container.ChildRemoved:Connect(function()
+        PendingDrops = true
+        ScanRequested = true
+    end))
+
+    table.insert(DropConnections, container.DescendantAdded:Connect(function()
+        PendingDrops = true
+        ScanRequested = true
+    end))
+
+    table.insert(DropConnections, container.DescendantRemoving:Connect(function()
+        PendingDrops = true
+        ScanRequested = true
+    end))
+
+    scanDrops()
+end
 
 local function setup()
-    local rooms = getRooms()
-    if rooms then hookRooms(rooms) end
+    VisualContainer = Instance.new("Folder")
+    VisualContainer.Name = "JustXDoors_HotelESP"
+    VisualContainer.Parent = workspace
 
-    local oldContainer = workspace:FindFirstChild("JustXDoors_HotelESP")
-    if oldContainer then pcall(function() oldContainer:Destroy() end) end
+    hookRooms(getRooms())
+    hookDrops(workspace:FindFirstChild("Drops"))
 
-    for _, object in ipairs(workspace:GetDescendants()) do
-        if object:IsA("BillboardGui") and object.Name == "JustXDoorsESPLabel" then
-            pcall(function() object:Destroy() end)
+    connect(workspace.ChildAdded, function(object)
+        if object.Name == "CurrentRooms" then
+            hookRooms(object)
+            return
         end
-    end
+
+        if object.Name == "Drops" then
+            hookDrops(object)
+            return
+        end
+
+        if object.Name == "RushMoving" or object.Name == "AmbushMoving"
+            or object.Name == "Eyes" or object.Name == "SallyLingering"
+            or object.Name == "SallyMoving" or object.Name == "Screech"
+        then
+            requestScan()
+        end
+    end)
+
+    connect(workspace.ChildRemoved, function(object)
+        if object == Rooms or object == Drops then
+            requestScan()
+        elseif object.Name == "RushMoving" or object.Name == "AmbushMoving"
+            or object.Name == "Eyes" or object.Name == "SallyLingering"
+            or object.Name == "SallyMoving"
+        then
+            requestScan()
+        end
+    end)
 
     connect(workspace.DescendantAdded, function(object)
         if object:IsA("ProximityPrompt") then return end
 
-        local entityNames = {
-            Eyes=true, SallyLingering=true, SallyMoving=true,
-            SeekMovingNewClone=true, SideroomDupe=true, FigureRig=true,
-            Snare=true, Screech=true, RushMoving=true, AmbushMoving=true,
-        }
-
-        if entityNames[object.Name] then
-            task.defer(function()
-                scanEntities()
-                scanSpecialEntities()
-            end)
-        elseif object.Parent and object.Parent.Name == "Drops" then
-            task.defer(scanDropItems)
-        end
-    end)
-
-    local function hookDrops(drops)
-        if not drops then
+        if Drops and object:IsDescendantOf(Drops) then
+            PendingDrops = true
+            ScanRequested = true
             return
         end
 
-        connect(drops.ChildAdded, function(drop)
-            -- Wait for the dropped object's own contents/physics to settle,
-            -- then process that exact root. No unrelated ESP toggle is needed.
-            task.defer(function()
-                if drop and drop.Parent == drops then
-                    scanDropItems()
-                end
-            end)
-            task.delay(0.05, function()
-                if drop and drop.Parent == drops then
-                    scanDropItems()
-                end
-            end)
-            task.delay(0.2, function()
-                if drop and drop.Parent == drops then
-                    scanDropItems()
-                end
-            end)
-        end)
+        local interesting = {
+            KeyObtain=true, GoldPile=true, Door=true, Dresser=true,
+            Table=true, Wardrobe=true, DrawerContainer=true, Bandage=true,
+            Smoothie=true, SideroomDupe=true, FigureRig=true, Snare=true,
+            SeekMovingNewClone=true, RushMoving=true, AmbushMoving=true,
+            Eyes=true, SallyLingering=true, SallyMoving=true, Screech=true,
+            VentGrate=true, LeverForGate=true, Toolshed=true,
+            Toolshed_Small=true, LiveBreakerPolePickup=true,
+            CrucifixWall=true, SallyToyObtain=true, ElectricalKeyObtain=true,
+        }
 
-        task.defer(scanDropItems)
-    end
-
-    -- Drops can already exist when the ESP module initializes.
-    hookDrops(workspace:FindFirstChild("Drops"))
-
-    connect(workspace.ChildAdded, function(object)
-        if object.Name == "Drops" then
-            hookDrops(object)
-        elseif object.Name == "CurrentRooms" then
-            task.defer(function() hookRooms(object) end)
-        elseif object.Name == "RushMoving" or object.Name == "AmbushMoving"
-            or object.Name == "Eyes" or object.Name == "SallyLingering"
-            or object.Name == "SallyMoving" or object.Name == "SeekMovingNewClone"
-            or object.Name == "Screech" or object.Name == "SideroomDupe"
-            or object.Name == "FigureRig" or object.Name == "Snare"
-        then
-            task.defer(function() scanEntities(); scanSpecialEntities() end)
-            task.delay(0.05, scanSpecialEntities)
-            task.delay(0.15, scanSpecialEntities)
-            task.delay(0.35, scanSpecialEntities)
+        if interesting[object.Name] then
+            local room = getRoom(object)
+            if room then
+                requestRoom(room)
+            else
+                requestScan()
+            end
         end
     end)
 
-    connect(Players.LocalPlayer:GetAttributeChangedSignal("CurrentRoom"), refreshRoomVisibility)
+    connect(workspace.DescendantRemoving, function(object)
+        if Objects then
+            requestScan()
+        end
+    end)
 
-    -- Do one initial pass so already-present entities/items are represented
-    -- immediately after enabling the module.
-    task.defer(scanAll)
+    connect(LocalPlayer:GetAttributeChangedSignal("CurrentRoom"), function()
+        requestScan()
+    end)
 
     connect(RunService.Heartbeat, function(dt)
-        ScanTimer += dt
-        if ScanTimer < 0.35 then return end
-        ScanTimer = 0
+        ScanClock += dt
+        LabelClock += dt
 
-        if Enabled.Doors or Enabled.Drawers or Enabled.Closets or Enabled.Key or Enabled.Gold
-            or Enabled.Chest or Enabled.Bandage or Enabled.Smoothie or Enabled.Flashlight
-            or Enabled.TipJar or Enabled.Crucifix or Enabled.SallyToy or Enabled.ElectricalKey
-            or Enabled.BreakerPole or Enabled.Battery or Enabled.Toolshed
-            or Enabled.VentGate or Enabled.Lever
-        then
-            scanAll()
-            refreshLabels()
+        if ScanClock >= 0.12 then
+            ScanClock = 0
+
+            if ScanRequested or PendingDrops then
+                PendingDrops = false
+                refreshPendingRooms()
+                scanAll()
+            end
         end
 
-        if Enabled.Rush or Enabled.Ambush then scanEntities() end
-
-        if Enabled.Dupe or Enabled.Eyes or Enabled.SallyLingering or Enabled.SallyMoving
-            or Enabled.Seek or Enabled.Figure or Enabled.Snare or Enabled.Screech
-        then
-            scanSpecialEntities()
-        end
-
-        if Enabled.Vitamins or Enabled.Lighter or Enabled.Candle or Enabled.AlarmClock
-            or Enabled.Lockpick or Enabled.SkeletonKey or Enabled.Shears or Enabled.Battery
-            or Enabled.RiftCandle or Enabled.RiftSmoothie or Enabled.RiftJar or Enabled.Donut
-            or Enabled.Crucifix or Enabled.SallyToy or Enabled.ElectricalKey or Enabled.BreakerPole
-        then
-            scanDropItems()
-            scanSpecialHotelItems()
+        -- Distance is refreshed every frame, independently of discovery.
+        -- This prevents 55 -> 51 -> 44 style jumps caused by scan intervals.
+        if LabelClock >= 0.033 then
+            LabelClock = 0
+            if Display.Distance then
+                for kind, objects in pairs(Objects) do
+                    for object, entry in pairs(objects) do
+                        if object.Parent then
+                            updateLabel(kind, object, entry)
+                        else
+                            clearEntry(kind, object)
+                        end
+                    end
+                end
+            end
         end
     end)
+
+    requestScan()
+end
+
+local function parseSelection(selected)
+    local result = {}
+
+    if type(selected) == "table" then
+        if #selected > 0 then
+            for _, value in ipairs(selected) do
+                result[value] = true
+            end
+        else
+            for value, state in pairs(selected) do
+                if state == true then result[value] = true end
+            end
+        end
+    elseif type(selected) == "string" then
+        result[selected] = true
+    end
+
+    return result
+end
+
+local function applyInteractables(selected)
+    local state = parseSelection(selected)
+
+    local map = {
+        Doors="Doors", Drawers="Drawers", Closets="Closets",
+        Chest="Chest", LockedChest="LockedChest",
+        ["Vent Gate"]="VentGate", Lever="Lever", Toolshed="Toolshed"
+    }
+
+    if state.All then
+        for _, kind in pairs(map) do state[kind] = true end
+    end
+
+    for label, kind in pairs(map) do
+        Enabled[kind] = state[label] == true or state[kind] == true
+    end
+
+    requestScan()
+end
+
+local function applyItems(selected)
+    local state = parseSelection(selected)
+
+    local map = {
+        Key="Key", Gold="Gold", Bandage="Bandage", Smoothie="Smoothie",
+        Flashlight="Flashlight", ["Tip Jar"]="TipJar",
+        Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
+        AlarmClock="AlarmClock", Lockpick="Lockpick",
+        ["Skeleton Key"]="SkeletonKey", Shears="Shears", Battery="Battery",
+        ["Rift Candle"]="RiftCandle", ["Rift Smoothie"]="RiftSmoothie",
+        ["Rift Jar"]="RiftJar", Donut="Donut", Crucifix="Crucifix",
+        ["Sally Toy"]="SallyToy", ["Electrical Key"]="ElectricalKey",
+        ["Breaker Pole"]="BreakerPole"
+    }
+
+    for label, kind in pairs(map) do
+        Enabled[kind] = state[label] == true or state[kind] == true
+    end
+
+    if type(selected) == "table" and not selected[1]
+        and selected.Gold ~= nil and selected.Gold ~= false
+    then
+        Module.GoldLevel = tonumber(selected.Gold) or 1
+    elseif state.Gold then
+        Module.GoldLevel = Module.GoldLevel or 1
+    end
+
+    requestScan()
 end
 
 function Module:Init(context)
+    if VisualContainer then
+        pcall(function() VisualContainer:Destroy() end)
+    end
+
     Context = context or {}
-    Enabled = Context.Enabled or Enabled
-    Colors = Context.Colors or Colors
+    Enabled = Context.Enabled or {}
+    Colors = Context.Colors or {}
     Display = Context.Display or Display
     Module.GoldLevel = Module.GoldLevel or 1
+
     setup()
+
     Module.Enabled = Enabled
     Module.Colors = Colors
     Module.Display = Display
-    Module.Objects = ESP
+    Module.Objects = Objects
+
     return Module
 end
 
-function Module:ApplyInteractables(selected) applyInteractables(selected) end
-function Module:ApplyItems(selected) applyItems(selected) end
-function Module:SetEntities(state)
-    local selected = {}
-    if type(state) == "table" then
-        if #state > 0 then
-            for _, name in ipairs(state) do
-                selected[name] = true
-            end
-        else
-            for name, value in pairs(state) do
-                if value == true then
-                    selected[name] = true
-                end
+function Module:ApplyInteractables(selected)
+    applyInteractables(selected)
+end
+
+function Module:ApplyItems(selected)
+    applyItems(selected)
+end
+
+function Module:SetEntities(selected)
+    local state = parseSelection(selected)
+
+    Enabled.Rush = state.Rush == true
+    Enabled.Ambush = state.Ambush == true
+    Enabled.Dupe = state.Dupe == true
+    Enabled.Eyes = state.Eyes == true
+    Enabled.SallyLingering = state.Sally == true or state.SallyLingering == true
+    Enabled.SallyMoving = state.Sally == true or state.SallyMoving == true
+    Enabled.Seek = state.Seek == true
+    Enabled.Figure = state.Figure == true
+    Enabled.Snare = state.Snare == true
+    Enabled.Screech = state.Screech == true
+
+    requestScan()
+end
+
+function Module:RefreshLabels()
+    for kind, objects in pairs(Objects) do
+        for object, entry in pairs(objects) do
+            if object.Parent then
+                updateLabel(kind, object, entry)
+            else
+                clearEntry(kind, object)
             end
         end
-    elseif type(state) == "string" then
-        selected[state] = true
     end
-
-    Enabled.Rush = selected.Rush == true
-    Enabled.Ambush = selected.Ambush == true
-    Enabled.Dupe = selected.Dupe == true
-    Enabled.Eyes = selected.Eyes == true
-    Enabled.SallyLingering = selected.Sally == true
-    Enabled.SallyMoving = selected.Sally == true
-    Enabled.Seek = selected.Seek == true
-    Enabled.Figure = selected.Figure == true
-    Enabled.Snare = selected.Snare == true
-    Enabled.Screech = selected.Screech == true
-
-    scanEntities()
-    scanSpecialEntities()
 end
-function Module:RefreshLabels() refreshLabels() end
-function Module:ScanAll() scanAll() end
+
+function Module:ScanAll()
+    requestScan()
+    scanAll()
+end
 
 function Module:Destroy()
-    local kinds = {
-        "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie","Flashlight",
-        "TipJar","VentGate","Lever","Rush","Ambush","Vitamins","Lighter","Candle","AlarmClock",
-        "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar","Donut",
-        "Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery","Dupe","Eyes",
-        "SallyLingering","SallyMoving","Seek","Figure","Snare","Screech","Toolshed"
-    }
-    for _, kind in ipairs(kinds) do clearKind(kind) end
-    if HighlightContainer then
-        pcall(function() HighlightContainer:Destroy() end)
-        HighlightContainer = nil
+    for _, kind in ipairs(KINDS) do
+        clearKind(kind)
     end
-    table.clear(RoomScanQueued)
-    disconnectAll()
-    RoomsConnection = nil
+
+    disconnectList(Connections)
+    disconnectList(DropConnections)
+
+    for room, list in pairs(RoomConnections) do
+        disconnectList(list)
+        RoomConnections[room] = nil
+    end
+
+    table.clear(PendingRooms)
+    PendingDrops = false
+    ScanRequested = false
+
+    if VisualContainer then
+        pcall(function() VisualContainer:Destroy() end)
+        VisualContainer = nil
+    end
+
+    Rooms = nil
+    Drops = nil
 end
 
 return Module
