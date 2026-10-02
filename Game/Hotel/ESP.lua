@@ -1064,15 +1064,14 @@ local function scanDrops(seen)
         local kind = map[object.Name]
 
         if kind and Enabled[kind] then
-            -- Use the complete dropped model when possible. This prevents the
-            -- ESP from vanishing when a Drop creates/reparents its internals.
+            -- Always resolve the top-level Drop under workspace.Drops.
+            -- Some Drops contain a child with the same name as the Drop
+            -- itself (for example Drops.Candle.Handle.Candle). Scanning
+            -- every descendant without climbing through BaseParts can create
+            -- a second ESP entry for that inner object.
             local root = object
             while root.Parent and root.Parent ~= Drops do
-                if root.Parent:IsA("Model") then
-                    root = root.Parent
-                else
-                    break
-                end
+                root = root.Parent
             end
 
             seen[kind][root] = true
