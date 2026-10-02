@@ -260,6 +260,21 @@ local function labelName(kind, object)
         return "Door • " .. getDoorNumber(room)
     end
 
+    -- Temporary Candle diagnostic: show where each Candle ESP instance
+    -- was discovered so we can identify the exact source of the duplicate.
+    if kind == "Candle" then
+        local source = "OTHER"
+
+        if Drops and object:IsDescendantOf(Drops) then
+            source = "DROPS"
+        elseif Rooms and object:IsDescendantOf(Rooms) then
+            local room = getRoom(object)
+            source = "ROOM:" .. (room and room.Name or "?")
+        end
+
+        return "Candle [" .. source .. "]"
+    end
+
     return LABEL_NAMES[kind] or kind
 end
 
