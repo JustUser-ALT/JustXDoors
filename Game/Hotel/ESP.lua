@@ -299,6 +299,12 @@ local function destroyEntryVisual(entry)
     entry.ItemSources = nil
     entry.ItemHumanoid = nil
 
+    if entry.DrawerHelperModel then
+        pcall(function() entry.DrawerHelperModel:Destroy() end)
+        entry.DrawerHelperModel = nil
+    end
+    entry.DrawerHumanoid = nil
+
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
         entry.Box = nil
@@ -596,6 +602,89 @@ local function makeItemHighlight(kind, object, entry)
     return true
 end
 
+-- Drawers can contain a KeyObtain while they are closed. A Highlight
+-- directly adorning the Drawer model also considers that nested Key geometry
+-- part of the same highlighted model, which can visually win over the Key's
+-- separate AlwaysOnTop Highlight. Use a transparent helper that copies only
+-- the Drawer geometry and deliberately excludes nested KeyObtain geometry.
+local function makeDrawerHighlight(object, entry)
+    if not object or not VisualContainer then return false end
+
+    local sources = {}
+    for _, source in ipairs(object:GetDescendants()) do
+        if source:IsA("BasePart") and source.Size.Magnitude > 0.05 then
+            local current = source.Parent
+            local insideKey = false
+
+            while current and current ~= object do
+                if current.Name == "KeyObtain" then
+                    insideKey = true
+                    break
+                end
+                current = current.Parent
+            end
+
+            if not insideKey then
+                sources[#sources + 1] = source
+            end
+        end
+    end
+
+    if #sources == 0 then return false end
+
+    if entry.DrawerHelperModel then
+        pcall(function() entry.DrawerHelperModel:Destroy() end)
+    end
+
+    local helperModel = Instance.new("Model")
+    helperModel.Name = "JustXDoorsDrawerHighlightModel"
+    helperModel.Parent = VisualContainer
+
+    local humanoid = Instance.new("Humanoid")
+    humanoid.Name = "JustXDoorsDrawerHighlightHumanoid"
+    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+    humanoid.NameDisplayDistance = 0
+    humanoid.Parent = helperModel
+
+    for index, source in ipairs(sources) do
+        local helper = Instance.new("Part")
+        helper.Name = "JustXDoorsDrawerHighlightPart_" .. tostring(index)
+        helper.Size = source.Size
+        helper.CFrame = source.CFrame
+        helper.Transparency = 0.999
+        helper.CanCollide = false
+        helper.CanTouch = false
+        helper.CanQuery = false
+        helper.CastShadow = false
+        helper.Anchored = false
+        helper.Massless = true
+        helper.Material = Enum.Material.Plastic
+        helper.Parent = helperModel
+
+        local weld = Instance.new("WeldConstraint")
+        weld.Name = "JustXDoorsDrawerHighlightWeld"
+        weld.Part0 = helper
+        weld.Part1 = source
+        weld.Parent = helper
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsDrawerESP"
+    highlight.Adornee = helperModel
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors.Drawers or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors.Drawers or Color3.new(1,1,1)
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Parent = VisualContainer
+
+    entry.DrawerHelperModel = helperModel
+    entry.DrawerHumanoid = humanoid
+    entry.Highlight = highlight
+    return true
+end
+
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
@@ -752,7 +841,34 @@ local function createVisual(kind, object, entry)
     end
 
     if entry.Highlight and entry.Highlight.Parent then
-        if ITEM_KINDS[kind] then
+        if kind == "Drawers" then
+            local valid = entry.DrawerHelperModel
+                and entry.DrawerHelperModel.Parent == VisualContainer
+                and entry.Highlight.Adornee == entry.DrawerHelperModel
+
+            if valid then
+                for _, helper in ipairs(entry.DrawerHelperModel:GetChildren()) do
+                    if helper:IsA("BasePart") then
+                        local weld = helper:FindFirstChildOfClass("WeldConstraint")
+                        local source = weld and weld.Part1
+                        if source and source.Parent then
+                            helper.Size = source.Size
+                            helper.CFrame = source.CFrame
+                        end
+                    end
+                end
+                entry.Highlight.FillColor = Colors.Drawers or Color3.new(1,1,1)
+                entry.Highlight.OutlineColor = Colors.Drawers or Color3.new(1,1,1)
+                entry.Highlight.FillTransparency = 1
+                entry.Highlight.OutlineTransparency = 0
+            else
+                if entry.Highlight then pcall(function() entry.Highlight:Destroy() end) end
+                entry.Highlight = nil
+                if entry.DrawerHelperModel then pcall(function() entry.DrawerHelperModel:Destroy() end) end
+                entry.DrawerHelperModel = nil
+                makeDrawerHighlight(object, entry)
+            end
+        elseif ITEM_KINDS[kind] then
             -- Validate the helper against the current item geometry. The
             -- helper is welded to the real parts, so the mobile finger/prompt
             -- can reparent or rebuild interaction objects without owning the
@@ -820,7 +936,9 @@ local function createVisual(kind, object, entry)
     local adornee = object:IsA("Model") and object or getPart(object)
     if not adornee then return false end
 
-    if ITEM_KINDS[kind] then
+    if kind == "Drawers" then
+        makeDrawerHighlight(object, entry)
+    elseif ITEM_KINDS[kind] then
         makeItemHighlight(kind, object, entry)
     else
         makeHighlight(kind, adornee, entry, 1)
