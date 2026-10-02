@@ -226,6 +226,180 @@ local function roomVisible(kind, room)
     if not current or not number then return true end
 
     if kind == "Doors" then
+        return number == current or number == current + 1
+    end
+
+    if ITEM_KINDS[kind] then
+        return number >= current - 1 and number <= current + 1
+    end
+
+    return number == current
+end
+
+local function getDoorNumber(room)
+    local door = room and room:FindFirstChild("Door")
+    local sign = door and door:FindFirstChild("Sign")
+    local stinker = sign and sign:FindFirstChild("Stinker")
+
+    if stinker then
+        local ok, value = pcall(function() return stinker.Text end)
+        if ok and type(value) == "string" then
+            local number = tonumber(value:match("%d+"))
+            if number then return string.format("%04d", number) end
+        end
+    end
+
+    local number = room and tonumber(room.Name)
+    return number and string.format("%04d", number + 1) or "????"
+end
+
+local function labelName(kind, object)
+    if kind == "Doors" then
+        local roomNumber = object:GetAttribute("JustXDoorsRoom")
+        local room = Rooms and Rooms:FindFirstChild(tostring(roomNumber))
+        return "Door • " .. getDoorNumber(room)
+    end
+
+    return LABEL_NAMES[kind] or kind
+end
+
+local function destroyEntryVisual(entry)
+    if entry.Highlight then
+        pcall(function() entry.Highlight:Destroy() end)
+        entry.Highlight = nil
+    end
+
+    if entry.Highlights then
+        for _, highlight in ipairs(entry.Highlights) do
+            pcall(function() highlight:Destroy() end)
+        end
+        entry.Highlights = nil
+    end
+
+    if entry.DoorConnection then
+        pcall(function() entry.DoorConnection:Disconnect() end)
+        entry.DoorConnection = nil
+    end
+
+    if entry.DoorHelpers then
+        for _, helper in ipairs(entry.DoorHelpers) do
+            pcall(function() helper:Destroy() end)
+        end
+        entry.DoorHelpers = nil
+    end
+    if entry.DoorHumanoid then
+        pcall(function() entry.DoorHumanoid:Destroy() end)
+        entry.DoorHumanoid = nil
+    end
+
+
+    if entry.Box then
+        pcall(function() entry.Box:Destroy() end)
+        entry.Box = nil
+    end
+
+    if entry.Boxes then
+        for _, box in ipairs(entry.Boxes) do
+            pcall(function() box:Destroy() end)
+        end
+        entry.Boxes = nil
+    end
+
+    if entry.Label then
+        pcall(function() entry.Label:Destroy() end)
+        entry.Label = nil
+    end
+end
+
+local function updateLabel(kind, object, entry)
+    if not Display.Name and not Display.Distance then
+        if entry.Label then entry.Label.Enabled = false end
+        return
+    end
+
+    local part = ENTITY_KINDS[kind] and getEntityPart(kind, object) or getPart(object)
+    if not part then return end
+
+    local label = entry.Label
+    if not label or not label.Parent then
+        label = Instance.new("BillboardGui")
+        label.Name = "JustXDoorsESPLabel"
+        label.AlwaysOnTop = true
+        label.LightInfluence = 0
+        label.MaxDistance = 1500
+        label.Size = UDim2.fromOffset(190, 26)
+        label.StudsOffset = Vector3.new(0, 2.5, 0)
+        label.Adornee = part
+        label.Parent = VisualContainer
+        entry.Label = label
+
+        local text = Instance.new("TextLabel")
+        text.Name = "Text"
+        text.BackgroundTransparency = 1
+        text.Size = UDim2.fromScale(1, 1)
+        text.Font = Enum.Font.GothamBold
+        text.TextSize = 13
+        text.TextStrokeTransparency = 0.35
+        text.TextColor3 = Colors[kind] or Color3.new(1,1,1)
+        text.Parent = label
+    else
+        label.Adornee = part
+    end
+
+    local text = label:FindFirstChild("Text")
+    if not text then return end
+
+    local values = {}
+    if Display.Name then values[#values + 1] = labelName(kind, object) end
+
+    if Display.Distance then
+        local root = getRoot()
+        if root then
+            values[#values + 1] = tostring(math.floor(
+                (root.Position - part.Position).Magnitude + 0.5
+            ))
+        end
+    end
+
+    text.Text = table.concat(values, " • ")
+    text.TextColor3 = Colors[kind] or Color3.new(1,1,1)
+    label.Enabled = true
+end
+
+local function makeHighlight(kind, adornee, entry, fillTransparency)
+    if not adornee then return false end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsESP"
+    highlight.Adornee = adornee
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.FillTransparency = fillTransparency or 1
+    highlight.OutlineTransparency = 0
+    highlight.Parent = adornee
+
+    entry.Highlight = highlight
+    return true
+end
+
+local function createVisual(kind, object, entry)
+    if not object or not object.Parent then return false end
+
+    local root = getRoot()
+    local part = ENTITY_KINDS[kind] and getEntityPart(kind, object) or getPart(object)
+
+    -- Keep labels available farther away, but only render 3D ESP near the player.
+    -- This is the main FPS optimization: SelectionBox is kept for doors only;
+    -- items/entities use the lighter Highlight path and are distance-culled.
+    local visualDistance = ENTITY_KINDS[kind] and ENTITY_VISUAL_DISTANCE or ITEM_VISUAL_DISTANCE
+    local near = true
+
+    if root and part then
+        near = (root.Position - part.Position).Magnitude <= visualDistance
+    end
+
+    if kind == "Doors" then
         -- Abyssal-style helper geometry: invisible, non-colliding parts copy
         -- the real door geometry and are used as Highlight Adornees.
         local doorParts = {}
@@ -348,12 +522,7 @@ local function roomVisible(kind, room)
             pcall(function() entry.Highlight:Destroy() end)
             entry.Highlight = nil
         end
-        if entry.DoorHumanoid then
-        pcall(function() entry.DoorHumanoid:Destroy() end)
-        entry.DoorHumanoid = nil
-    end
-
-    if entry.Box then
+        if entry.Box then
             pcall(function() entry.Box:Destroy() end)
             entry.Box = nil
         end
