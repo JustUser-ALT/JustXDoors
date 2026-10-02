@@ -414,10 +414,12 @@ local function createVisual(kind, object, entry)
     -- Keep labels available farther away, but only render 3D ESP near the player.
     -- This is the main FPS optimization: SelectionBox is kept for doors only;
     -- items/entities use the lighter Highlight path and are distance-culled.
-    local visualDistance = ENTITY_KINDS[kind] and ENTITY_VISUAL_DISTANCE or ITEM_VISUAL_DISTANCE
+    -- Item ESP must stay visible even when the player is standing directly
+    -- beside the item. Only entities use distance-based 3D culling.
+    local visualDistance = ENTITY_VISUAL_DISTANCE
     local near = true
 
-    if root and part then
+    if ENTITY_KINDS[kind] and root and part then
         near = (root.Position - part.Position).Magnitude <= visualDistance
     end
 
