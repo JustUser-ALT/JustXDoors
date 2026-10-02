@@ -363,7 +363,7 @@ local function makeHighlight(kind, adornee, entry, fillTransparency)
     highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
     highlight.FillTransparency = fillTransparency
     highlight.OutlineTransparency = 0
-    highlight.Parent = VisualContainer
+    highlight.Parent = adornee
 
     entry.Highlight = highlight
     return true
@@ -371,10 +371,6 @@ end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
-
-    if kind == "Doors" then
-        debugDoorStructure(object)
-    end
 
     if entry.Highlight and entry.Highlight.Parent then
         updateLabel(kind, object, entry)
@@ -410,7 +406,7 @@ local function createVisual(kind, object, entry)
         box.LineThickness = 0.04
         box.Color3 = color
         box.SurfaceTransparency = 1
-        box.Parent = VisualContainer
+        box.Parent = source
 
         entry.Box = box
         updateLabel(kind, object, entry)
