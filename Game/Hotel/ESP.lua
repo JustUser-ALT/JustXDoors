@@ -59,6 +59,50 @@ local ITEM_KINDS = {
     SallyToy=true, ElectricalKey=true, BreakerPole=true, Battery=true,
 }
 
+local DEFAULT_COLORS = {
+    Doors = Color3.fromRGB(0, 200, 255),
+    Drawers = Color3.fromRGB(150, 95, 55),
+    Closets = Color3.fromRGB(125, 75, 45),
+    Toolshed = Color3.fromRGB(180, 110, 55),
+    Chest = Color3.fromRGB(255, 165, 0),
+    VentGate = Color3.fromRGB(125, 190, 255),
+    Lever = Color3.fromRGB(255, 150, 40),
+
+    Key = Color3.fromRGB(255, 225, 40),
+    Gold = Color3.fromRGB(255, 215, 0),
+    Bandage = Color3.fromRGB(95, 255, 120),
+    Smoothie = Color3.fromRGB(255, 105, 180),
+    Flashlight = Color3.fromRGB(220, 245, 255),
+    TipJar = Color3.fromRGB(90, 220, 190),
+    Vitamins = Color3.fromRGB(135, 255, 75),
+    Lighter = Color3.fromRGB(255, 155, 60),
+    Candle = Color3.fromRGB(255, 240, 175),
+    AlarmClock = Color3.fromRGB(120, 190, 255),
+    Lockpick = Color3.fromRGB(180, 100, 255),
+    SkeletonKey = Color3.fromRGB(210, 175, 255),
+    Shears = Color3.fromRGB(195, 210, 220),
+    Battery = Color3.fromRGB(110, 255, 150),
+    RiftCandle = Color3.fromRGB(255, 85, 210),
+    RiftSmoothie = Color3.fromRGB(255, 70, 135),
+    RiftJar = Color3.fromRGB(190, 80, 255),
+    Donut = Color3.fromRGB(255, 140, 195),
+    Crucifix = Color3.fromRGB(240, 240, 255),
+    SallyToy = Color3.fromRGB(255, 120, 230),
+    ElectricalKey = Color3.fromRGB(70, 235, 255),
+    BreakerPole = Color3.fromRGB(255, 135, 45),
+
+    Rush = Color3.fromRGB(255, 60, 60),
+    Ambush = Color3.fromRGB(205, 45, 45),
+    Dupe = Color3.fromRGB(255, 140, 40),
+    Eyes = Color3.fromRGB(120, 235, 255),
+    SallyLingering = Color3.fromRGB(255, 105, 210),
+    SallyMoving = Color3.fromRGB(255, 70, 175),
+    Seek = Color3.fromRGB(190, 90, 255),
+    Figure = Color3.fromRGB(190, 190, 210),
+    Snare = Color3.fromRGB(110, 255, 110),
+    Screech = Color3.fromRGB(255, 235, 90),
+}
+
 local function connect(signal, callback)
     local ok, connection = pcall(function()
         return signal:Connect(callback)
@@ -217,82 +261,115 @@ local function labelName(kind, object)
     return names[kind] or kind
 end
 
-local function getTargetPart(kind, object)
-    if not object then return nil end
+local function isIgnoredVisualPart(part)
+    if not part or not part:IsA("BasePart") then return true end
+    local name = part.Name:lower()
 
-    -- DOORS uses a large Door model containing collision/trigger geometry.
-    -- The actual visible door leaf is the nested "Door" BasePart.
-    if kind == "Doors" and object:IsA("Model") then
-        local doorPart = object:FindFirstChild("Door", true)
-        if doorPart and doorPart:IsA("BasePart") then
-            return doorPart
+    return part.Transparency >= 1
+        or name:find("hitbox", 1, true)
+        or name:find("collision", 1, true)
+        or name:find("trigger", 1, true)
+        or name == "humanoidrootpart"
+end
+
+local function collectVisualParts(object, kind)
+    if not object then return {} end
+
+    if object:IsA("BasePart") then
+        if not isIgnoredVisualPart(object) then
+            return {object}
+        end
+        return {}
+    end
+
+    if not object:IsA("Model") then
+        return {}
+    end
+
+    local result = {}
+
+    -- A DOORS door is a compound model. Highlight every visible piece of
+    -- the actual door assembly instead of only the central Door BasePart.
+    if kind == "Doors" then
+        local doorAssembly = object:FindFirstChild("Door", true)
+
+        if doorAssembly and doorAssembly:IsA("Model") then
+            for _, part in ipairs(doorAssembly:GetDescendants()) do
+                if part:IsA("BasePart") and not isIgnoredVisualPart(part) then
+                    local name = part.Name:lower()
+                    if not name:find("frame", 1, true) then
+                        table.insert(result, part)
+                    end
+                end
+            end
+
+            if #result > 0 then
+                return result
+            end
+        elseif doorAssembly and doorAssembly:IsA("BasePart")
+            and not isIgnoredVisualPart(doorAssembly)
+        then
+            return {doorAssembly}
         end
     end
 
-    local candidates = {}
+    -- Items, drawers, wardrobes and chests can contain several visible
+    -- MeshParts. Highlight each visible part so the whole model is covered.
+    for _, part in ipairs(object:GetDescendants()) do
+        if part:IsA("BasePart") and not isIgnoredVisualPart(part) then
+            table.insert(result, part)
+        end
+    end
+
+    return result
+end
+
+local function getTargetPart(kind, object)
+    if not object then return nil end
 
     if object:IsA("BasePart") then
         return object
     end
 
-    if object:IsA("Model") then
-        if object.PrimaryPart then
-            table.insert(candidates, object.PrimaryPart)
-        end
-
-        for _, part in ipairs(object:GetDescendants()) do
-            if part:IsA("BasePart") then
-                table.insert(candidates, part)
-            end
-        end
-    else
-        for _, part in ipairs(object:GetDescendants()) do
-            if part:IsA("BasePart") then
-                table.insert(candidates, part)
-            end
-        end
+    if object:IsA("Model") and object.PrimaryPart then
+        return object.PrimaryPart
     end
 
-    -- Prefer a rendered part over invisible hitboxes/collision parts.
-    local fallback
-    for _, part in ipairs(candidates) do
-        fallback = fallback or part
-        local name = part.Name:lower()
-        local looksLikeHitbox =
-            name:find("hitbox", 1, true)
-            or name:find("collision", 1, true)
-            or name:find("trigger", 1, true)
-
-        if part.Transparency < 1 and not looksLikeHitbox then
-            return part
-        end
-    end
-
-    return fallback
+    local parts = collectVisualParts(object, kind)
+    return parts[1]
+        or (object:IsA("Model") and object:FindFirstChildWhichIsA("BasePart", true))
 end
 
 local function prepareTransparentEntity(object, entry)
     if not object or not object:IsA("Model") then return end
 
     local parts = {}
-    local hasVisiblePart = false
+    local hasRenderablePart = false
 
     for _, part in ipairs(object:GetDescendants()) do
         if part:IsA("BasePart") then
             table.insert(parts, part)
+
             if part.Transparency < 1 then
-                hasVisiblePart = true
+                hasRenderablePart = true
             end
         end
     end
 
-    if #parts == 0 or hasVisiblePart then
+    if #parts == 0 or hasRenderablePart then
         return
     end
 
-    -- DOORS entities such as Rush/Ambush can be fully transparent.
-    -- Roblox Highlight does not reliably render transparent non-humanoid
-    -- models, so use the established 0.99-transparency Humanoid workaround.
+    local primary = object.PrimaryPart or parts[1]
+    if not primary then return end
+
+    entry.OldPrimaryPart = object.PrimaryPart
+    if not object.PrimaryPart then
+        pcall(function()
+            object.PrimaryPart = primary
+        end)
+    end
+
     local humanoid = object:FindFirstChildOfClass("Humanoid")
     if not humanoid then
         humanoid = Instance.new("Humanoid")
@@ -304,11 +381,10 @@ local function prepareTransparentEntity(object, entry)
         entry.PatchedHumanoid = humanoid
     end
 
-    local part = object.PrimaryPart or getTargetPart("Entity", object)
-    if part and part:IsA("BasePart") and part.Transparency >= 1 then
-        entry.PatchedPart = part
-        entry.PatchedTransparency = part.Transparency
-        part.Transparency = 0.99
+    if primary.Transparency >= 1 then
+        entry.PatchedPart = primary
+        entry.PatchedTransparency = primary.Transparency
+        primary.Transparency = 0.99
     end
 end
 
@@ -369,14 +445,23 @@ local function updateLabel(kind, object, entry)
 end
 
 local function destroyVisual(entry)
-    if entry.Highlight then
+    if entry.Highlights then
+        for _, highlight in ipairs(entry.Highlights) do
+            pcall(function()
+                if highlight then highlight:Destroy() end
+            end)
+        end
+        entry.Highlights = nil
+    elseif entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
     end
+
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
         entry.Box = nil
     end
+
     if entry.Label then
         pcall(function() entry.Label:Destroy() end)
         entry.Label = nil
@@ -388,6 +473,15 @@ local function destroyVisual(entry)
         end)
     end
 
+    if entry.OldPrimaryPart ~= nil and entry.PatchedHumanoid
+        and entry.PatchedHumanoid.Parent
+    then
+        pcall(function()
+            local model = entry.PatchedHumanoid.Parent
+            model.PrimaryPart = entry.OldPrimaryPart
+        end)
+    end
+
     if entry.PatchedHumanoid and entry.PatchedHumanoid.Parent then
         pcall(function() entry.PatchedHumanoid:Destroy() end)
     end
@@ -395,60 +489,84 @@ local function destroyVisual(entry)
     entry.PatchedPart = nil
     entry.PatchedTransparency = nil
     entry.PatchedHumanoid = nil
+    entry.OldPrimaryPart = nil
 end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
-    if (entry.Highlight and entry.Highlight.Parent)
-        or (entry.Box and entry.Box.Parent)
-    then
-        return true
+
+    if entry.Highlights then
+        local alive = false
+        for _, highlight in ipairs(entry.Highlights) do
+            if highlight and highlight.Parent then
+                alive = true
+                break
+            end
+        end
+        if alive then
+            updateLabel(kind, object, entry)
+            return true
+        end
     end
 
     if ENTITY_KINDS[kind] then
         prepareTransparentEntity(object, entry)
     end
 
-    local adornee = object
+    entry.Highlights = {}
 
-    if kind == "Doors" then
-        -- Never highlight the whole Door model: it contains oversized
-        -- collision/trigger geometry. Highlight only the actual door leaf.
-        adornee = getTargetPart(kind, object) or object
-    elseif ITEM_KINDS[kind] then
-        -- Item models can contain large invisible hitboxes. A visible
-        -- BasePart keeps the highlight around the actual item.
-        adornee = getTargetPart(kind, object) or object
-    elseif not object:IsA("Model") and not object:IsA("BasePart") then
-        adornee = getTargetPart(kind, object) or object
-    end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = ITEM_KINDS[kind] and "JustXDoorsItemESP" or "JustXDoorsESP"
-    highlight.Adornee = adornee
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-
-    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-
-    if INTERACTABLES[kind] then
-        -- Outline only, but still visible through walls.
-        highlight.FillTransparency = 1
-        highlight.OutlineTransparency = 0
-    elseif ITEM_KINDS[kind] then
-        -- Items now use a real Highlight rather than a 2D box.
-        highlight.FillTransparency = 0.82
-        highlight.OutlineTransparency = 0
-    else
+    if ENTITY_KINDS[kind] and object:IsA("Model") then
+        -- Match the established DOORS ESP technique: transparent entities
+        -- receive a Humanoid + 0.99-transparency PrimaryPart, then one
+        -- Highlight is attached to the whole entity model.
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsEntityESP"
+        highlight.Adornee = object
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = Colors[kind] or Color3.new(1, 0, 0)
+        highlight.OutlineColor = Colors[kind] or Color3.new(1, 0, 0)
         highlight.FillTransparency = 0.55
         highlight.OutlineTransparency = 0
+        highlight.Parent = object
+
+        table.insert(entry.Highlights, highlight)
+    else
+        local parts = collectVisualParts(object, kind)
+
+        -- Fallback for unusual models where every part is transparent.
+        if #parts == 0 and object:IsA("Model") then
+            local target = getTargetPart(kind, object)
+            if target then
+                parts = {target}
+            end
+        end
+
+        for _, part in ipairs(parts) do
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoorsESP"
+            highlight.Adornee = part
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+            highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+
+            if INTERACTABLES[kind] then
+                highlight.FillTransparency = 1
+                highlight.OutlineTransparency = 0
+            elseif ITEM_KINDS[kind] then
+                highlight.FillTransparency = 0.78
+                highlight.OutlineTransparency = 0
+            else
+                highlight.FillTransparency = 0.55
+                highlight.OutlineTransparency = 0
+            end
+
+            highlight.Parent = part
+            table.insert(entry.Highlights, highlight)
+        end
     end
 
-    highlight.Parent = VisualContainer
-    entry.Highlight = highlight
-
     updateLabel(kind, object, entry)
-    return true
+    return #entry.Highlights > 0
 end
 
 local function clearEntry(kind, object)
@@ -474,7 +592,7 @@ local function addObject(kind, object, room)
         return
     end
 
-    local part = getPart(object)
+    local part = getTargetPart(kind, object) or getPart(object)
     local root = getRoot()
     if part and root
         and (root.Position - part.Position).Magnitude > MAX_ESP_DISTANCE
@@ -513,7 +631,7 @@ local function clearStale(kind, seen, domain)
         local keep = seen[object] and object.Parent
 
         local tooFar = false
-        local part = getPart(object)
+        local part = getTargetPart(kind, object) or getPart(object)
         local root = getRoot()
         if part and root then
             tooFar = (root.Position - part.Position).Magnitude > MAX_ESP_DISTANCE
@@ -1227,6 +1345,13 @@ function Module:Init(context)
     Context = context or {}
     Enabled = Context.Enabled or {}
     Colors = Context.Colors or {}
+
+    for _, kind in ipairs(KINDS) do
+        if Colors[kind] == nil then
+            Colors[kind] = DEFAULT_COLORS[kind] or Color3.new(1, 1, 1)
+        end
+    end
+
     Display = Context.Display or Display
     Module.GoldLevel = Module.GoldLevel or 1
 
