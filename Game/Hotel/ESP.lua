@@ -335,39 +335,40 @@ local function getTargetPart(kind, object)
 end
 
 local function prepareTransparentEntity(object, entry)
-    if not object or not object:IsA("Model") then return end
+    if not object then return end
 
-    local parts = {}
-    local hasRenderablePart = false
-
-    for _, part in ipairs(object:GetDescendants()) do
-        if part:IsA("BasePart") then
-            table.insert(parts, part)
-
-            if part.Transparency < 1 then
-                hasRenderablePart = true
-            end
+    if object:IsA("BasePart") then
+        if object.Transparency >= 1 then
+            entry.PatchedPart = object
+            entry.PatchedTransparency = object.Transparency
+            object.Transparency = 0.99
         end
-    end
-
-    if #parts == 0 or hasRenderablePart then
         return
     end
 
-    local primary = object.PrimaryPart or parts[1]
-    if not primary then return end
+    if not object:IsA("Model") then return end
 
-    entry.OldPrimaryPart = object.PrimaryPart
-    entry.HadPrimaryPart = object.PrimaryPart ~= nil
-    if not object.PrimaryPart then
+    local primary = object.PrimaryPart
+    if not primary then
+        primary = object:FindFirstChildWhichIsA("BasePart", true)
+        if not primary then return end
+
+        entry.OldPrimaryPart = nil
+        entry.HadPrimaryPart = false
+
         pcall(function()
             object.PrimaryPart = primary
         end)
+    else
+        entry.OldPrimaryPart = primary
+        entry.HadPrimaryPart = true
     end
 
-    local humanoid = object:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        humanoid = Instance.new("Humanoid")
+    -- This mirrors the established DOORS ESP workaround used by
+    -- DoorsClutch / Doors-Script: a Humanoid plus a barely-visible
+    -- PrimaryPart allows Highlight to render transparent entities.
+    if not object:FindFirstChildOfClass("Humanoid") then
+        local humanoid = Instance.new("Humanoid")
         humanoid.Name = "JustXDoorsESP_Humanoid"
         humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
         humanoid.RequiresNeck = false
@@ -533,7 +534,7 @@ local function createVisual(kind, object, entry)
         highlight.OutlineColor = Colors[kind] or Color3.fromRGB(255, 60, 60)
         highlight.FillTransparency = 0.55
         highlight.OutlineTransparency = 0
-        highlight.Parent = object
+        highlight.Parent = object:IsA("Model") and object or object
 
         entry.Highlights = {highlight}
         entry.TargetCount = 1
