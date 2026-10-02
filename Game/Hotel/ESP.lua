@@ -97,13 +97,16 @@ local function isInventoryObject(object)
         return true
     end
 
+    -- Some DOORS items can temporarily become descendants of the character
+    -- while the interaction/hold state is being created. Do not remove their
+    -- ESP just because the player walked close to them.
     local character = LocalPlayer.Character
     if character and object:IsDescendantOf(character) then
-        return true
+        local tool = object:FindFirstAncestorWhichIsA("Tool")
+        return tool ~= nil
     end
 
-    local playerModel = workspace:FindFirstChild(LocalPlayer.Name)
-    return playerModel and object:IsDescendantOf(playerModel) or false
+    return false
 end
 
 local function getPart(object)
@@ -214,8 +217,103 @@ local function labelName(kind, object)
     return names[kind] or kind
 end
 
+local function getTargetPart(kind, object)
+    if not object then return nil end
+
+    -- DOORS uses a large Door model containing collision/trigger geometry.
+    -- The actual visible door leaf is the nested "Door" BasePart.
+    if kind == "Doors" and object:IsA("Model") then
+        local doorPart = object:FindFirstChild("Door", true)
+        if doorPart and doorPart:IsA("BasePart") then
+            return doorPart
+        end
+    end
+
+    local candidates = {}
+
+    if object:IsA("BasePart") then
+        return object
+    end
+
+    if object:IsA("Model") then
+        if object.PrimaryPart then
+            table.insert(candidates, object.PrimaryPart)
+        end
+
+        for _, part in ipairs(object:GetDescendants()) do
+            if part:IsA("BasePart") then
+                table.insert(candidates, part)
+            end
+        end
+    else
+        for _, part in ipairs(object:GetDescendants()) do
+            if part:IsA("BasePart") then
+                table.insert(candidates, part)
+            end
+        end
+    end
+
+    -- Prefer a rendered part over invisible hitboxes/collision parts.
+    local fallback
+    for _, part in ipairs(candidates) do
+        fallback = fallback or part
+        local name = part.Name:lower()
+        local looksLikeHitbox =
+            name:find("hitbox", 1, true)
+            or name:find("collision", 1, true)
+            or name:find("trigger", 1, true)
+
+        if part.Transparency < 1 and not looksLikeHitbox then
+            return part
+        end
+    end
+
+    return fallback
+end
+
+local function prepareTransparentEntity(object, entry)
+    if not object or not object:IsA("Model") then return end
+
+    local parts = {}
+    local hasVisiblePart = false
+
+    for _, part in ipairs(object:GetDescendants()) do
+        if part:IsA("BasePart") then
+            table.insert(parts, part)
+            if part.Transparency < 1 then
+                hasVisiblePart = true
+            end
+        end
+    end
+
+    if #parts == 0 or hasVisiblePart then
+        return
+    end
+
+    -- DOORS entities such as Rush/Ambush can be fully transparent.
+    -- Roblox Highlight does not reliably render transparent non-humanoid
+    -- models, so use the established 0.99-transparency Humanoid workaround.
+    local humanoid = object:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        humanoid = Instance.new("Humanoid")
+        humanoid.Name = "JustXDoorsESP_Humanoid"
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        humanoid.RequiresNeck = false
+        humanoid.AutoRotate = false
+        humanoid.Parent = object
+        entry.PatchedHumanoid = humanoid
+    end
+
+    local part = object.PrimaryPart or getTargetPart("Entity", object)
+    if part and part:IsA("BasePart") and part.Transparency >= 1 then
+        entry.PatchedPart = part
+        entry.PatchedTransparency = part.Transparency
+        part.Transparency = 0.99
+    end
+end
+
 local function updateLabel(kind, object, entry)
-    local part = getPart(object)
+    local part = getTargetPart(kind, object)
     if not part then return end
 
     if not Display.Name and not Display.Distance then
@@ -283,6 +381,20 @@ local function destroyVisual(entry)
         pcall(function() entry.Label:Destroy() end)
         entry.Label = nil
     end
+
+    if entry.PatchedPart and entry.PatchedPart.Parent then
+        pcall(function()
+            entry.PatchedPart.Transparency = entry.PatchedTransparency or 1
+        end)
+    end
+
+    if entry.PatchedHumanoid and entry.PatchedHumanoid.Parent then
+        pcall(function() entry.PatchedHumanoid:Destroy() end)
+    end
+
+    entry.PatchedPart = nil
+    entry.PatchedTransparency = nil
+    entry.PatchedHumanoid = nil
 end
 
 local function createVisual(kind, object, entry)
@@ -293,9 +405,27 @@ local function createVisual(kind, object, entry)
         return true
     end
 
+    if ENTITY_KINDS[kind] then
+        prepareTransparentEntity(object, entry)
+    end
+
+    local adornee = object
+
+    if kind == "Doors" then
+        -- Never highlight the whole Door model: it contains oversized
+        -- collision/trigger geometry. Highlight only the actual door leaf.
+        adornee = getTargetPart(kind, object) or object
+    elseif ITEM_KINDS[kind] then
+        -- Item models can contain large invisible hitboxes. A visible
+        -- BasePart keeps the highlight around the actual item.
+        adornee = getTargetPart(kind, object) or object
+    elseif not object:IsA("Model") and not object:IsA("BasePart") then
+        adornee = getTargetPart(kind, object) or object
+    end
+
     local highlight = Instance.new("Highlight")
     highlight.Name = ITEM_KINDS[kind] and "JustXDoorsItemESP" or "JustXDoorsESP"
-    highlight.Adornee = object
+    highlight.Adornee = adornee
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 
     highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
