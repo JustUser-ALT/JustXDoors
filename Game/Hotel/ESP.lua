@@ -699,7 +699,8 @@ end
 local function registerRoom(room, seen)
     if not room or not room.Parent then return end
 
-    local door = room:FindFirstChild("Door")
+    local doorContainer = room:FindFirstChild("Door")
+    local door = doorContainer and (doorContainer:FindFirstChild("Door") or doorContainer)
     if Enabled.Doors and door and roomVisible("Doors", room) then
         seen.Doors[door] = true
         addObject("Doors", door, room)
