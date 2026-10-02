@@ -299,6 +299,13 @@ local function destroyEntryVisual(entry)
     entry.ItemSources = nil
     entry.ItemHumanoid = nil
 
+    if entry.DrawerAdornments then
+        for _, adornment in ipairs(entry.DrawerAdornments) do
+            pcall(function() adornment:Destroy() end)
+        end
+        entry.DrawerAdornments = nil
+    end
+
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
         entry.Box = nil
@@ -604,6 +611,68 @@ end
 -- part of the same highlighted model, which can visually win over the Key's
 -- separate AlwaysOnTop Highlight. Use a transparent helper that copies only
 -- the Drawer geometry and deliberately excludes nested KeyObtain geometry.
+local function hasNestedKey(object)
+    return object and object:FindFirstChild("KeyObtain", true) ~= nil
+end
+
+-- A Drawer that contains a Key cannot use a Highlight safely: Roblox documents
+-- that nested/overlapping Highlight instances can interfere with each other.
+-- Use AlwaysOnTop BoxHandleAdornment for that special case instead. It does
+-- not participate in the Highlight render pool, so the Key Highlight remains
+-- independent.
+local function makeDrawerAdornments(object, entry)
+    if not object or not VisualContainer then return false end
+
+    if entry.DrawerAdornments then
+        for _, adornment in ipairs(entry.DrawerAdornments) do
+            pcall(function() adornment:Destroy() end)
+        end
+    end
+    entry.DrawerAdornments = {}
+
+    for _, source in ipairs(object:GetDescendants()) do
+        if source:IsA("BasePart") and source.Size.Magnitude > 0.05 then
+            local current = source.Parent
+            local insideKey = false
+
+            while current and current ~= object do
+                if current.Name == "KeyObtain" then
+                    insideKey = true
+                    break
+                end
+                current = current.Parent
+            end
+
+            if not insideKey then
+                local adornment = Instance.new("BoxHandleAdornment")
+                adornment.Name = "JustXDoorsDrawerAdornment"
+                adornment.Adornee = source
+                adornment.Size = source.Size + Vector3.new(0.025, 0.025, 0.025)
+                adornment.AlwaysOnTop = true
+                adornment.ZIndex = 0
+                adornment.Color3 = Colors.Drawers or Color3.new(1,1,1)
+                adornment.Transparency = 0
+                adornment.Parent = VisualContainer
+                table.insert(entry.DrawerAdornments, adornment)
+            end
+        end
+    end
+
+    return #entry.DrawerAdornments > 0
+end
+
+local function updateDrawerAdornments(object, entry)
+    if not entry.DrawerAdornments then return end
+
+    for _, adornment in ipairs(entry.DrawerAdornments) do
+        local source = adornment.Adornee
+        if source and source.Parent then
+            adornment.Size = source.Size + Vector3.new(0.025, 0.025, 0.025)
+            adornment.Color3 = Colors.Drawers or Color3.new(1,1,1)
+        end
+    end
+end
+
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
@@ -759,6 +828,43 @@ local function createVisual(kind, object, entry)
         return true
     end
 
+    if kind == "Drawers" and hasNestedKey(object) then
+        if entry.Highlight then
+            pcall(function() entry.Highlight:Destroy() end)
+            entry.Highlight = nil
+        end
+
+        local valid = entry.DrawerAdornments and #entry.DrawerAdornments > 0
+        if valid then
+            for _, adornment in ipairs(entry.DrawerAdornments) do
+                if not adornment.Parent or not adornment.Adornee or not adornment.Adornee.Parent then
+                    valid = false
+                    break
+                end
+            end
+        end
+
+        if not valid then
+            if entry.DrawerAdornments then
+                for _, adornment in ipairs(entry.DrawerAdornments) do
+                    pcall(function() adornment:Destroy() end)
+                end
+            end
+            entry.DrawerAdornments = nil
+            makeDrawerAdornments(object, entry)
+        else
+            updateDrawerAdornments(object, entry)
+        end
+
+        updateLabel(kind, object, entry)
+        return true
+    elseif entry.DrawerAdornments then
+        for _, adornment in ipairs(entry.DrawerAdornments) do
+            pcall(function() adornment:Destroy() end)
+        end
+        entry.DrawerAdornments = nil
+    end
+
     if entry.Highlight and entry.Highlight.Parent then
         if ITEM_KINDS[kind] then
             -- Validate the helper against the current item geometry. The
@@ -830,9 +936,9 @@ local function createVisual(kind, object, entry)
 
     if ITEM_KINDS[kind] then
         makeItemHighlight(kind, object, entry)
+    elseif kind == "Drawers" and hasNestedKey(object) then
+        makeDrawerAdornments(object, entry)
     else
-        -- Drawers use the same direct-Adornee Highlight architecture as
-        -- Abyssal: the Highlight lives outside the interactable hierarchy.
         makeHighlight(kind, adornee, entry, 1)
     end
 
