@@ -24,6 +24,39 @@ local LabelClock = 0
 
 local MAX_DISTANCE = 300
 
+-- TEMPORARY DOOR DIAGNOSTIC.
+local DEBUG_DOOR_STRUCTURE = true
+local DebuggedDoors = {}
+
+local function debugDoorStructure(door)
+    if not DEBUG_DOOR_STRUCTURE or not door or DebuggedDoors[door] then return end
+    DebuggedDoors[door] = true
+
+    warn("========== JustXDoors DOOR DEBUG ==========")
+    warn("[Door]", door:GetFullName())
+
+    local count = 0
+    for _, object in ipairs(door:GetDescendants()) do
+        if object:IsA("BasePart") then
+            count += 1
+            local size = object.Size
+            local pos = object.Position
+            warn(string.format(
+                "[PART %d] %s | Size=(%.2f, %.2f, %.2f) | Pos=(%.2f, %.2f, %.2f) | Transparency=%.2f | Parent=%s",
+                count,
+                object:GetFullName(),
+                size.X, size.Y, size.Z,
+                pos.X, pos.Y, pos.Z,
+                object.Transparency,
+                object.Parent and object.Parent:GetFullName() or "nil"
+            ))
+        end
+    end
+
+    warn("[Door] BasePart count:", count)
+    warn("========== END DOOR DEBUG ==========")
+end
+
 local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
@@ -359,6 +392,10 @@ end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
+
+    if kind == "Doors" then
+        debugDoorStructure(object)
+    end
 
     if entry.Highlight and entry.Highlight.Parent then
         updateLabel(kind, object, entry)
