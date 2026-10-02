@@ -274,6 +274,18 @@ local function destroyEntryVisual(entry)
         entry.Highlights = nil
     end
 
+    if entry.DoorConnection then
+        pcall(function() entry.DoorConnection:Disconnect() end)
+        entry.DoorConnection = nil
+    end
+
+    if entry.DoorHelpers then
+        for _, helper in ipairs(entry.DoorHelpers) do
+            pcall(function() helper:Destroy() end)
+        end
+        entry.DoorHelpers = nil
+    end
+
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
         entry.Box = nil
@@ -383,64 +395,91 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        -- IMPORTANT:
-        -- The outer Door model contains helper geometry such as:
-        --   Hidden     -> large helper volume (causes the giant rectangle)
-        --   Collision  -> collision volume
-        --   Hinge      -> transparent helper
-        --
-        -- The actual visible door is the BasePart named "Door" inside
-        -- the outer Door model. Highlight that real door first, then add
-        -- only its smaller visible decorative pieces.
-        local visualDoor = object:IsA("Model") and object:FindFirstChild("Door")
-        local parts = {}
-
-        if visualDoor and visualDoor:IsA("BasePart") then
-            table.insert(parts, visualDoor)
-
-            for _, child in ipairs(visualDoor:GetDescendants()) do
-                if child:IsA("BasePart")
-                    and child.Transparency < 1
-                    and child.Name ~= "Hidden"
-                    and child.Name ~= "Collision"
-                    and child.Name ~= "Hinge"
-                then
-                    local size = child.Size
-                    local volume = size.X * size.Y * size.Z
-
-                    -- Ignore another room-sized helper, but keep real
-                    -- door details such as Plate / Knob / Sign / CrossBoards.
-                    if math.max(size.X, size.Y, size.Z) <= 8
-                        and volume <= 350
-                    then
-                        table.insert(parts, child)
-                    end
-                end
-            end
-        else
-            -- Fallback for floors/variants where Door itself is a Part.
+        -- Door.Door is a large rectangular Part, so highlighting it directly
+        -- creates the large rectangle seen in-game. Instead create thin,
+        -- invisible helper parts that cover the visible door in sections.
+        local source = object:IsA("Model") and object:FindFirstChild("Door")
+        if not source or not source:IsA("BasePart") then
             local fallback = getPart(object)
-            if fallback and fallback:IsA("BasePart") then
-                table.insert(parts, fallback)
+            if not fallback then return false end
+            source = fallback
+        end
+
+        -- Remove helper geometry from a previous refresh.
+        if entry.DoorHelpers then
+            for _, helper in ipairs(entry.DoorHelpers) do
+                pcall(function() helper:Destroy() end)
             end
         end
 
-        if #parts == 0 then return false end
-
+        entry.DoorHelpers = {}
         entry.Highlights = {}
-        for _, part in ipairs(parts) do
+
+        local sourceSize = source.Size
+        local sourceCF = source.CFrame
+
+        -- Three thin sections. They are deliberately slightly inset so
+        -- their Highlight outlines don't produce one giant bounding box.
+        local sections = {
+            { name = "Top",    y =  0.31, height = 0.19 },
+            { name = "Middle", y =  0.00, height = 0.30 },
+            { name = "Bottom", y = -0.31, height = 0.19 },
+        }
+
+        for _, section in ipairs(sections) do
+            local helper = Instance.new("Part")
+            helper.Name = "JustXDoorsDoorESP_" .. section.name
+            helper.Size = Vector3.new(
+                math.max(sourceSize.X - 0.12, 0.1),
+                math.min(section.height, sourceSize.Y - 0.08),
+                math.max(sourceSize.Z + 0.02, 0.08)
+            )
+            helper.CFrame = sourceCF * CFrame.new(0, section.y * sourceSize.Y, 0)
+            helper.Transparency = 1
+            helper.Anchored = true
+            helper.CanCollide = false
+            helper.CanTouch = false
+            helper.CanQuery = false
+            helper.CastShadow = false
+            helper.Parent = VisualContainer
+
             local highlight = Instance.new("Highlight")
             highlight.Name = "JustXDoorsDoorESP"
-            highlight.Adornee = part
+            highlight.Adornee = helper
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             highlight.FillColor = color
             highlight.OutlineColor = color
             highlight.FillTransparency = 1
             highlight.OutlineTransparency = 0
             highlight.Parent = VisualContainer
+
+            table.insert(entry.DoorHelpers, helper)
             table.insert(entry.Highlights, highlight)
         end
 
+        -- Keep the helper sections attached to the actual moving door.
+        local connection
+        connection = RunService.Heartbeat:Connect(function()
+            if not source.Parent or not object.Parent then
+                if connection then connection:Disconnect() end
+                return
+            end
+
+            local currentCF = source.CFrame
+            for index, section in ipairs(sections) do
+                local helper = entry.DoorHelpers[index]
+                if helper and helper.Parent then
+                    helper.CFrame = currentCF * CFrame.new(0, section.y * source.Size.Y, 0)
+                    helper.Size = Vector3.new(
+                        math.max(source.Size.X - 0.12, 0.1),
+                        math.min(section.height, source.Size.Y - 0.08),
+                        math.max(source.Size.Z + 0.02, 0.08)
+                    )
+                end
+            end
+        end)
+
+        entry.DoorConnection = connection
         updateLabel(kind, object, entry)
         return true
     end
