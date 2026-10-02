@@ -380,10 +380,6 @@ local function updateBoxEntry(entry, object, entity)
 
     if center and size then
         entry.BoxProxy.Size = size
-        entry.Box.CFrame = CFrame.new()
-        if entry.Box:IsA("WireframeHandleAdornment") then
-            addWireCubeLines(entry.Box, size)
-        end
     end
 end
 
@@ -443,23 +439,6 @@ local function updateLabel(kind, object, entry)
     text.Text = table.concat(values, " • ")
 end
 
-local function addWireCubeLines(wire, size)
-    local h = size * 0.5
-    local p = {
-        Vector3.new(-h.X, -h.Y, -h.Z), Vector3.new(h.X, -h.Y, -h.Z),
-        Vector3.new(h.X, h.Y, -h.Z), Vector3.new(-h.X, h.Y, -h.Z),
-        Vector3.new(-h.X, -h.Y, h.Z), Vector3.new(h.X, -h.Y, h.Z),
-        Vector3.new(h.X, h.Y, h.Z), Vector3.new(-h.X, h.Y, h.Z),
-    }
-
-    wire:Clear()
-    wire:AddLines({
-        p[1],p[2], p[2],p[3], p[3],p[4], p[4],p[1],
-        p[5],p[6], p[6],p[7], p[7],p[8], p[8],p[5],
-        p[1],p[5], p[2],p[6], p[3],p[7], p[4],p[8],
-    })
-end
-
 local function createBox(entry, color)
     local proxy = Instance.new("Part")
     proxy.Name = "JustXDoorsESPProxy"
@@ -472,15 +451,14 @@ local function createBox(entry, color)
     proxy.Size = Vector3.one
     proxy.Parent = VisualContainer
 
-    local box = Instance.new("WireframeHandleAdornment")
+    local box = Instance.new("SelectionBox")
     box.Name = "JustXDoorsESPBox"
     box.Adornee = proxy
-    box.AlwaysOnTop = true
-    box.Thickness = 2
+    box.LineThickness = 0.05
     box.Color3 = color
-    box.Transparency = 0
-    box.Parent = proxy
-    addWireCubeLines(box, Vector3.one)
+    box.SurfaceColor3 = color
+    box.SurfaceTransparency = 1
+    box.Parent = VisualContainer
 
     entry.BoxProxy = proxy
     entry.Box = box
@@ -543,16 +521,15 @@ local function createVisual(kind, object, entry)
             highlight.Parent = VisualContainer
             entry.Highlight = highlight
         elseif target then
-            local wire = Instance.new("WireframeHandleAdornment")
-            wire.Name = "JustXDoorsEntityESP"
-            wire.Adornee = target
-            wire.AlwaysOnTop = true
-            wire.Thickness = 2
-            wire.Color3 = color
-            wire.Transparency = 0
-            addWireCubeLines(wire, target.Size)
-            wire.Parent = VisualContainer
-            entry.Box = wire
+            local box = Instance.new("SelectionBox")
+            box.Name = "JustXDoorsEntityESP"
+            box.Adornee = target
+            box.LineThickness = 0.05
+            box.Color3 = color
+            box.SurfaceColor3 = color
+            box.SurfaceTransparency = 1
+            box.Parent = VisualContainer
+            entry.Box = box
         else
             return false
         end
