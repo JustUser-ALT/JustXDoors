@@ -288,28 +288,22 @@ local function collectVisualParts(object, kind)
 
     local result = {}
 
-    -- A DOORS door is a compound model. Highlight every visible piece of
-    -- the actual door assembly instead of only the central Door BasePart.
+    -- A DOORS door is a compound model. Use every visible part of the
+    -- door assembly so upper/middle/lower mesh pieces all receive ESP.
     if kind == "Doors" then
-        local doorAssembly = object:FindFirstChild("Door", true)
-
-        if doorAssembly and doorAssembly:IsA("Model") then
-            for _, part in ipairs(doorAssembly:GetDescendants()) do
-                if part:IsA("BasePart") and not isIgnoredVisualPart(part) then
-                    local name = part.Name:lower()
-                    if not name:find("frame", 1, true) then
-                        table.insert(result, part)
-                    end
+        for _, part in ipairs(object:GetDescendants()) do
+            if part:IsA("BasePart") and not isIgnoredVisualPart(part) then
+                local name = part.Name:lower()
+                if not name:find("frame", 1, true)
+                    and not name:find("sign", 1, true)
+                then
+                    table.insert(result, part)
                 end
             end
+        end
 
-            if #result > 0 then
-                return result
-            end
-        elseif doorAssembly and doorAssembly:IsA("BasePart")
-            and not isIgnoredVisualPart(doorAssembly)
-        then
-            return {doorAssembly}
+        if #result > 0 then
+            return result
         end
     end
 
