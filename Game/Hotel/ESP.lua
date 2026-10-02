@@ -330,12 +330,17 @@ local function updateBoxEntry(entry, object, entity)
 
     local center, size
     if entity then
-        local ok, cf, s = pcall(function()
-            return object:GetBoundingBox()
-        end)
-        if ok and cf and s then
-            center, size = cf.Position, s
-            entry.BoxProxy.CFrame = cf
+        if object:IsA("Model") then
+            local ok, cf, s = pcall(function()
+                return object:GetBoundingBox()
+            end)
+            if ok and cf and s then
+                center, size = cf.Position, s
+                entry.BoxProxy.CFrame = cf
+            end
+        elseif object:IsA("BasePart") then
+            center, size = object.Position, object.Size
+            entry.BoxProxy.CFrame = object.CFrame
         end
     else
         center, size = calculateBounds(getVisualParts(object))
