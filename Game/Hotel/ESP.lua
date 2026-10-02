@@ -293,6 +293,35 @@ local function getTargetPart(kind, object)
     return object:FindFirstChildWhichIsA("BasePart", true)
 end
 
+local function getEntityPart(kind, object)
+    if not object then return nil end
+
+    local preferred = {
+        Rush = {"RushNew"},
+        Ambush = {"RushNew", "AmbushNew"},
+        Dupe = {"DoorFake"},
+        Seek = {"Seek"},
+        Figure = {"HumanoidRootPart", "FigureRagdoll"},
+        Eyes = {"Eyes"},
+        SallyLingering = {"Sally"},
+        SallyMoving = {"Sally"},
+        Snare = {"Snare"},
+        Screech = {"Screech"},
+    }
+
+    local names = preferred[kind]
+    if names then
+        for _, name in ipairs(names) do
+            local part = object:FindFirstChild(name, true)
+            if part and part:IsA("BasePart") then
+                return part
+            end
+        end
+    end
+
+    return getTargetPart(kind, object)
+end
+
 local function calculateBounds(parts)
     if #parts == 0 then return nil end
 
@@ -351,13 +380,16 @@ local function updateBoxEntry(entry, object, entity)
 
     if center and size then
         entry.BoxProxy.Size = size
-        entry.Box.Size = size
         entry.Box.CFrame = CFrame.new()
+        if entry.Box:IsA("WireframeHandleAdornment") then
+            addWireCubeLines(entry.Box, size)
+        end
     end
 end
 
 local function updateLabel(kind, object, entry)
-    local part = getTargetPart(kind, object)
+    local part = ENTITY_KINDS[kind] and getEntityPart(kind, object)
+        or getTargetPart(kind, object)
     if not part then return end
 
     if not Display.Name and not Display.Distance then
@@ -411,7 +443,24 @@ local function updateLabel(kind, object, entry)
     text.Text = table.concat(values, " • ")
 end
 
-local function createBox(entry, color, transparency)
+local function addWireCubeLines(wire, size)
+    local h = size * 0.5
+    local p = {
+        Vector3.new(-h.X, -h.Y, -h.Z), Vector3.new(h.X, -h.Y, -h.Z),
+        Vector3.new(h.X, h.Y, -h.Z), Vector3.new(-h.X, h.Y, -h.Z),
+        Vector3.new(-h.X, -h.Y, h.Z), Vector3.new(h.X, -h.Y, h.Z),
+        Vector3.new(h.X, h.Y, h.Z), Vector3.new(-h.X, h.Y, h.Z),
+    }
+
+    wire:Clear()
+    wire:AddLines({
+        p[1],p[2], p[2],p[3], p[3],p[4], p[4],p[1],
+        p[5],p[6], p[6],p[7], p[7],p[8], p[8],p[5],
+        p[1],p[5], p[2],p[6], p[3],p[7], p[4],p[8],
+    })
+end
+
+local function createBox(entry, color)
     local proxy = Instance.new("Part")
     proxy.Name = "JustXDoorsESPProxy"
     proxy.Anchored = true
@@ -423,16 +472,15 @@ local function createBox(entry, color, transparency)
     proxy.Size = Vector3.one
     proxy.Parent = VisualContainer
 
-    local box = Instance.new("BoxHandleAdornment")
+    local box = Instance.new("WireframeHandleAdornment")
     box.Name = "JustXDoorsESPBox"
     box.Adornee = proxy
     box.AlwaysOnTop = true
-    box.ZIndex = 5
-    box.Size = Vector3.one
-    box.CFrame = CFrame.new()
+    box.Thickness = 2
     box.Color3 = color
-    box.Transparency = transparency or 0.05
+    box.Transparency = 0
     box.Parent = proxy
+    addWireCubeLines(box, Vector3.one)
 
     entry.BoxProxy = proxy
     entry.Box = box
