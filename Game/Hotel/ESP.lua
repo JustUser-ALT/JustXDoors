@@ -383,6 +383,28 @@ local function makeHighlight(kind, adornee, entry, fillTransparency)
     return true
 end
 
+-- Items are deliberately parented outside the item itself.
+-- Some DOORS item interactions reparent/rebuild parts while the item is
+-- still present. Keeping the Highlight in our own container prevents that
+-- lifecycle from taking the Highlight with it.
+local function makeItemHighlight(kind, adornee, entry)
+    if not adornee then return false end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsItemESP"
+    highlight.Adornee = adornee
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = true
+    highlight.Parent = VisualContainer
+
+    entry.Highlight = highlight
+    return true
+end
+
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
@@ -537,8 +559,26 @@ local function createVisual(kind, object, entry)
     end
 
     if entry.Highlight and entry.Highlight.Parent then
-        updateLabel(kind, object, entry)
-        return true
+        if ITEM_KINDS[kind] then
+            -- Rebind item ESP if the game's interaction code changed the
+            -- underlying object hierarchy.
+            if entry.Highlight.Parent ~= VisualContainer
+                or entry.Highlight.Adornee ~= object
+                or not entry.Highlight.Enabled
+            then
+                pcall(function() entry.Highlight:Destroy() end)
+                entry.Highlight = nil
+            else
+                entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+                entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+                entry.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            end
+        end
+
+        if entry.Highlight then
+            updateLabel(kind, object, entry)
+            return true
+        end
     end
 
     if entry.Box and entry.Box.Parent then
@@ -563,7 +603,12 @@ local function createVisual(kind, object, entry)
     local adornee = object:IsA("Model") and object or getPart(object)
     if not adornee then return false end
 
-    makeHighlight(kind, adornee, entry, 1)
+    if ITEM_KINDS[kind] then
+        makeItemHighlight(kind, adornee, entry)
+    else
+        makeHighlight(kind, adornee, entry, 1)
+    end
+
     updateLabel(kind, object, entry)
     return true
 end
