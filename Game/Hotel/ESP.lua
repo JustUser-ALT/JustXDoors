@@ -1244,14 +1244,12 @@ local function setup()
             end
         end
 
-        -- Keep lightweight Door/Entity boxes aligned with moving geometry.
-        for kind, objects in pairs(Objects) do
-            if kind == "Doors" or ENTITY_KINDS[kind] then
-                for object, entry in pairs(objects) do
-                    if object.Parent and entry.Box then
-                        updateBoxEntry(entry, object, ENTITY_KINDS[kind] == true)
-                    end
-                end
+        -- Door boxes use a proxy because their visible geometry can
+        -- contain several parts. Entity ESP is attached directly to the
+        -- moving entity part and therefore needs no per-frame bounds pass.
+        for object, entry in pairs(Objects.Doors) do
+            if object.Parent and entry.Box then
+                updateBoxEntry(entry, object, false)
             end
         end
 
