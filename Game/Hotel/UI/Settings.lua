@@ -42,14 +42,22 @@ function SettingsUI:Create(ctx)
             Callback = function(value)
                 ctx.Colors[kind] = value
                 for _, entry in pairs(ctx.ESP[kind]) do
-                    for _, highlight in ipairs(entry.Highlights) do
-                        if highlight and highlight.Parent then
-                            highlight.FillColor = value
-                            highlight.OutlineColor = value
+                    if entry.Highlights then
+                        for _, highlight in ipairs(entry.Highlights) do
+                            if highlight and highlight.Parent then
+                                highlight.FillColor = value
+                                highlight.OutlineColor = value
+                            end
                         end
+                    elseif entry.Highlight and entry.Highlight.Parent then
+                        entry.Highlight.FillColor = value
+                        entry.Highlight.OutlineColor = value
                     end
+
                     local label = entry.Label and entry.Label:FindFirstChild("Text")
-                    if label then label.TextColor3 = value end
+                    if label then
+                        label.TextColor3 = value
+                    end
                 end
             end,
         })
