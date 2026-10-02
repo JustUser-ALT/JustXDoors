@@ -435,7 +435,7 @@ local function createVisual(kind, object, entry)
                 math.max(sourceSize.Z + 0.02, 0.08)
             )
             helper.CFrame = sourceCF * CFrame.new(0, section.y * sourceSize.Y, 0)
-            helper.Transparency = 1
+            helper.Transparency = 0.99
             helper.Anchored = true
             helper.CanCollide = false
             helper.CanTouch = false
