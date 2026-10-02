@@ -61,7 +61,7 @@ local ITEM_KINDS = {
 
 local DEFAULT_COLORS = {
     Doors = Color3.fromRGB(0, 200, 255),
-    Drawers = Color3.fromRGB(150, 95, 55),
+    Drawers = Color3.fromRGB(255, 170, 70),
     Closets = Color3.fromRGB(125, 75, 45),
     Toolshed = Color3.fromRGB(180, 110, 55),
     Chest = Color3.fromRGB(255, 165, 0),
