@@ -42,6 +42,18 @@ function SettingsUI:Create(ctx)
             Callback = function(value)
                 ctx.Colors[kind] = value
                 for _, entry in pairs(ctx.ESP[kind]) do
+                    if entry.Boxes then
+                        for _, box in ipairs(entry.Boxes) do
+                            if box and box.Parent then
+                                box.Color3 = value
+                            end
+                        end
+                    end
+
+                    if entry.Box and entry.Box.Parent then
+                        entry.Box.Color3 = value
+                    end
+
                     if entry.Highlights then
                         for _, highlight in ipairs(entry.Highlights) do
                             if highlight and highlight.Parent then
