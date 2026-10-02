@@ -292,6 +292,12 @@ local function destroyEntryVisual(entry)
         entry.DoorHumanoid = nil
     end
 
+    if entry.ItemHelperModel then
+        pcall(function() entry.ItemHelperModel:Destroy() end)
+        entry.ItemHelperModel = nil
+    end
+    entry.ItemSources = nil
+    entry.ItemHumanoid = nil
 
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
@@ -383,16 +389,124 @@ local function makeHighlight(kind, adornee, entry, fillTransparency)
     return true
 end
 
--- Items are deliberately parented outside the item itself.
--- Some DOORS item interactions reparent/rebuild parts while the item is
--- still present. Keeping the Highlight in our own container prevents that
--- lifecycle from taking the Highlight with it.
-local function makeItemHighlight(kind, adornee, entry)
-    if not adornee then return false end
+-- Item ESP uses its own helper geometry instead of adorning the live
+-- DOORS item. Some mobile interactions create/reparent interaction parts
+-- (the on-screen finger/prompt is one visible symptom), which can make a
+-- Highlight attached directly to the item disappear.
+local function getItemParts(object)
+    local parts = {}
+
+    if not object then return parts end
+
+    if object:IsA("BasePart") then
+        if object.Transparency < 1 and object.Size.Magnitude > 0.05 then
+            parts[1] = object
+        end
+        return parts
+    end
+
+    for _, child in ipairs(object:GetDescendants()) do
+        if child:IsA("BasePart")
+            and child.Transparency < 1
+            and child.Size.Magnitude > 0.05
+        then
+            parts[#parts + 1] = child
+        end
+    end
+
+    return parts
+end
+
+local function destroyItemHelper(entry)
+    if entry.Highlight then
+        pcall(function() entry.Highlight:Destroy() end)
+        entry.Highlight = nil
+    end
+
+    if entry.ItemHelperModel then
+        pcall(function() entry.ItemHelperModel:Destroy() end)
+        entry.ItemHelperModel = nil
+    end
+
+    entry.ItemSources = nil
+    entry.ItemHumanoid = nil
+end
+
+local function makeItemHighlight(kind, object, entry)
+    if not object or not VisualContainer then return false end
+
+    local sources = getItemParts(object)
+    if #sources == 0 then return false end
+
+    destroyItemHelper(entry)
+
+    local helperModel = Instance.new("Model")
+    helperModel.Name = "JustXDoorsItemHighlightModel"
+    helperModel.Parent = VisualContainer
+
+    -- Same transparent-model technique used by the working Door ESP.
+    -- The helper parts are almost completely invisible, while the Highlight
+    -- is rendered from their actual geometry.
+    local humanoid = Instance.new("Humanoid")
+    humanoid.Name = "JustXDoorsItemHighlightHumanoid"
+    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+    humanoid.NameDisplayDistance = 0
+    humanoid.Parent = helperModel
+
+    local sourceMap = {}
+
+    for index, source in ipairs(sources) do
+        local helper
+
+        local ok, clone = pcall(function()
+            return source:Clone()
+        end)
+
+        if ok and clone and clone:IsA("BasePart") then
+            helper = clone
+
+            -- Keep only geometry-related mesh objects. Never copy prompts,
+            -- touch transmitters, scripts, constraints, etc. from the item.
+            for _, child in ipairs(helper:GetDescendants()) do
+                if not (
+                    child:IsA("SpecialMesh")
+                    or child:IsA("BlockMesh")
+                    or child:IsA("CylinderMesh")
+                ) then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        else
+            helper = Instance.new("Part")
+            helper.Shape = Enum.PartType.Block
+            helper.Size = source.Size
+        end
+
+        helper.Name = "JustXDoorsItemHighlightPart_" .. tostring(index)
+        helper.CFrame = source.CFrame
+        helper.Transparency = 0.999
+        helper.CanCollide = false
+        helper.CanTouch = false
+        helper.CanQuery = false
+        helper.CastShadow = false
+        helper.Anchored = false
+        helper.Massless = true
+        helper.Material = Enum.Material.Plastic
+        helper.Parent = helperModel
+
+        local weld = Instance.new("WeldConstraint")
+        weld.Name = "JustXDoorsItemHighlightWeld"
+        weld.Part0 = helper
+        weld.Part1 = source
+        weld.Parent = helper
+
+        sourceMap[source] = helper
+    end
 
     local highlight = Instance.new("Highlight")
     highlight.Name = "JustXDoorsItemESP"
-    highlight.Adornee = adornee
+    highlight.Adornee = helperModel
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
     highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
@@ -401,7 +515,11 @@ local function makeItemHighlight(kind, adornee, entry)
     highlight.Enabled = true
     highlight.Parent = VisualContainer
 
+    entry.ItemHelperModel = helperModel
+    entry.ItemHumanoid = humanoid
+    entry.ItemSources = sourceMap
     entry.Highlight = highlight
+
     return true
 end
 
@@ -562,14 +680,38 @@ local function createVisual(kind, object, entry)
 
     if entry.Highlight and entry.Highlight.Parent then
         if ITEM_KINDS[kind] then
-            -- Rebind item ESP if the game's interaction code changed the
-            -- underlying object hierarchy.
-            if entry.Highlight.Parent ~= VisualContainer
-                or entry.Highlight.Adornee ~= object
-                or not entry.Highlight.Enabled
-            then
-                pcall(function() entry.Highlight:Destroy() end)
-                entry.Highlight = nil
+            -- Validate the helper against the current item geometry. The
+            -- helper is welded to the real parts, so the mobile finger/prompt
+            -- can reparent or rebuild interaction objects without owning the
+            -- ESP Highlight.
+            local sources = getItemParts(object)
+            local valid = entry.ItemHelperModel
+                and entry.ItemHelperModel.Parent == VisualContainer
+                and entry.Highlight.Parent == VisualContainer
+                and entry.Highlight.Adornee == entry.ItemHelperModel
+                and entry.Highlight.Enabled
+                and entry.ItemSources ~= nil
+
+            if valid and #sources ~= (function()
+                local count = 0
+                for _ in pairs(entry.ItemSources) do count += 1 end
+                return count
+            end)() then
+                valid = false
+            end
+
+            if valid then
+                for _, source in ipairs(sources) do
+                    if not source.Parent or not entry.ItemSources[source] then
+                        valid = false
+                        break
+                    end
+                end
+            end
+
+            if not valid then
+                destroyItemHelper(entry)
+                makeItemHighlight(kind, object, entry)
             else
                 entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
                 entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
@@ -606,7 +748,7 @@ local function createVisual(kind, object, entry)
     if not adornee then return false end
 
     if ITEM_KINDS[kind] then
-        makeItemHighlight(kind, adornee, entry)
+        makeItemHighlight(kind, object, entry)
     else
         makeHighlight(kind, adornee, entry, 1)
     end
