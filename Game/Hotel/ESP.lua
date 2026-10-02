@@ -1036,7 +1036,7 @@ local function scanDrops(seen)
         Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
         RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
         Donut="Donut", Crucifix="Crucifix",
-        SallyToy="SallyToy", SallyToyObtain="SallyToy",
+        SallyToy="SallyToy",
     }
 
     for _, object in ipairs(Drops:GetDescendants()) do
