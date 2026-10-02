@@ -395,91 +395,24 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        -- Door.Door is a large rectangular Part, so highlighting it directly
-        -- creates the large rectangle seen in-game. Instead create thin,
-        -- invisible helper parts that cover the visible door in sections.
+        -- Do not use transparent helper Parts here. Roblox Highlight can
+        -- behave inconsistently on generated transparent geometry.
+        -- The reliable target is the real Door.Door Part, but we hide its
+        -- rectangular fill and use a SelectionBox for the outline.
         local source = object:IsA("Model") and object:FindFirstChild("Door")
         if not source or not source:IsA("BasePart") then
-            local fallback = getPart(object)
-            if not fallback then return false end
-            source = fallback
+            return false
         end
 
-        -- Remove helper geometry from a previous refresh.
-        if entry.DoorHelpers then
-            for _, helper in ipairs(entry.DoorHelpers) do
-                pcall(function() helper:Destroy() end)
-            end
-        end
+        local box = Instance.new("SelectionBox")
+        box.Name = "JustXDoorsDoorESP"
+        box.Adornee = source
+        box.LineThickness = 0.04
+        box.Color3 = color
+        box.SurfaceTransparency = 1
+        box.Parent = VisualContainer
 
-        entry.DoorHelpers = {}
-        entry.Highlights = {}
-
-        local sourceSize = source.Size
-        local sourceCF = source.CFrame
-
-        -- Three thin sections. They are deliberately slightly inset so
-        -- their Highlight outlines don't produce one giant bounding box.
-        local sections = {
-            { name = "Top",    y =  0.31, height = 0.19 },
-            { name = "Middle", y =  0.00, height = 0.30 },
-            { name = "Bottom", y = -0.31, height = 0.19 },
-        }
-
-        for _, section in ipairs(sections) do
-            local helper = Instance.new("Part")
-            helper.Name = "JustXDoorsDoorESP_" .. section.name
-            helper.Size = Vector3.new(
-                math.max(sourceSize.X - 0.12, 0.1),
-                math.min(section.height, sourceSize.Y - 0.08),
-                math.max(sourceSize.Z + 0.02, 0.08)
-            )
-            helper.CFrame = sourceCF * CFrame.new(0, section.y * sourceSize.Y, 0)
-            helper.Transparency = 0.99
-            helper.Anchored = true
-            helper.CanCollide = false
-            helper.CanTouch = false
-            helper.CanQuery = false
-            helper.CastShadow = false
-            helper.Parent = VisualContainer
-
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "JustXDoorsDoorESP"
-            highlight.Adornee = helper
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.FillColor = color
-            highlight.OutlineColor = color
-            highlight.FillTransparency = 1
-            highlight.OutlineTransparency = 0
-            highlight.Parent = VisualContainer
-
-            table.insert(entry.DoorHelpers, helper)
-            table.insert(entry.Highlights, highlight)
-        end
-
-        -- Keep the helper sections attached to the actual moving door.
-        local connection
-        connection = RunService.Heartbeat:Connect(function()
-            if not source.Parent or not object.Parent then
-                if connection then connection:Disconnect() end
-                return
-            end
-
-            local currentCF = source.CFrame
-            for index, section in ipairs(sections) do
-                local helper = entry.DoorHelpers[index]
-                if helper and helper.Parent then
-                    helper.CFrame = currentCF * CFrame.new(0, section.y * source.Size.Y, 0)
-                    helper.Size = Vector3.new(
-                        math.max(source.Size.X - 0.12, 0.1),
-                        math.min(section.height, source.Size.Y - 0.08),
-                        math.max(source.Size.Z + 0.02, 0.08)
-                    )
-                end
-            end
-        end)
-
-        entry.DoorConnection = connection
+        entry.Box = box
         updateLabel(kind, object, entry)
         return true
     end
