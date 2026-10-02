@@ -398,30 +398,47 @@ local function getItemParts(object, kind)
 
     if not object then return parts end
 
-    -- Keys are special: DOORS keeps the real key geometry under Hitbox and
-    -- some drawer states make those parts fully transparent until the drawer
-    -- is opened. Abyssal-style key ESP uses the Hitbox geometry directly.
+    -- Keys are special. In a closed Drawer the KeyObtain can keep only
+    -- its interaction Hitbox visible to the client while the actual key
+    -- geometry is hidden/reparented by the Drawer system.
+    --
+    -- Never use the Hitbox itself as helper geometry: it is an interaction
+    -- volume and can render as the strange circular ESP seen on mobile.
     if kind == "Key" then
         local hitbox = object:FindFirstChild("Hitbox", true)
 
         if hitbox then
+            -- First use real geometry belonging to the Hitbox container.
             for _, child in ipairs(hitbox:GetDescendants()) do
                 if child:IsA("BasePart")
+                    and child.Name ~= "Hitbox"
                     and child.Name ~= "PromptHitbox"
                     and child.Size.Magnitude > 0.05
                 then
                     parts[#parts + 1] = child
                 end
             end
+        end
 
-            if #parts == 0 and hitbox:IsA("BasePart") then
-                parts[1] = hitbox
+        -- If the Drawer has moved/hidden the key geometry elsewhere under
+        -- KeyObtain, search the complete object while excluding interaction
+        -- volumes and the prompt itself.
+        if #parts == 0 then
+            for _, child in ipairs(object:GetDescendants()) do
+                if child:IsA("BasePart")
+                    and child ~= hitbox
+                    and child.Name ~= "PromptHitbox"
+                    and child.Name ~= "ModulePrompt"
+                    and child.Size.Magnitude > 0.05
+                then
+                    parts[#parts + 1] = child
+                end
             end
         end
 
-        if #parts > 0 then
-            return parts
-        end
+        -- Do not fall back to Hitbox. If there is no actual geometry yet,
+        -- the next scan will rebuild it instead of drawing the bad circle.
+        return parts
     end
 
     if object:IsA("BasePart") then
@@ -1019,6 +1036,7 @@ local function scanDrops(seen)
         Smoothie="Smoothie", Flashlight="Flashlight", TipJar="TipJar",
         RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie", RiftJar="RiftJar",
         Donut="Donut", Crucifix="Crucifix",
+        SallyToy="SallyToy", SallyToyObtain="SallyToy",
     }
 
     for _, object in ipairs(Drops:GetDescendants()) do
