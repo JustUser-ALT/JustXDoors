@@ -945,12 +945,13 @@ local function scanEntities()
         Snare = "Snare",
     }
 
-    -- Entity instances are not guaranteed to be direct children of Workspace.
-    -- Scan descendants so nested/replicated entity models receive ESP too.
-    for _, object in ipairs(workspace:GetDescendants()) do
-        local kind = entityNames[object.Name]
+    -- Entity instances used by Hotel are normally exposed through these
+    -- direct/global references. Avoid walking every Workspace descendant
+    -- repeatedly because entity models can contain large animated trees.
+    for _, kindName in ipairs({"RushMoving", "AmbushMoving", "Eyes", "SallyLingering", "SallyMoving"}) do
+        local kind = entityNames[kindName]
         if kind and Enabled[kind] then
-            register(kind, object)
+            register(kind, workspace:FindFirstChild(kindName))
         end
     end
 
