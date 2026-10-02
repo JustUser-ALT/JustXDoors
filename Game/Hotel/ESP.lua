@@ -24,39 +24,6 @@ local LabelClock = 0
 
 local MAX_DISTANCE = 300
 
--- TEMPORARY DOOR DIAGNOSTIC.
-local DEBUG_DOOR_STRUCTURE = true
-local DebuggedDoors = {}
-
-local function debugDoorStructure(door)
-    if not DEBUG_DOOR_STRUCTURE or not door or DebuggedDoors[door] then return end
-    DebuggedDoors[door] = true
-
-    warn("========== JustXDoors DOOR DEBUG ==========")
-    warn("[Door]", door:GetFullName())
-
-    local count = 0
-    for _, object in ipairs(door:GetDescendants()) do
-        if object:IsA("BasePart") then
-            count += 1
-            local size = object.Size
-            local pos = object.Position
-            warn(string.format(
-                "[PART %d] %s | Size=(%.2f, %.2f, %.2f) | Pos=(%.2f, %.2f, %.2f) | Transparency=%.2f | Parent=%s",
-                count,
-                object:GetFullName(),
-                size.X, size.Y, size.Z,
-                pos.X, pos.Y, pos.Z,
-                object.Transparency,
-                object.Parent and object.Parent:GetFullName() or "nil"
-            ))
-        end
-    end
-
-    warn("[Door] BasePart count:", count)
-    warn("========== END DOOR DEBUG ==========")
-end
-
 local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
@@ -416,52 +383,45 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        -- The outer Door model also contains large helper/room geometry.
-        -- We still scan the complete assembly so upper/middle/lower pieces
-        -- are found, but reject oversized parts that produce a giant box.
+        -- IMPORTANT:
+        -- The outer Door model contains helper geometry such as:
+        --   Hidden     -> large helper volume (causes the giant rectangle)
+        --   Collision  -> collision volume
+        --   Hinge      -> transparent helper
+        --
+        -- The actual visible door is the BasePart named "Door" inside
+        -- the outer Door model. Highlight that real door first, then add
+        -- only its smaller visible decorative pieces.
+        local visualDoor = object:IsA("Model") and object:FindFirstChild("Door")
         local parts = {}
-        local innerDoor = object:IsA("Model") and object:FindFirstChild("Door")
-        local anchor = innerDoor and getPart(innerDoor) or getPart(object)
 
-        local anchorPosition = anchor and anchor.Position or nil
+        if visualDoor and visualDoor:IsA("BasePart") then
+            table.insert(parts, visualDoor)
 
-        if object:IsA("BasePart") then
-            parts = {object}
-        elseif object:IsA("Model") then
-            for _, part in ipairs(object:GetDescendants()) do
-                local lowerName = part.Name:lower()
-
-                if part:IsA("BasePart")
-                    and part.Transparency < 1
-                    and not lowerName:find("hitbox", 1, true)
-                    and not lowerName:find("collision", 1, true)
-                    and not lowerName:find("trigger", 1, true)
-                    and not lowerName:find("touch", 1, true)
-                    and part.Name ~= "HumanoidRootPart"
+            for _, child in ipairs(visualDoor:GetDescendants()) do
+                if child:IsA("BasePart")
+                    and child.Transparency < 1
+                    and child.Name ~= "Hidden"
+                    and child.Name ~= "Collision"
+                    and child.Name ~= "Hinge"
                 then
-                    local size = part.Size
-                    local largestAxis = math.max(size.X, size.Y, size.Z)
-                    local smallestAxis = math.min(size.X, size.Y, size.Z)
+                    local size = child.Size
+                    local volume = size.X * size.Y * size.Z
 
-                    -- A room-sized helper/collision part is what caused the
-                    -- giant rectangle in the previous version. Never use
-                    -- large slabs as ESP geometry, even if they are inside
-                    -- the Door model.
-                    local notRoomSized = largestAxis <= 14
-                        and size.X * size.Y * size.Z <= 700
-
-                    local nearDoor = false
-                    if anchorPosition then
-                        nearDoor = (part.Position - anchorPosition).Magnitude <= 14
-                    end
-
-                    -- Keep the actual visible door pieces and nearby frame
-                    -- pieces. Thin frame pieces are allowed even when one
-                    -- axis is very small; oversized room geometry is not.
-                    if notRoomSized and nearDoor then
-                        table.insert(parts, part)
+                    -- Ignore another room-sized helper, but keep real
+                    -- door details such as Plate / Knob / Sign / CrossBoards.
+                    if math.max(size.X, size.Y, size.Z) <= 8
+                        and volume <= 350
+                    then
+                        table.insert(parts, child)
                     end
                 end
+            end
+        else
+            -- Fallback for floors/variants where Door itself is a Part.
+            local fallback = getPart(object)
+            if fallback and fallback:IsA("BasePart") then
+                table.insert(parts, fallback)
             end
         end
 
