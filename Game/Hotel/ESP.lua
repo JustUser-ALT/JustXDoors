@@ -226,61 +226,6 @@ local function roomVisible(kind, room)
     local number = tonumber(room.Name)
     if not current or not number then return true end
 
-    if kind == "Drawers" then
-        -- Drawers are intentionally represented by helper geometry instead
-        -- of adorning the live Dresser. A Dresser can contain KeyObtain,
-        -- SallyToyObtain, or another item; adorning the whole Dresser makes
-        -- the Drawer Highlight overlap and visually cover the Item ESP.
-        if not near then
-            destroyDrawerHelper(entry)
-            updateLabel(kind, object, entry)
-            return true
-        end
-
-        local sources = getDrawerParts(object)
-        local sourceCount = 0
-        for _ in pairs(entry.DrawerSources or {}) do
-            sourceCount += 1
-        end
-
-        local valid = entry.DrawerHelperModel
-            and entry.DrawerHelperModel.Parent == VisualContainer
-            and entry.DrawerHighlight
-            and entry.DrawerHighlight.Parent == HighlightContainer
-            and entry.DrawerHighlight.Adornee == entry.DrawerHelperModel
-            and entry.DrawerHighlight.Enabled
-            and entry.DrawerSources ~= nil
-            and sourceCount == #sources
-
-        if valid then
-            for _, source in ipairs(sources) do
-                if not source.Parent or not entry.DrawerSources[source] then
-                    valid = false
-                    break
-                end
-            end
-        end
-
-        if not valid then
-            makeDrawerHighlight(kind, object, entry)
-        else
-            for _, source in ipairs(sources) do
-                local helper = entry.DrawerSources[source]
-                if helper and helper.Parent then
-                    helper.Size = source.Size
-                    helper.CFrame = source.CFrame
-                end
-            end
-
-            entry.DrawerHighlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-            entry.DrawerHighlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-            entry.DrawerHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        end
-
-        updateLabel(kind, object, entry)
-        return true
-    end
-
     if kind == "Doors" then
         return number == current or number == current + 1
     end
@@ -847,6 +792,60 @@ local function createVisual(kind, object, entry)
 
     if ENTITY_KINDS[kind] and root and part then
         near = (root.Position - part.Position).Magnitude <= visualDistance
+    end
+
+    if kind == "Drawers" then
+        -- Drawers use isolated helper geometry. The live Dresser can contain
+        -- KeyObtain, SallyToyObtain, or other item models, and adorning the
+        -- whole Dresser makes the Drawer Highlight overlap the Item ESP.
+        if not near then
+            destroyDrawerHelper(entry)
+            updateLabel(kind, object, entry)
+            return true
+        end
+
+        local sources = getDrawerParts(object)
+        local sourceCount = 0
+        for _ in pairs(entry.DrawerSources or {}) do
+            sourceCount += 1
+        end
+
+        local valid = entry.DrawerHelperModel
+            and entry.DrawerHelperModel.Parent == VisualContainer
+            and entry.DrawerHighlight
+            and entry.DrawerHighlight.Parent == HighlightContainer
+            and entry.DrawerHighlight.Adornee == entry.DrawerHelperModel
+            and entry.DrawerHighlight.Enabled
+            and entry.DrawerSources ~= nil
+            and sourceCount == #sources
+
+        if valid then
+            for _, source in ipairs(sources) do
+                if not source.Parent or not entry.DrawerSources[source] then
+                    valid = false
+                    break
+                end
+            end
+        end
+
+        if not valid then
+            makeDrawerHighlight(kind, object, entry)
+        else
+            for _, source in ipairs(sources) do
+                local helper = entry.DrawerSources[source]
+                if helper and helper.Parent then
+                    helper.Size = source.Size
+                    helper.CFrame = source.CFrame
+                end
+            end
+
+            entry.DrawerHighlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+            entry.DrawerHighlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+            entry.DrawerHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        end
+
+        updateLabel(kind, object, entry)
+        return true
     end
 
     if kind == "Doors" then
