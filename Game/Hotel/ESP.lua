@@ -393,13 +393,39 @@ end
 -- DOORS item. Some mobile interactions create/reparent interaction parts
 -- (the on-screen finger/prompt is one visible symptom), which can make a
 -- Highlight attached directly to the item disappear.
-local function getItemParts(object)
+local function getItemParts(object, kind)
     local parts = {}
 
     if not object then return parts end
 
+    -- Keys are special: DOORS keeps the real key geometry under Hitbox and
+    -- some drawer states make those parts fully transparent until the drawer
+    -- is opened. Abyssal-style key ESP uses the Hitbox geometry directly.
+    if kind == "Key" then
+        local hitbox = object:FindFirstChild("Hitbox", true)
+
+        if hitbox then
+            for _, child in ipairs(hitbox:GetDescendants()) do
+                if child:IsA("BasePart")
+                    and child.Name ~= "PromptHitbox"
+                    and child.Size.Magnitude > 0.05
+                then
+                    parts[#parts + 1] = child
+                end
+            end
+
+            if #parts == 0 and hitbox:IsA("BasePart") then
+                parts[1] = hitbox
+            end
+        end
+
+        if #parts > 0 then
+            return parts
+        end
+    end
+
     if object:IsA("BasePart") then
-        if object.Transparency < 1 and object.Size.Magnitude > 0.05 then
+        if object.Size.Magnitude > 0.05 then
             parts[1] = object
         end
         return parts
@@ -435,7 +461,7 @@ end
 local function makeItemHighlight(kind, object, entry)
     if not object or not VisualContainer then return false end
 
-    local sources = getItemParts(object)
+    local sources = getItemParts(object, kind)
     if #sources == 0 then return false end
 
     destroyItemHelper(entry)
@@ -684,7 +710,7 @@ local function createVisual(kind, object, entry)
             -- helper is welded to the real parts, so the mobile finger/prompt
             -- can reparent or rebuild interaction objects without owning the
             -- ESP Highlight.
-            local sources = getItemParts(object)
+            local sources = getItemParts(object, kind)
             local valid = entry.ItemHelperModel
                 and entry.ItemHelperModel.Parent == VisualContainer
                 and entry.Highlight.Parent == VisualContainer
@@ -961,7 +987,9 @@ local function scanRoom(room, seen)
             addObject("BreakerPole", object, room)
         end
 
-        if Enabled.SallyToy and name == "SallyToyObtain" and room.Name == "28" then
+        if Enabled.SallyToy and name == "SallyToyObtain" then
+            -- Sally Toy is an item, so do not hard-code room 28. The room
+            -- itself already supplies the correct room visibility handling.
             seen.SallyToy[object] = true
             addObject("SallyToy", object, room)
         end
