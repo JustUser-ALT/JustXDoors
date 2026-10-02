@@ -465,14 +465,13 @@ local function createBox(entry, color)
 end
 
 local function destroyVisual(entry)
-    if entry.DoorHighlightModel then
-        pcall(function() entry.DoorHighlightModel:Destroy() end)
-        entry.DoorHighlightModel = nil
-    end
-
-    if entry.DoorHighlightPart then
-        pcall(function() entry.DoorHighlightPart:Destroy() end)
-        entry.DoorHighlightPart = nil
+    if entry.Highlights then
+        for _, highlight in ipairs(entry.Highlights) do
+            if highlight then
+                pcall(function() highlight:Destroy() end)
+            end
+        end
+        entry.Highlights = nil
     end
 
     if entry.Highlight then
@@ -496,6 +495,21 @@ end
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
+    if entry.Highlights and #entry.Highlights > 0 then
+        local valid = false
+        for _, highlight in ipairs(entry.Highlights) do
+            if highlight and highlight.Parent then
+                valid = true
+                break
+            end
+        end
+        if valid then
+            updateLabel(kind, object, entry)
+            return true
+        end
+        entry.Highlights = nil
+    end
+
     if entry.Highlight and entry.Highlight.Parent then
         updateLabel(kind, object, entry)
         return true
@@ -510,115 +524,33 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        -- Match Abyssal's door ESP implementation:
-        -- create a transparent helper model with a Humanoid, copy the
-        -- visible Door parts into it, weld them to the real door parts,
-        -- then highlight the helper model AlwaysOnTop.
-        --
-        -- This is intentionally different from highlighting the real Door
-        -- model or drawing one bounding box.
-        if object:IsA("Model") then
-            local doorParts = {}
-
-            for _, child in ipairs(object:GetChildren()) do
-                if child.Name == "Door" and child:IsA("BasePart") then
-                    table.insert(doorParts, child)
-                end
-            end
-
-            if #doorParts == 2 then
-                local highlightModel = Instance.new("Model")
-                highlightModel.Name = "JustXDoorsDoorHighlightModel"
-                highlightModel.Parent = object
-
-                local humanoid = Instance.new("Humanoid")
-                humanoid.Name = "HighlightHumanoid"
-                humanoid.Parent = highlightModel
-
-                entry.DoorHighlightModel = highlightModel
-
-                for _, doorPart in ipairs(doorParts) do
-                    local helper = Instance.new("Part")
-                    helper.Name = "HighlightPart"
-                    helper.Transparency = 0.999
-                    helper.Size = doorPart.Size
-                    helper.CanCollide = false
-                    helper.CanTouch = false
-                    helper.CanQuery = false
-                    helper.CFrame = doorPart.CFrame
-                    helper.Material = Enum.Material.Plastic
-                    helper:SetAttribute("ParentRoom", object:GetAttribute("JustXDoorsRoom"))
-                    helper.Parent = highlightModel
-
-                    local weld = Instance.new("WeldConstraint")
-                    weld.Part0 = helper
-                    weld.Part1 = doorPart
-                    weld.Enabled = true
-                    weld.Parent = helper
-                end
-
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "JustXDoorsDoorESP"
-                highlight.FillTransparency = 1
-                highlight.OutlineTransparency = 0
-                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                highlight.Adornee = highlightModel
-                highlight.FillColor = color
-                highlight.OutlineColor = color
-                highlight.Parent = VisualContainer
-                entry.Highlight = highlight
-
-                updateLabel(kind, object, entry)
-                return true
-            end
-
-            -- Abyssal's fallback for a door with a single Door part.
-            local root = object:FindFirstChild("Door")
-            if root and root:IsA("BasePart") then
-                local helper = Instance.new("Part")
-                helper.Name = "HighlightPart"
-                helper.Transparency = 0.999
-                helper.Size = root.Size
-                helper.CanCollide = false
-                helper.CanTouch = false
-                helper.CanQuery = false
-                helper.CFrame = root.CFrame
-                helper.Material = Enum.Material.Plastic
-                helper:SetAttribute("ParentRoom", object:GetAttribute("JustXDoorsRoom"))
-                helper.Parent = object
-
-                local weld = Instance.new("WeldConstraint")
-                weld.Part0 = helper
-                weld.Part1 = root
-                weld.Enabled = true
-                weld.Parent = helper
-
-                local humanoid = object:FindFirstChild("HighlightHumanoid")
-                if not humanoid then
-                    humanoid = Instance.new("Humanoid")
-                    humanoid.Name = "HighlightHumanoid"
-                    humanoid.Parent = object
-                end
-
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "JustXDoorsDoorESP"
-                highlight.FillTransparency = 1
-                highlight.OutlineTransparency = 0
-                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                highlight.Adornee = object
-                highlight.FillColor = color
-                highlight.OutlineColor = color
-                highlight.Parent = VisualContainer
-
-                entry.DoorHighlightPart = helper
-                entry.Highlight = highlight
-
-                updateLabel(kind, object, entry)
-                return true
-            end
+        -- A Door model is made from several visible parts. Highlighting the
+        -- model itself can miss the upper section, center plate, or lower
+        -- section. Give each real visible part its own outline instead.
+        -- This keeps the exact door shape and AlwaysOnTop behavior without
+        -- using one oversized bounding box.
+        local parts = getVisualParts(object)
+        if #parts == 0 then
+            return false
         end
 
-        return false
+        entry.Highlights = {}
+
+        for _, part in ipairs(parts) do
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoorsDoorESP"
+            highlight.Adornee = part
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.FillColor = color
+            highlight.OutlineColor = color
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = 0
+            highlight.Parent = VisualContainer
+            table.insert(entry.Highlights, highlight)
+        end
+
+        updateLabel(kind, object, entry)
+        return true
     end
 
     if ENTITY_KINDS[kind] then
@@ -792,11 +724,10 @@ local function registerRoom(room, seen)
     if not room or not room.Parent then return end
 
     local doorContainer = room:FindFirstChild("Door")
-    local door = doorContainer and doorContainer:FindFirstChild("Door")
-
-    if Enabled.Doors and doorContainer and door and roomVisible("Doors", room) then
-        seen.Doors[doorContainer] = true
-        addObject("Doors", doorContainer, room)
+    local door = doorContainer and (doorContainer:FindFirstChild("Door") or doorContainer)
+    if Enabled.Doors and door and roomVisible("Doors", room) then
+        seen.Doors[door] = true
+        addObject("Doors", door, room)
     end
 
     local itemMap = {
