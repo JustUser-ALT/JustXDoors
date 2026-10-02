@@ -781,7 +781,13 @@ local function addObject(kind, object, room)
     local part = ENTITY_KINDS[kind] and getEntityPart(kind, object) or getPart(object)
     local root = getRoot()
 
-    if part and root and (root.Position - part.Position).Magnitude > MAX_DISTANCE then
+    -- Doors and Items are intentionally not limited by physical distance.
+    -- Their visibility is controlled by room rules instead. Entities keep
+    -- the distance limit for performance.
+    if kind ~= "Doors" and not ITEM_KINDS[kind]
+        and part and root
+        and (root.Position - part.Position).Magnitude > MAX_DISTANCE
+    then
         clearEntry(kind, object)
         return
     end
@@ -813,10 +819,15 @@ end
 
 local function reconcile(kind, seen)
     for object, entry in pairs(Objects[kind]) do
-        if not object.Parent or not seen[object] then
+        if not object.Parent then
+            clearEntry(kind, object)
+        elseif entry.Room and not roomVisible(kind, entry.Room) then
+            -- Do not rely on the scan's seen table for room visibility.
+            -- Objects can still be discovered in an old room, so they may
+            -- otherwise remain alive after the player changes rooms.
+            clearEntry(kind, object)
+        elseif not seen[object] then
             if entry.Room and Rooms and object:IsDescendantOf(Rooms) then
-                -- Room objects are only removed when they are no longer
-                -- present/visible in the current reconciliation.
                 clearEntry(kind, object)
             elseif entry.Room == nil then
                 if not Drops or not object:IsDescendantOf(Drops) then
@@ -881,9 +892,10 @@ local function scanRoom(room, seen)
             addObject("Chest", object, room)
         end
 
-        if Enabled.Key and name == "KeyObtain"
-            and object:FindFirstChild("ModulePrompt", true)
-        then
+        if Enabled.Key and name == "KeyObtain" then
+            -- A key inside a Drawer can be missing ModulePrompt while it is
+            -- stored/hidden by the drawer interaction system. The KeyObtain
+            -- object itself is still the reliable marker.
             seen.Key[object] = true
             addObject("Key", object, room)
         end
