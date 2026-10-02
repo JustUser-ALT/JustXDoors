@@ -465,6 +465,15 @@ local function createBox(entry, color)
 end
 
 local function destroyVisual(entry)
+    if entry.Highlights then
+        for _, highlight in ipairs(entry.Highlights) do
+            if highlight then
+                pcall(function() highlight:Destroy() end)
+            end
+        end
+        entry.Highlights = nil
+    end
+
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
@@ -486,6 +495,21 @@ end
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
+    if entry.Highlights and #entry.Highlights > 0 then
+        local valid = false
+        for _, highlight in ipairs(entry.Highlights) do
+            if highlight and highlight.Parent then
+                valid = true
+                break
+            end
+        end
+        if valid then
+            updateLabel(kind, object, entry)
+            return true
+        end
+        entry.Highlights = nil
+    end
+
     if entry.Highlight and entry.Highlight.Parent then
         updateLabel(kind, object, entry)
         return true
@@ -500,19 +524,30 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        -- Doors use a single outline-only Highlight so the ESP remains
-        -- tightly attached to the visible door geometry while also being
-        -- visible through walls.
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsDoorESP"
-        highlight.Adornee = object
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillColor = color
-        highlight.OutlineColor = color
-        highlight.FillTransparency = 1
-        highlight.OutlineTransparency = 0
-        highlight.Parent = VisualContainer
-        entry.Highlight = highlight
+        -- A Door model is made from several visible parts. Highlighting the
+        -- model itself can miss the upper section, center plate, or lower
+        -- section. Give each real visible part its own outline instead.
+        -- This keeps the exact door shape and AlwaysOnTop behavior without
+        -- using one oversized bounding box.
+        local parts = getVisualParts(object)
+        if #parts == 0 then
+            return false
+        end
+
+        entry.Highlights = {}
+
+        for _, part in ipairs(parts) do
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoorsDoorESP"
+            highlight.Adornee = part
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.FillColor = color
+            highlight.OutlineColor = color
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = 0
+            highlight.Parent = VisualContainer
+            table.insert(entry.Highlights, highlight)
+        end
 
         updateLabel(kind, object, entry)
         return true
