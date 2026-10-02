@@ -319,6 +319,8 @@ local function labelName(kind, object)
     return LABEL_NAMES[kind] or kind
 end
 
+local destroyDrawerHelper
+
 local function destroyEntryVisual(entry)
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
@@ -726,7 +728,7 @@ local function getDrawerParts(drawer)
     return parts
 end
 
-local function destroyDrawerHelper(entry)
+destroyDrawerHelper = function(entry)
     if entry.DrawerHighlight then
         pcall(function() entry.DrawerHighlight:Destroy() end)
         entry.DrawerHighlight = nil
