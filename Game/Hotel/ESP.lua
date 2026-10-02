@@ -386,11 +386,13 @@ local function createVisual(kind, object, entry)
             parts = {object}
         elseif object:IsA("Model") then
             for _, part in ipairs(object:GetDescendants()) do
+                local lowerName = part.Name:lower()
                 if part:IsA("BasePart")
                     and part.Transparency < 1
-                    and not part.Name:lower():find("hitbox", 1, true)
-                    and not part.Name:lower():find("collision", 1, true)
-                    and not part.Name:lower():find("trigger", 1, true)
+                    and not lowerName:find("hitbox", 1, true)
+                    and not lowerName:find("collision", 1, true)
+                    and not lowerName:find("trigger", 1, true)
+                    and not lowerName:find("touch", 1, true)
                     and part.Name ~= "HumanoidRootPart"
                 then
                     table.insert(parts, part)
@@ -525,8 +527,11 @@ end
 local function scanRoom(room, seen)
     if not room or not room.Parent or not tonumber(room.Name) then return end
 
-    local doorContainer = room:FindFirstChild("Door")
-    local door = doorContainer and (doorContainer:FindFirstChild("Door") or doorContainer)
+    -- Use the complete room Door container, not only the inner moving
+    -- Door model. The visible door is made from several separate parts
+    -- (upper/middle/lower/frame pieces), while the inner Door object only
+    -- contains the main panel.
+    local door = room:FindFirstChild("Door")
 
     if Enabled.Doors and door and roomVisible("Doors", room) then
         seen.Doors[door] = true
