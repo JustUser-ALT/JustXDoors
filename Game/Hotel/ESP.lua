@@ -23,6 +23,8 @@ local ScanClock = 0
 local LabelClock = 0
 
 local MAX_DISTANCE = 300
+local ITEM_VISUAL_DISTANCE = 90
+local ENTITY_VISUAL_DISTANCE = 140
 
 local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
@@ -359,64 +361,94 @@ local function updateLabel(kind, object, entry)
     label.Enabled = true
 end
 
-local function makeHighlight(kind, adornee, entry)
+local function makeHighlight(kind, adornee, entry, fillTransparency)
     if not adornee then return false end
 
-    -- Use SelectionBox for the main ESP layer.
-    -- Highlight is capped at 255 visible instances by Roblox and excess
-    -- instances are silently ignored. SelectionBox does not use that cap.
-    local box = Instance.new("SelectionBox")
-    box.Name = "JustXDoorsESP"
-    box.Adornee = adornee
-    box.LineThickness = 0.04
-    box.Color3 = Colors[kind] or Color3.new(1,1,1)
-    box.SurfaceTransparency = 1
-    box.Parent = VisualContainer
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsESP"
+    highlight.Adornee = adornee
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.FillTransparency = fillTransparency or 1
+    highlight.OutlineTransparency = 0
+    highlight.Parent = adornee
 
-    entry.Box = box
+    entry.Highlight = highlight
     return true
 end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
-    if entry.Highlight and entry.Highlight.Parent then
-        updateLabel(kind, object, entry)
-        return true
+    local root = getRoot()
+    local part = ENTITY_KINDS[kind] and getEntityPart(kind, object) or getPart(object)
+
+    -- Keep labels available farther away, but only render 3D ESP near the player.
+    -- This is the main FPS optimization: SelectionBox is kept for doors only;
+    -- items/entities use the lighter Highlight path and are distance-culled.
+    local visualDistance = ENTITY_KINDS[kind] and ENTITY_VISUAL_DISTANCE or ITEM_VISUAL_DISTANCE
+    local near = true
+
+    if root and part then
+        near = (root.Position - part.Position).Magnitude <= visualDistance
     end
 
-    if entry.Highlights then
-        local valid = false
-        for _, h in ipairs(entry.Highlights) do
-            if h and h.Parent then valid = true break end
-        end
-        if valid then
+    if kind == "Doors" then
+        if entry.Box and entry.Box.Parent then
             updateLabel(kind, object, entry)
             return true
         end
-    end
 
-    local color = Colors[kind] or Color3.new(1,1,1)
-
-    if kind == "Doors" then
-        -- Do not use transparent helper Parts here. Roblox Highlight can
-        -- behave inconsistently on generated transparent geometry.
-        -- The reliable target is the real Door.Door Part, but we hide its
-        -- rectangular fill and use a SelectionBox for the outline.
         local source = object:IsA("Model") and object:FindFirstChild("Door")
         if not source or not source:IsA("BasePart") then
             return false
         end
 
-        local box = Instance.new("SelectionBox")
-        box.Name = "JustXDoorsDoorESP"
-        box.Adornee = source
-        box.LineThickness = 0.04
-        box.Color3 = color
-        box.SurfaceTransparency = 1
-        box.Parent = source
+        -- Doors keep SelectionBox because this is the version that gives the
+        -- correct clean outline around the real Door.Door geometry.
+        if near then
+            local box = Instance.new("SelectionBox")
+            box.Name = "JustXDoorsDoorESP"
+            box.Adornee = source
+            box.LineThickness = 0.04
+            box.Color3 = Colors[kind] or Color3.new(1,1,1)
+            box.SurfaceTransparency = 1
+            box.Parent = source
+            entry.Box = box
+        end
 
-        entry.Box = box
+        updateLabel(kind, object, entry)
+        return true
+    end
+
+    -- If an object moved outside the render radius, remove only its 3D visual.
+    -- The Billboard label is intentionally kept.
+    if not near then
+        if entry.Highlight then
+            pcall(function() entry.Highlight:Destroy() end)
+            entry.Highlight = nil
+        end
+        if entry.Box then
+            pcall(function() entry.Box:Destroy() end)
+            entry.Box = nil
+        end
+        if entry.Highlights then
+            for _, h in ipairs(entry.Highlights) do
+                pcall(function() h:Destroy() end)
+            end
+            entry.Highlights = nil
+        end
+        updateLabel(kind, object, entry)
+        return true
+    end
+
+    if entry.Highlight and entry.Highlight.Parent then
+        updateLabel(kind, object, entry)
+        return true
+    end
+
+    if entry.Box and entry.Box.Parent then
         updateLabel(kind, object, entry)
         return true
     end
@@ -425,16 +457,20 @@ local function createVisual(kind, object, entry)
         local target = getEntityPart(kind, object)
         if not target then return false end
 
-        -- Prefer the actual entity/model. No transparent Humanoid proxy is
-        -- created, avoiding the large FPS cost seen with the old workaround.
+        -- Use a real Highlight on the entity/model. No transparent Humanoid
+        -- proxy is created, which avoids the previous entity FPS problem.
         local adornee = object:IsA("Model") and object or target
-        makeHighlight(kind, adornee, entry)
+        makeHighlight(kind, adornee, entry, 1)
         updateLabel(kind, object, entry)
         return true
     end
 
-    -- One Highlight per complete item/interactable, including Drops.
-    makeHighlight(kind, object:IsA("Model") and object or getPart(object), entry)
+    -- Items/interactables use outline-only Highlight. This is substantially
+    -- cheaper visually than creating SelectionBoxes for every object.
+    local adornee = object:IsA("Model") and object or getPart(object)
+    if not adornee then return false end
+
+    makeHighlight(kind, adornee, entry, 1)
     updateLabel(kind, object, entry)
     return true
 end
@@ -996,7 +1032,7 @@ local function setup()
 
         -- Reconciliation is deliberately slow and centralized. Object-added
         -- events only queue a scan; they never create hundreds of Highlights.
-        if ScanQueued and ScanClock >= 0.10 then
+        if ScanQueued and ScanClock >= 0.15 then
             ScanClock = 0
             scanAll()
         elseif ScanClock >= 0.50 then
