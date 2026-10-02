@@ -364,6 +364,7 @@ local function prepareTransparentEntity(object, entry)
     if not primary then return end
 
     entry.OldPrimaryPart = object.PrimaryPart
+    entry.HadPrimaryPart = object.PrimaryPart ~= nil
     if not object.PrimaryPart then
         pcall(function()
             object.PrimaryPart = primary
@@ -407,7 +408,7 @@ local function updateLabel(kind, object, entry)
         label.Size = UDim2.fromOffset(190, 26)
         label.StudsOffset = Vector3.new(0, 2.5, 0)
         label.Adornee = part
-        label.Parent = VisualContainer
+        label.Parent = part
         entry.Label = label
 
         local text = Instance.new("TextLabel")
@@ -473,12 +474,14 @@ local function destroyVisual(entry)
         end)
     end
 
-    if entry.OldPrimaryPart ~= nil and entry.PatchedHumanoid
-        and entry.PatchedHumanoid.Parent
-    then
+    if entry.PatchedHumanoid and entry.PatchedHumanoid.Parent then
         pcall(function()
             local model = entry.PatchedHumanoid.Parent
-            model.PrimaryPart = entry.OldPrimaryPart
+            if entry.HadPrimaryPart then
+                model.PrimaryPart = entry.OldPrimaryPart
+            else
+                model.PrimaryPart = nil
+            end
         end)
     end
 
@@ -490,79 +493,110 @@ local function destroyVisual(entry)
     entry.PatchedTransparency = nil
     entry.PatchedHumanoid = nil
     entry.OldPrimaryPart = nil
+    entry.HadPrimaryPart = nil
+    entry.TargetCount = nil
+end
+
+local function destroyHighlights(entry)
+    if entry.Highlights then
+        for _, highlight in ipairs(entry.Highlights) do
+            pcall(function()
+                if highlight then highlight:Destroy() end
+            end)
+        end
+    end
+    entry.Highlights = nil
 end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
-    if entry.Highlights then
+    if ENTITY_KINDS[kind] then
+        prepareTransparentEntity(object, entry)
+
         local alive = false
+        if entry.Highlights then
+            for _, highlight in ipairs(entry.Highlights) do
+                if highlight and highlight.Parent then
+                    alive = true
+                    break
+                end
+            end
+        end
+
+        if alive then
+            updateLabel(kind, object, entry)
+            return true
+        end
+
+        destroyHighlights(entry)
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsEntityESP"
+        highlight.Adornee = object
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = Colors[kind] or Color3.fromRGB(255, 60, 60)
+        highlight.OutlineColor = Colors[kind] or Color3.fromRGB(255, 60, 60)
+        highlight.FillTransparency = 0.55
+        highlight.OutlineTransparency = 0
+        highlight.Parent = object
+
+        entry.Highlights = {highlight}
+        entry.TargetCount = 1
+
+        updateLabel(kind, object, entry)
+        return true
+    end
+
+    local parts = collectVisualParts(object, kind)
+
+    if #parts == 0 and object:IsA("Model") then
+        local target = getTargetPart(kind, object)
+        if target then
+            parts = {target}
+        end
+    end
+
+    local alive = false
+    if entry.Highlights and entry.TargetCount == #parts then
         for _, highlight in ipairs(entry.Highlights) do
             if highlight and highlight.Parent then
                 alive = true
                 break
             end
         end
-        if alive then
-            updateLabel(kind, object, entry)
-            return true
-        end
     end
 
-    if ENTITY_KINDS[kind] then
-        prepareTransparentEntity(object, entry)
+    if alive then
+        updateLabel(kind, object, entry)
+        return true
     end
 
+    destroyHighlights(entry)
     entry.Highlights = {}
+    entry.TargetCount = #parts
 
-    if ENTITY_KINDS[kind] and object:IsA("Model") then
-        -- Match the established DOORS ESP technique: transparent entities
-        -- receive a Humanoid + 0.99-transparency PrimaryPart, then one
-        -- Highlight is attached to the whole entity model.
+    for _, part in ipairs(parts) do
         local highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsEntityESP"
-        highlight.Adornee = object
+        highlight.Name = "JustXDoorsESP"
+        highlight.Adornee = part
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillColor = Colors[kind] or Color3.new(1, 0, 0)
-        highlight.OutlineColor = Colors[kind] or Color3.new(1, 0, 0)
-        highlight.FillTransparency = 0.55
-        highlight.OutlineTransparency = 0
-        highlight.Parent = object
+        highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+        highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
 
+        if INTERACTABLES[kind] then
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = 0
+        elseif ITEM_KINDS[kind] then
+            highlight.FillTransparency = 0.78
+            highlight.OutlineTransparency = 0
+        else
+            highlight.FillTransparency = 0.55
+            highlight.OutlineTransparency = 0
+        end
+
+        highlight.Parent = part
         table.insert(entry.Highlights, highlight)
-    else
-        local parts = collectVisualParts(object, kind)
-
-        -- Fallback for unusual models where every part is transparent.
-        if #parts == 0 and object:IsA("Model") then
-            local target = getTargetPart(kind, object)
-            if target then
-                parts = {target}
-            end
-        end
-
-        for _, part in ipairs(parts) do
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "JustXDoorsESP"
-            highlight.Adornee = part
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-            highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-
-            if INTERACTABLES[kind] then
-                highlight.FillTransparency = 1
-                highlight.OutlineTransparency = 0
-            elseif ITEM_KINDS[kind] then
-                highlight.FillTransparency = 0.78
-                highlight.OutlineTransparency = 0
-            else
-                highlight.FillTransparency = 0.55
-                highlight.OutlineTransparency = 0
-            end
-
-            highlight.Parent = part
-            table.insert(entry.Highlights, highlight)
-        end
     end
 
     updateLabel(kind, object, entry)
