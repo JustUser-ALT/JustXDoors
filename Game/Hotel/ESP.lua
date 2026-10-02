@@ -291,6 +291,13 @@ local function destroyEntryVisual(entry)
         entry.Box = nil
     end
 
+    if entry.Boxes then
+        for _, box in ipairs(entry.Boxes) do
+            pcall(function() box:Destroy() end)
+        end
+        entry.Boxes = nil
+    end
+
     if entry.Label then
         pcall(function() entry.Label:Destroy() end)
         entry.Label = nil
@@ -352,20 +359,21 @@ local function updateLabel(kind, object, entry)
     label.Enabled = true
 end
 
-local function makeHighlight(kind, adornee, entry, fillTransparency)
+local function makeHighlight(kind, adornee, entry)
     if not adornee then return false end
 
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "JustXDoorsESP"
-    highlight.Adornee = adornee
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-    highlight.FillTransparency = fillTransparency
-    highlight.OutlineTransparency = 0
-    highlight.Parent = adornee
+    -- Use SelectionBox for the main ESP layer.
+    -- Highlight is capped at 255 visible instances by Roblox and excess
+    -- instances are silently ignored. SelectionBox does not use that cap.
+    local box = Instance.new("SelectionBox")
+    box.Name = "JustXDoorsESP"
+    box.Adornee = adornee
+    box.LineThickness = 0.04
+    box.Color3 = Colors[kind] or Color3.new(1,1,1)
+    box.SurfaceTransparency = 1
+    box.Parent = VisualContainer
 
-    entry.Highlight = highlight
+    entry.Box = box
     return true
 end
 
@@ -420,13 +428,13 @@ local function createVisual(kind, object, entry)
         -- Prefer the actual entity/model. No transparent Humanoid proxy is
         -- created, avoiding the large FPS cost seen with the old workaround.
         local adornee = object:IsA("Model") and object or target
-        makeHighlight(kind, adornee, entry, 0.65)
+        makeHighlight(kind, adornee, entry)
         updateLabel(kind, object, entry)
         return true
     end
 
     -- One Highlight per complete item/interactable, including Drops.
-    makeHighlight(kind, object, entry, ITEM_KINDS[kind] and 0.55 or 1)
+    makeHighlight(kind, object:IsA("Model") and object or getPart(object), entry)
     updateLabel(kind, object, entry)
     return true
 end
