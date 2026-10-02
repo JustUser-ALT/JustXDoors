@@ -398,19 +398,67 @@ local function getItemParts(object, kind)
 
     if not object then return parts end
 
-    -- Keys are special. In a closed Drawer the KeyObtain can keep only
-    -- its interaction Hitbox visible to the client while the actual key
-    -- geometry is hidden/reparented by the Drawer system.
-    --
-    -- Never use the Hitbox itself as helper geometry: it is an interaction
-    -- volume and can render as the strange circular ESP seen on mobile.
+    -- Keys need a stricter geometry selection than normal Items.
+    -- KeyObtain contains an interaction Hitbox, and using its parts first
+    -- can produce a flat/circular outline whose orientation follows the
+    -- interaction volume rather than the visible key.
     if kind == "Key" then
         local hitbox = object:FindFirstChild("Hitbox", true)
 
-        if hitbox then
-            -- First use real geometry belonging to the Hitbox container.
+        local function isInsideInteractionVolume(part)
+            local parent = part.Parent
+            while parent and parent ~= object do
+                if parent == hitbox
+                    or parent.Name == "PromptHitbox"
+                    or parent.Name == "ModulePrompt"
+                then
+                    return true
+                end
+                parent = parent.Parent
+            end
+            return false
+        end
+
+        -- Prefer actual key geometry outside the interaction container.
+        -- MeshParts are checked first because the normal KeyObtain model
+        -- exposes the visible key through mesh geometry.
+        local candidates = {}
+        for _, child in ipairs(object:GetDescendants()) do
+            if child:IsA("BasePart")
+                and child.Size.Magnitude > 0.05
+                and child.Name ~= "PromptHitbox"
+                and child.Name ~= "ModulePrompt"
+                and not isInsideInteractionVolume(child)
+            then
+                candidates[#candidates + 1] = child
+            end
+        end
+
+        for _, child in ipairs(candidates) do
+            if child:IsA("MeshPart")
+                or child.Name == "Key"
+                or child.Name == "Handle"
+                or child.Name == "Mesh"
+            then
+                parts[#parts + 1] = child
+            end
+        end
+
+        -- If the key uses ordinary Parts instead of MeshParts, keep those
+        -- real visible parts as a second choice.
+        if #parts == 0 then
+            for _, child in ipairs(candidates) do
+                if child.Transparency < 1 then
+                    parts[#parts + 1] = child
+                end
+            end
+        end
+
+        -- Only as a last resort use geometry inside Hitbox. Never use the
+        -- Hitbox itself or PromptHitbox as helper geometry.
+        if #parts == 0 and hitbox then
             for _, child in ipairs(hitbox:GetDescendants()) do
-                if child:IsA("BasePart")
+                if child:IsA("MeshPart")
                     and child.Name ~= "Hitbox"
                     and child.Name ~= "PromptHitbox"
                     and child.Size.Magnitude > 0.05
@@ -420,24 +468,6 @@ local function getItemParts(object, kind)
             end
         end
 
-        -- If the Drawer has moved/hidden the key geometry elsewhere under
-        -- KeyObtain, search the complete object while excluding interaction
-        -- volumes and the prompt itself.
-        if #parts == 0 then
-            for _, child in ipairs(object:GetDescendants()) do
-                if child:IsA("BasePart")
-                    and child ~= hitbox
-                    and child.Name ~= "PromptHitbox"
-                    and child.Name ~= "ModulePrompt"
-                    and child.Size.Magnitude > 0.05
-                then
-                    parts[#parts + 1] = child
-                end
-            end
-        end
-
-        -- Do not fall back to Hitbox. If there is no actual geometry yet,
-        -- the next scan will rebuild it instead of drawing the bad circle.
         return parts
     end
 
