@@ -387,8 +387,6 @@ local function createVisual(kind, object, entry)
         local anchor = innerDoor and getPart(innerDoor) or getPart(object)
 
         local anchorPosition = anchor and anchor.Position or nil
-        local anchorMagnitude = anchor and anchor.Size.Magnitude or 6
-        local maxAllowedMagnitude = math.max(10, anchorMagnitude * 2.5)
 
         if object:IsA("BasePart") then
             parts = {object}
@@ -404,18 +402,26 @@ local function createVisual(kind, object, entry)
                     and not lowerName:find("touch", 1, true)
                     and part.Name ~= "HumanoidRootPart"
                 then
-                    local insideInnerDoor = innerDoor and part:IsDescendantOf(innerDoor)
-                    local reasonableSize = part.Size.Magnitude <= maxAllowedMagnitude
+                    local size = part.Size
+                    local largestAxis = math.max(size.X, size.Y, size.Z)
+                    local smallestAxis = math.min(size.X, size.Y, size.Z)
+
+                    -- A room-sized helper/collision part is what caused the
+                    -- giant rectangle in the previous version. Never use
+                    -- large slabs as ESP geometry, even if they are inside
+                    -- the Door model.
+                    local notRoomSized = largestAxis <= 14
+                        and size.X * size.Y * size.Z <= 700
 
                     local nearDoor = false
                     if anchorPosition then
-                        nearDoor = (part.Position - anchorPosition).Magnitude <= 8
+                        nearDoor = (part.Position - anchorPosition).Magnitude <= 14
                     end
 
-                    -- Always keep the actual Door model geometry. For the
-                    -- outer assembly, only keep reasonably-sized parts close
-                    -- to the real door so wall/room-sized parts are ignored.
-                    if insideInnerDoor or (reasonableSize and nearDoor) then
+                    -- Keep the actual visible door pieces and nearby frame
+                    -- pieces. Thin frame pieces are allowed even when one
+                    -- axis is very small; oversized room geometry is not.
+                    if notRoomSized and nearDoor then
                         table.insert(parts, part)
                     end
                 end
