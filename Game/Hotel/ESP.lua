@@ -305,6 +305,12 @@ local function destroyEntryVisual(entry)
     if entry.DrawerHelperModel then
         destroyDrawerHelper(entry)
     end
+    if entry.DrawerBoxes then
+        for _, box in pairs(entry.DrawerBoxes) do
+            pcall(function() box:Destroy() end)
+        end
+        entry.DrawerBoxes = nil
+    end
 
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
@@ -795,33 +801,46 @@ local function createVisual(kind, object, entry)
     end
 
     if kind == "Drawers" then
-        -- Drawers use isolated helper geometry. The live Dresser can contain
-        -- KeyObtain, SallyToyObtain, or other item models, and adorning the
-        -- whole Dresser makes the Drawer Highlight overlap the Item ESP.
+        -- Drawer ESP deliberately uses SelectionBoxes instead of Highlight.
+        -- A Highlight on a Dresser (or on helper geometry representing it)
+        -- can visually occlude Items stored inside the furniture. SelectionBox
+        -- is outline-only, so Key/SallyToy/etc. keep their independent Item ESP.
+        if entry.DrawerHighlight then
+            pcall(function() entry.DrawerHighlight:Destroy() end)
+            entry.DrawerHighlight = nil
+        end
+        if entry.DrawerHelperModel then
+            pcall(function() entry.DrawerHelperModel:Destroy() end)
+            entry.DrawerHelperModel = nil
+        end
+        entry.DrawerSources = nil
+        entry.DrawerHumanoid = nil
+
         if not near then
-            destroyDrawerHelper(entry)
+            if entry.Boxes then
+                for _, box in ipairs(entry.Boxes) do
+                    pcall(function() box:Destroy() end)
+                end
+                entry.Boxes = nil
+            end
             updateLabel(kind, object, entry)
             return true
         end
 
         local sources = getDrawerParts(object)
         local sourceCount = 0
-        for _ in pairs(entry.DrawerSources or {}) do
+        for _ in pairs(entry.DrawerBoxes or {}) do
             sourceCount += 1
         end
 
-        local valid = entry.DrawerHelperModel
-            and entry.DrawerHelperModel.Parent == VisualContainer
-            and entry.DrawerHighlight
-            and entry.DrawerHighlight.Parent == HighlightContainer
-            and entry.DrawerHighlight.Adornee == entry.DrawerHelperModel
-            and entry.DrawerHighlight.Enabled
-            and entry.DrawerSources ~= nil
+        local valid = entry.Boxes
+            and entry.Boxes.Parent == VisualContainer
+            and entry.DrawerBoxes ~= nil
             and sourceCount == #sources
 
         if valid then
             for _, source in ipairs(sources) do
-                if not source.Parent or not entry.DrawerSources[source] then
+                if not source.Parent or not entry.DrawerBoxes[source] then
                     valid = false
                     break
                 end
@@ -829,19 +848,37 @@ local function createVisual(kind, object, entry)
         end
 
         if not valid then
-            makeDrawerHighlight(kind, object, entry)
-        else
-            for _, source in ipairs(sources) do
-                local helper = entry.DrawerSources[source]
-                if helper and helper.Parent then
-                    helper.Size = source.Size
-                    helper.CFrame = source.CFrame
+            if entry.Boxes then
+                for _, box in ipairs(entry.Boxes) do
+                    pcall(function() box:Destroy() end)
                 end
             end
 
-            entry.DrawerHighlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-            entry.DrawerHighlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-            entry.DrawerHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            entry.Boxes = Instance.new("Folder")
+            entry.Boxes.Name = "JustXDoorsDrawerBoxes"
+            entry.Boxes.Parent = VisualContainer
+            entry.DrawerBoxes = {}
+
+            for index, source in ipairs(sources) do
+                local box = Instance.new("SelectionBox")
+                box.Name = "JustXDoorsDrawerESP_" .. tostring(index)
+                box.Adornee = source
+                box.LineThickness = 0.035
+                box.Color3 = Colors[kind] or Color3.new(1,1,1)
+                box.SurfaceColor3 = Colors[kind] or Color3.new(1,1,1)
+                box.SurfaceTransparency = 1
+                box.Parent = entry.Boxes
+                entry.DrawerBoxes[source] = box
+            end
+        else
+            for _, source in ipairs(sources) do
+                local box = entry.DrawerBoxes[source]
+                if box then
+                    box.Adornee = source
+                    box.Color3 = Colors[kind] or Color3.new(1,1,1)
+                    box.SurfaceTransparency = 1
+                end
+            end
         end
 
         updateLabel(kind, object, entry)
