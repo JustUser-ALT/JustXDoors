@@ -260,21 +260,6 @@ local function labelName(kind, object)
         return "Door • " .. getDoorNumber(room)
     end
 
-    -- Temporary Candle diagnostic: show where each Candle ESP instance
-    -- was discovered so we can identify the exact source of the duplicate.
-    if kind == "Candle" then
-        local source = "OTHER"
-
-        if Drops and object:IsDescendantOf(Drops) then
-            source = "DROPS"
-        elseif Rooms and object:IsDescendantOf(Rooms) then
-            local room = getRoom(object)
-            source = "ROOM:" .. (room and room.Name or "?")
-        end
-
-        return "Candle [" .. source .. "]"
-    end
-
     return LABEL_NAMES[kind] or kind
 end
 
@@ -853,49 +838,6 @@ local function addObject(kind, object, room)
         and not roomVisible(kind, room)
     then
         return
-    end
-
-    -- Candle can temporarily exist both in a room and in workspace.Drops
-    -- during pickup/reparenting. Treat two Candle instances at the same
-    -- physical location as one ESP, but only when they come from those
-    -- different containers. This avoids hiding two genuinely separate
-    -- Candles that happen to be near each other.
-    if kind == "Candle" and Drops and Rooms then
-        local part = getPart(object)
-        if part then
-            local inDrops = object:IsDescendantOf(Drops)
-            local inRooms = object:IsDescendantOf(Rooms)
-
-            if inDrops or inRooms then
-                local duplicate
-                for other in pairs(Objects.Candle) do
-                    if other ~= object and other.Parent then
-                        local otherInDrops = other:IsDescendantOf(Drops)
-                        local otherInRooms = other:IsDescendantOf(Rooms)
-
-                        if (inDrops and otherInRooms) or (inRooms and otherInDrops) then
-                            local otherPart = getPart(other)
-                            if otherPart
-                                and (part.Position - otherPart.Position).Magnitude <= 0.5
-                            then
-                                duplicate = other
-                                break
-                            end
-                        end
-                    end
-                end
-
-                if duplicate then
-                    -- Prefer the Drops representation because it is the
-                    -- canonical post-pickup representation of the item.
-                    if inDrops then
-                        clearEntry("Candle", duplicate)
-                    else
-                        return
-                    end
-                end
-            end
-        end
     end
 
     if ITEM_KINDS[kind] and isInventoryObject(object) then
