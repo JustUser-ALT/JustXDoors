@@ -500,8 +500,20 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        createBox(entry, color)
-        updateBoxEntry(entry, object, false)
+        -- Doors use a single outline-only Highlight so the ESP remains
+        -- tightly attached to the visible door geometry while also being
+        -- visible through walls.
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsDoorESP"
+        highlight.Adornee = object
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+        highlight.Parent = VisualContainer
+        entry.Highlight = highlight
+
         updateLabel(kind, object, entry)
         return true
     end
@@ -1230,14 +1242,8 @@ local function setup()
             end
         end
 
-        -- Door boxes use a proxy because their visible geometry can
-        -- contain several parts. Entity ESP is attached directly to the
-        -- moving entity part and therefore needs no per-frame bounds pass.
-        for object, entry in pairs(Objects.Doors) do
-            if object.Parent and entry.Box then
-                updateBoxEntry(entry, object, false)
-            end
-        end
+        -- Door ESP uses Highlight with AlwaysOnTop, so it does not
+        -- require a per-frame proxy/bounds update.
 
         -- Distance is refreshed every frame, independently of discovery.
         -- This prevents 55 -> 51 -> 44 style jumps caused by scan intervals.
