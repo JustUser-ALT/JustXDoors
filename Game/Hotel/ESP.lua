@@ -1027,7 +1027,7 @@ local function scanRoom(room, seen)
             addObject("BreakerPole", object, room)
         end
 
-        if Enabled.SallyToy and name == "SallyToyObtain" and room.Name == "28" then
+        if Enabled.SallyToy and name == "SallyToyObtain" then
             seen.SallyToy[object] = true
             addObject("SallyToy", object, room)
         end
