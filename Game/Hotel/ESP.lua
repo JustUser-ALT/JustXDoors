@@ -774,16 +774,24 @@ local function registerRoom(room, seen)
             kind == "Lighter" and object:FindFirstAncestor("Bookcase") ~= nil
         local itemRoot = kind and findItemRoot(object, room) or object
 
-        if kind and Enabled[kind] and itemRoot == object
+        if kind and Enabled[kind]
             and not insideBatteryPack
             and not decorativeBookcaseLighter
-            and (object:GetAttribute("Pickup") ~= nil
-                or object:GetAttribute("PropType") ~= nil
-                or object:FindFirstChild("ModulePrompt", true))
             and roomVisible(kind, room)
         then
-            seen[kind][object] = true
-            addObject(kind, object, room)
+            local candidate = itemRoot or object
+            local validItem =
+                candidate:GetAttribute("Pickup") ~= nil
+                or candidate:GetAttribute("PropType") ~= nil
+                or candidate:FindFirstChild("ModulePrompt", true) ~= nil
+                or object:GetAttribute("Pickup") ~= nil
+                or object:GetAttribute("PropType") ~= nil
+                or object:FindFirstChild("ModulePrompt", true) ~= nil
+
+            if validItem then
+                seen[kind][candidate] = true
+                addObject(kind, candidate, room)
+            end
         end
 
         if Enabled.VentGate and name == "VentGrate" and roomVisible("VentGate", room) then
