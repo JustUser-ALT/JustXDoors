@@ -522,18 +522,41 @@ local function createVisual(kind, object, entry)
     local color = Colors[kind] or Color3.new(1,1,1)
 
     if kind == "Doors" then
-        createBox(entry, color, 0.02)
+        createBox(entry, color)
         updateBoxEntry(entry, object, false)
         updateLabel(kind, object, entry)
         return true
     end
 
     if ENTITY_KINDS[kind] then
-        -- Do not use the transparent-Model + Humanoid workaround here.
-        -- Roblox documents that workaround as a source of measurable
-        -- performance drops. Use a lightweight always-on-top box instead.
-        createBox(entry, color, 0.02)
-        updateBoxEntry(entry, object, true)
+        local target = getEntityPart(kind, object)
+
+        if target and target.Transparency <= 0.01 then
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoorsEntityESP"
+            highlight.Adornee = target
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.FillColor = color
+            highlight.OutlineColor = color
+            highlight.FillTransparency = 0.65
+            highlight.OutlineTransparency = 0
+            highlight.Parent = VisualContainer
+            entry.Highlight = highlight
+        elseif target then
+            local wire = Instance.new("WireframeHandleAdornment")
+            wire.Name = "JustXDoorsEntityESP"
+            wire.Adornee = target
+            wire.AlwaysOnTop = true
+            wire.Thickness = 2
+            wire.Color3 = color
+            wire.Transparency = 0
+            addWireCubeLines(wire, target.Size)
+            wire.Parent = VisualContainer
+            entry.Box = wire
+        else
+            return false
+        end
+
         updateLabel(kind, object, entry)
         return true
     end
