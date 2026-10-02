@@ -653,12 +653,10 @@ local function clearStale(kind, seen, domain)
                 shouldClear = false
             end
         elseif domain == "Rooms" then
-            -- Room entries and dropped entries can share the same kind
-            -- (for example Key/Crucifix). Never let one scanner delete the other.
             local room = entry and entry.Room
             if room ~= nil then
-                shouldClear = not Rooms
-                    or not object:IsDescendantOf(Rooms)
+                shouldClear = not object.Parent
+                    or not object:IsDescendantOf(workspace)
                     or not room.Parent
                     or not roomVisible(kind, room)
             else
@@ -715,11 +713,11 @@ local function registerRoom(room, seen)
     }
 
     for _, object in ipairs(room:GetDescendants()) do
-        if not object:IsA("Model") and not object:IsA("BasePart") then
+        local name = object.Name
+
+        if not object:IsA("Model") and not object:IsA("BasePart") and name ~= "GoldPile" then
             continue
         end
-
-        local name = object.Name
 
         if Enabled.Drawers and roomVisible("Drawers", room)
             and (name == "Dresser" or name == "Table" or name == "Rolltop_Desk")
