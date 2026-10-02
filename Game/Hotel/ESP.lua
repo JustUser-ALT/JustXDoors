@@ -226,6 +226,61 @@ local function roomVisible(kind, room)
     local number = tonumber(room.Name)
     if not current or not number then return true end
 
+    if kind == "Drawers" then
+        -- Drawers are intentionally represented by helper geometry instead
+        -- of adorning the live Dresser. A Dresser can contain KeyObtain,
+        -- SallyToyObtain, or another item; adorning the whole Dresser makes
+        -- the Drawer Highlight overlap and visually cover the Item ESP.
+        if not near then
+            destroyDrawerHelper(entry)
+            updateLabel(kind, object, entry)
+            return true
+        end
+
+        local sources = getDrawerParts(object)
+        local sourceCount = 0
+        for _ in pairs(entry.DrawerSources or {}) do
+            sourceCount += 1
+        end
+
+        local valid = entry.DrawerHelperModel
+            and entry.DrawerHelperModel.Parent == VisualContainer
+            and entry.DrawerHighlight
+            and entry.DrawerHighlight.Parent == HighlightContainer
+            and entry.DrawerHighlight.Adornee == entry.DrawerHelperModel
+            and entry.DrawerHighlight.Enabled
+            and entry.DrawerSources ~= nil
+            and sourceCount == #sources
+
+        if valid then
+            for _, source in ipairs(sources) do
+                if not source.Parent or not entry.DrawerSources[source] then
+                    valid = false
+                    break
+                end
+            end
+        end
+
+        if not valid then
+            makeDrawerHighlight(kind, object, entry)
+        else
+            for _, source in ipairs(sources) do
+                local helper = entry.DrawerSources[source]
+                if helper and helper.Parent then
+                    helper.Size = source.Size
+                    helper.CFrame = source.CFrame
+                end
+            end
+
+            entry.DrawerHighlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+            entry.DrawerHighlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+            entry.DrawerHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        end
+
+        updateLabel(kind, object, entry)
+        return true
+    end
+
     if kind == "Doors" then
         return number == current or number == current + 1
     end
@@ -299,6 +354,10 @@ local function destroyEntryVisual(entry)
     end
     entry.ItemSources = nil
     entry.ItemHumanoid = nil
+
+    if entry.DrawerHelperModel then
+        destroyDrawerHelper(entry)
+    end
 
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
@@ -596,6 +655,176 @@ local function makeItemHighlight(kind, object, entry)
     entry.ItemHumanoid = humanoid
     entry.ItemSources = sourceMap
     entry.Highlight = highlight
+
+    return true
+end
+
+local DRAWER_ITEM_NAMES = {
+    KeyObtain = true,
+    SallyToyObtain = true,
+    ElectricalKeyObtain = true,
+    Vitamins = true,
+    Lighter = true,
+    Candle = true,
+    AlarmClock = true,
+    Lockpick = true,
+    SkeletonKey = true,
+    Shears = true,
+    Battery = true,
+    Bandage = true,
+    Smoothie = true,
+    Flashlight = true,
+    TipJar = true,
+    RiftCandle = true,
+    RiftSmoothie = true,
+    RiftJar = true,
+    Donut = true,
+    Crucifix = true,
+    GoldPile = true,
+}
+
+local function isDrawerItemPart(drawer, part)
+    local current = part.Parent
+
+    while current and current ~= drawer do
+        if DRAWER_ITEM_NAMES[current.Name] then
+            return true
+        end
+
+        -- Also reject a nested object that is itself one of our known item
+        -- roots. This covers renamed/variant item containers whose visible
+        -- geometry is not directly under KeyObtain/SallyToyObtain.
+        if current:IsA("Model") then
+            for kind in pairs(ITEM_KINDS) do
+                if current:GetAttribute("JustXDoorsItemKind") == kind then
+                    return true
+                end
+            end
+        end
+
+        current = current.Parent
+    end
+
+    return false
+end
+
+local function getDrawerParts(drawer)
+    local parts = {}
+
+    if not drawer then return parts end
+
+    for _, child in ipairs(drawer:GetDescendants()) do
+        if child:IsA("BasePart")
+            and child.Size.Magnitude > 0.05
+            and child.Transparency < 1
+            and not isDrawerItemPart(drawer, child)
+        then
+            parts[#parts + 1] = child
+        end
+    end
+
+    return parts
+end
+
+local function destroyDrawerHelper(entry)
+    if entry.DrawerHighlight then
+        pcall(function() entry.DrawerHighlight:Destroy() end)
+        entry.DrawerHighlight = nil
+    end
+
+    if entry.DrawerHelperModel then
+        pcall(function() entry.DrawerHelperModel:Destroy() end)
+        entry.DrawerHelperModel = nil
+    end
+
+    entry.DrawerSources = nil
+    entry.DrawerHumanoid = nil
+end
+
+local function makeDrawerHighlight(kind, object, entry)
+    if not object or not VisualContainer or not HighlightContainer then
+        return false
+    end
+
+    local sources = getDrawerParts(object)
+    if #sources == 0 then return false end
+
+    destroyDrawerHelper(entry)
+
+    local helperModel = Instance.new("Model")
+    helperModel.Name = "JustXDoorsDrawerHighlightModel"
+    helperModel.Parent = VisualContainer
+
+    local humanoid = Instance.new("Humanoid")
+    humanoid.Name = "JustXDoorsDrawerHighlightHumanoid"
+    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+    humanoid.NameDisplayDistance = 0
+    humanoid.Parent = helperModel
+
+    local sourceMap = {}
+
+    for index, source in ipairs(sources) do
+        local helper
+
+        local ok, clone = pcall(function()
+            return source:Clone()
+        end)
+
+        if ok and clone and clone:IsA("BasePart") then
+            helper = clone
+
+            for _, child in ipairs(helper:GetDescendants()) do
+                if not (
+                    child:IsA("SpecialMesh")
+                    or child:IsA("BlockMesh")
+                    or child:IsA("CylinderMesh")
+                ) then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        else
+            helper = Instance.new("Part")
+            helper.Shape = Enum.PartType.Block
+            helper.Size = source.Size
+        end
+
+        helper.Name = "JustXDoorsDrawerHighlightPart_" .. tostring(index)
+        helper.CFrame = source.CFrame
+        helper.Transparency = 0.999
+        helper.CanCollide = false
+        helper.CanTouch = false
+        helper.CanQuery = false
+        helper.CastShadow = false
+        helper.Anchored = false
+        helper.Massless = true
+        helper.Material = Enum.Material.Plastic
+        helper.Parent = helperModel
+
+        local weld = Instance.new("WeldConstraint")
+        weld.Name = "JustXDoorsDrawerHighlightWeld"
+        weld.Part0 = helper
+        weld.Part1 = source
+        weld.Parent = helper
+
+        sourceMap[source] = helper
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsDrawerESP"
+    highlight.Adornee = helperModel
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = true
+    highlight.Parent = HighlightContainer
+
+    entry.DrawerHelperModel = helperModel
+    entry.DrawerHumanoid = humanoid
+    entry.DrawerSources = sourceMap
+    entry.DrawerHighlight = highlight
 
     return true
 end
