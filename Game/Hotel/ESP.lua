@@ -146,8 +146,7 @@ local function isInventoryObject(object)
     -- ESP just because the player walked close to them.
     local character = LocalPlayer.Character
     if character and object:IsDescendantOf(character) then
-        local tool = object:FindFirstAncestorWhichIsA("Tool")
-        return tool ~= nil
+        return object:FindFirstAncestorWhichIsA("Tool") ~= nil
     end
 
     return false
@@ -264,7 +263,6 @@ end
 local function isIgnoredVisualPart(part)
     if not part or not part:IsA("BasePart") then return true end
     local name = part.Name:lower()
-
     return part.Transparency >= 1
         or name:find("hitbox", 1, true)
         or name:find("collision", 1, true)
@@ -272,115 +270,84 @@ local function isIgnoredVisualPart(part)
         or name == "humanoidrootpart"
 end
 
-local function collectVisualParts(object, kind)
+local function getVisualParts(object)
     if not object then return {} end
-
     if object:IsA("BasePart") then
-        if not isIgnoredVisualPart(object) then
-            return {object}
-        end
-        return {}
+        return isIgnoredVisualPart(object) and {} or {object}
     end
-
-    if not object:IsA("Model") then
-        return {}
-    end
+    if not object:IsA("Model") then return {} end
 
     local result = {}
-
-    -- A DOORS door is a compound model. Use every visible part of the
-    -- door assembly so upper/middle/lower mesh pieces all receive ESP.
-    if kind == "Doors" then
-        for _, part in ipairs(object:GetDescendants()) do
-            if part:IsA("BasePart") and not isIgnoredVisualPart(part) then
-                local name = part.Name:lower()
-                if not name:find("frame", 1, true)
-                    and not name:find("sign", 1, true)
-                then
-                    table.insert(result, part)
-                end
-            end
-        end
-
-        if #result > 0 then
-            return result
-        end
-    end
-
-    -- Items, drawers, wardrobes and chests can contain several visible
-    -- MeshParts. Highlight each visible part so the whole model is covered.
     for _, part in ipairs(object:GetDescendants()) do
         if part:IsA("BasePart") and not isIgnoredVisualPart(part) then
             table.insert(result, part)
         end
     end
-
     return result
 end
 
 local function getTargetPart(kind, object)
     if not object then return nil end
-
-    if object:IsA("BasePart") then
-        return object
-    end
-
-    if object:IsA("Model") and object.PrimaryPart then
-        return object.PrimaryPart
-    end
-
-    local parts = collectVisualParts(object, kind)
-    return parts[1]
-        or (object:IsA("Model") and object:FindFirstChildWhichIsA("BasePart", true))
+    if object:IsA("BasePart") then return object end
+    if object:IsA("Model") and object.PrimaryPart then return object.PrimaryPart end
+    return object:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function prepareTransparentEntity(object, entry)
-    if not object then return end
+local function calculateBounds(parts)
+    if #parts == 0 then return nil end
 
-    if object:IsA("BasePart") then
-        if object.Transparency >= 1 then
-            entry.PatchedPart = object
-            entry.PatchedTransparency = object.Transparency
-            object.Transparency = 0.99
+    local minX, minY, minZ = math.huge, math.huge, math.huge
+    local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
+
+    for _, part in ipairs(parts) do
+        local cf = part.CFrame
+        local half = part.Size * 0.5
+
+        for _, sx in ipairs({-1, 1}) do
+            for _, sy in ipairs({-1, 1}) do
+                for _, sz in ipairs({-1, 1}) do
+                    local p = cf:PointToWorldSpace(Vector3.new(
+                        half.X * sx, half.Y * sy, half.Z * sz
+                    ))
+                    minX = math.min(minX, p.X)
+                    minY = math.min(minY, p.Y)
+                    minZ = math.min(minZ, p.Z)
+                    maxX = math.max(maxX, p.X)
+                    maxY = math.max(maxY, p.Y)
+                    maxZ = math.max(maxZ, p.Z)
+                end
+            end
         end
-        return
     end
 
-    if not object:IsA("Model") then return end
+    local min = Vector3.new(minX, minY, minZ)
+    local max = Vector3.new(maxX, maxY, maxZ)
+    return (min + max) * 0.5, max - min
+end
 
-    local primary = object.PrimaryPart
-    if not primary then
-        primary = object:FindFirstChildWhichIsA("BasePart", true)
-        if not primary then return end
+local function updateBoxEntry(entry, object, entity)
+    if not entry.BoxProxy or not entry.BoxProxy.Parent then return end
 
-        entry.OldPrimaryPart = nil
-        entry.HadPrimaryPart = false
-
-        pcall(function()
-            object.PrimaryPart = primary
+    local center, size
+    if entity then
+        local ok, cf, s = pcall(function()
+            return object:GetBoundingBox()
         end)
+        if ok and cf and s then
+            center, size = cf.Position, s
+            entry.BoxProxy.CFrame = cf
+        end
     else
-        entry.OldPrimaryPart = primary
-        entry.HadPrimaryPart = true
+        center, size = calculateBounds(getVisualParts(object))
+        if center and size then
+            entry.BoxProxy.CFrame = CFrame.new(center)
+        end
     end
 
-    -- This mirrors the established DOORS ESP workaround used by
-    -- DoorsClutch / Doors-Script: a Humanoid plus a barely-visible
-    -- PrimaryPart allows Highlight to render transparent entities.
-    if not object:FindFirstChildOfClass("Humanoid") then
-        local humanoid = Instance.new("Humanoid")
-        humanoid.Name = "JustXDoorsESP_Humanoid"
-        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-        humanoid.RequiresNeck = false
-        humanoid.AutoRotate = false
-        humanoid.Parent = object
-        entry.PatchedHumanoid = humanoid
-    end
-
-    if primary.Transparency >= 1 then
-        entry.PatchedPart = primary
-        entry.PatchedTransparency = primary.Transparency
-        primary.Transparency = 0.99
+    if center and size then
+        entry.BoxProxy.Size = size
+        entry.Box.Size = size
+        entry.Box.CFrame = CFrame.new()
     end
 end
 
@@ -403,7 +370,7 @@ local function updateLabel(kind, object, entry)
         label.Size = UDim2.fromOffset(190, 26)
         label.StudsOffset = Vector3.new(0, 2.5, 0)
         label.Adornee = part
-        label.Parent = part
+        label.Parent = VisualContainer
         entry.Label = label
 
         local text = Instance.new("TextLabel")
@@ -424,178 +391,116 @@ local function updateLabel(kind, object, entry)
     local text = label:FindFirstChild("Text")
     if not text then return end
 
-    local parts = {}
-    if Display.Name then
-        parts[#parts + 1] = labelName(kind, object)
-    end
+    local values = {}
+    if Display.Name then values[#values + 1] = labelName(kind, object) end
 
     if Display.Distance then
         local root = getRoot()
         if root then
-            local distance = (root.Position - part.Position).Magnitude
-            parts[#parts + 1] = tostring(math.floor(distance + 0.5))
+            values[#values + 1] = tostring(math.floor(
+                (root.Position - part.Position).Magnitude + 0.5
+            ))
         end
     end
 
-    text.Text = table.concat(parts, " • ")
+    text.Text = table.concat(values, " • ")
+end
+
+local function createBox(entry, color, transparency)
+    local proxy = Instance.new("Part")
+    proxy.Name = "JustXDoorsESPProxy"
+    proxy.Anchored = true
+    proxy.CanCollide = false
+    proxy.CanTouch = false
+    proxy.CanQuery = false
+    proxy.CastShadow = false
+    proxy.Transparency = 1
+    proxy.Size = Vector3.one
+    proxy.Parent = VisualContainer
+
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "JustXDoorsESPBox"
+    box.Adornee = proxy
+    box.AlwaysOnTop = true
+    box.ZIndex = 5
+    box.Size = Vector3.one
+    box.CFrame = CFrame.new()
+    box.Color3 = color
+    box.Transparency = transparency or 0.05
+    box.Parent = proxy
+
+    entry.BoxProxy = proxy
+    entry.Box = box
 end
 
 local function destroyVisual(entry)
-    if entry.Highlights then
-        for _, highlight in ipairs(entry.Highlights) do
-            pcall(function()
-                if highlight then highlight:Destroy() end
-            end)
-        end
-        entry.Highlights = nil
-    elseif entry.Highlight then
+    if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
     end
-
     if entry.Box then
         pcall(function() entry.Box:Destroy() end)
         entry.Box = nil
     end
-
+    if entry.BoxProxy then
+        pcall(function() entry.BoxProxy:Destroy() end)
+        entry.BoxProxy = nil
+    end
     if entry.Label then
         pcall(function() entry.Label:Destroy() end)
         entry.Label = nil
     end
-
-    if entry.PatchedPart and entry.PatchedPart.Parent then
-        pcall(function()
-            entry.PatchedPart.Transparency = entry.PatchedTransparency or 1
-        end)
-    end
-
-    if entry.PatchedHumanoid and entry.PatchedHumanoid.Parent then
-        pcall(function()
-            local model = entry.PatchedHumanoid.Parent
-            if entry.HadPrimaryPart then
-                model.PrimaryPart = entry.OldPrimaryPart
-            else
-                model.PrimaryPart = nil
-            end
-        end)
-    end
-
-    if entry.PatchedHumanoid and entry.PatchedHumanoid.Parent then
-        pcall(function() entry.PatchedHumanoid:Destroy() end)
-    end
-
-    entry.PatchedPart = nil
-    entry.PatchedTransparency = nil
-    entry.PatchedHumanoid = nil
-    entry.OldPrimaryPart = nil
-    entry.HadPrimaryPart = nil
-    entry.TargetCount = nil
-end
-
-local function destroyHighlights(entry)
-    if entry.Highlights then
-        for _, highlight in ipairs(entry.Highlights) do
-            pcall(function()
-                if highlight then highlight:Destroy() end
-            end)
-        end
-    end
-    entry.Highlights = nil
 end
 
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
+    if entry.Highlight and entry.Highlight.Parent then
+        updateLabel(kind, object, entry)
+        return true
+    end
+
+    if entry.Box and entry.Box.Parent then
+        updateBoxEntry(entry, object, ENTITY_KINDS[kind] == true)
+        updateLabel(kind, object, entry)
+        return true
+    end
+
+    local color = Colors[kind] or Color3.new(1,1,1)
+
+    if kind == "Doors" then
+        createBox(entry, color, 0.02)
+        updateBoxEntry(entry, object, false)
+        updateLabel(kind, object, entry)
+        return true
+    end
+
     if ENTITY_KINDS[kind] then
-        prepareTransparentEntity(object, entry)
-
-        local alive = false
-        if entry.Highlights then
-            for _, highlight in ipairs(entry.Highlights) do
-                if highlight and highlight.Parent then
-                    alive = true
-                    break
-                end
-            end
-        end
-
-        if alive then
-            updateLabel(kind, object, entry)
-            return true
-        end
-
-        destroyHighlights(entry)
-
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsEntityESP"
-        highlight.Adornee = object
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillColor = Colors[kind] or Color3.fromRGB(255, 60, 60)
-        highlight.OutlineColor = Colors[kind] or Color3.fromRGB(255, 60, 60)
-        highlight.FillTransparency = 0.55
-        highlight.OutlineTransparency = 0
-        highlight.Parent = object:IsA("Model") and object or object
-
-        entry.Highlights = {highlight}
-        entry.TargetCount = 1
-
+        -- Do not use the transparent-Model + Humanoid workaround here.
+        -- Roblox documents that workaround as a source of measurable
+        -- performance drops. Use a lightweight always-on-top box instead.
+        createBox(entry, color, 0.02)
+        updateBoxEntry(entry, object, true)
         updateLabel(kind, object, entry)
         return true
     end
 
-    local parts = collectVisualParts(object, kind)
-
-    if #parts == 0 and object:IsA("Model") then
-        local target = getTargetPart(kind, object)
-        if target then
-            parts = {target}
-        end
-    end
-
-    local alive = false
-    if entry.Highlights and entry.TargetCount == #parts then
-        for _, highlight in ipairs(entry.Highlights) do
-            if highlight and highlight.Parent then
-                alive = true
-                break
-            end
-        end
-    end
-
-    if alive then
-        updateLabel(kind, object, entry)
-        return true
-    end
-
-    destroyHighlights(entry)
-    entry.Highlights = {}
-    entry.TargetCount = #parts
-
-    for _, part in ipairs(parts) do
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsESP"
-        highlight.Adornee = part
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-        highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-
-        if INTERACTABLES[kind] then
-            highlight.FillTransparency = 1
-            highlight.OutlineTransparency = 0
-        elseif ITEM_KINDS[kind] then
-            highlight.FillTransparency = 0.78
-            highlight.OutlineTransparency = 0
-        else
-            highlight.FillTransparency = 0.55
-            highlight.OutlineTransparency = 0
-        end
-
-        highlight.Parent = part
-        table.insert(entry.Highlights, highlight)
-    end
+    -- One Highlight per object. This is the same basic architecture used
+    -- by current DOORS ESP implementations and avoids the FPS hit caused
+    -- by one Highlight per MeshPart.
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsESP"
+    highlight.Adornee = object
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.FillTransparency = ITEM_KINDS[kind] and 0.55 or 1
+    highlight.OutlineTransparency = 0
+    highlight.Parent = VisualContainer
+    entry.Highlight = highlight
 
     updateLabel(kind, object, entry)
-    return #entry.Highlights > 0
+    return true
 end
 
 local function clearEntry(kind, object)
@@ -618,15 +523,6 @@ local function addObject(kind, object, room)
     end
 
     if ITEM_KINDS[kind] and isInventoryObject(object) then
-        return
-    end
-
-    local part = getTargetPart(kind, object) or getPart(object)
-    local root = getRoot()
-    if part and root
-        and (root.Position - part.Position).Magnitude > MAX_ESP_DISTANCE
-    then
-        clearEntry(kind, object)
         return
     end
 
@@ -789,14 +685,10 @@ local function registerRoom(room, seen)
         end
 
         if Enabled.Gold and roomVisible("Gold", room) and name == "GoldPile" then
-            for _, levelObject in ipairs(object:GetChildren()) do
-                local level = tonumber(levelObject.Name)
-                if level and level >= (Module.GoldLevel or 1)
-                    and (levelObject:IsA("Model") or levelObject:IsA("BasePart"))
-                then
-                    seen.Gold[levelObject] = true
-                    addObject("Gold", levelObject, room)
-                end
+            local value = tonumber(object:GetAttribute("GoldValue"))
+            if not value or value >= (Module.GoldLevel or 1) then
+                seen.Gold[object] = true
+                addObject("Gold", object, room)
             end
         end
 
@@ -833,7 +725,9 @@ local function registerRoom(room, seen)
         if kind and Enabled[kind] and itemRoot == object
             and not insideBatteryPack
             and not decorativeBookcaseLighter
-            and object:FindFirstChild("ModulePrompt", true)
+            and (object:GetAttribute("Pickup") ~= nil
+                or object:GetAttribute("PropType") ~= nil
+                or object:FindFirstChild("ModulePrompt", true))
             and roomVisible(kind, room)
         then
             seen[kind][object] = true
@@ -1272,6 +1166,17 @@ local function setup()
                 PendingDrops = false
                 refreshPendingRooms()
                 scanAll()
+            end
+        end
+
+        -- Keep lightweight Door/Entity boxes aligned with moving geometry.
+        for kind, objects in pairs(Objects) do
+            if kind == "Doors" or ENTITY_KINDS[kind] then
+                for object, entry in pairs(objects) do
+                    if object.Parent and entry.Box then
+                        updateBoxEntry(entry, object, ENTITY_KINDS[kind] == true)
+                    end
+                end
             end
         end
 
