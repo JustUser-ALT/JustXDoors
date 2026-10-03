@@ -569,7 +569,7 @@ local function makeKeyDrawerProxy(object, entry, sources)
     if not object or not VisualContainer then return false end
 
     local drawer = findContainingDrawer(object)
-    if not drawer or #sources == 0 then
+    if not drawer then
         destroyKeyProxy(entry)
         return false
     end
@@ -581,34 +581,50 @@ local function makeKeyDrawerProxy(object, entry, sources)
     local minVector
     local maxVector
 
-    for _, source in ipairs(sources) do
-        if source.Parent then
-            local cf = source.CFrame
-            local half = source.Size * 0.5
+    -- Hidden Drawer keys can temporarily have no usable visible BasePart
+    -- (their interaction/visual parts are rebuilt by the Drawer system).
+    -- In that case use KeyObtain's model bounding box instead of requiring
+    -- getItemParts() to find a source part.
+    if #sources == 0 and object:IsA("Model") then
+        local ok, cf, size = pcall(function()
+            return object:GetBoundingBox()
+        end)
 
-            for _, x in ipairs({-1, 1}) do
-                for _, y in ipairs({-1, 1}) do
-                    for _, z in ipairs({-1, 1}) do
-                        local point = cf:PointToWorldSpace(Vector3.new(
-                            half.X * x,
-                            half.Y * y,
-                            half.Z * z
-                        ))
+        if ok and cf and size and size.Magnitude > 0.05 then
+            local half = size * 0.5
+            minVector = cf.Position - half
+            maxVector = cf.Position + half
+        end
+    else
+        for _, source in ipairs(sources) do
+            if source.Parent then
+                local cf = source.CFrame
+                local half = source.Size * 0.5
 
-                        if not minVector then
-                            minVector = point
-                            maxVector = point
-                        else
-                            minVector = Vector3.new(
-                                math.min(minVector.X, point.X),
-                                math.min(minVector.Y, point.Y),
-                                math.min(minVector.Z, point.Z)
-                            )
-                            maxVector = Vector3.new(
-                                math.max(maxVector.X, point.X),
-                                math.max(maxVector.Y, point.Y),
-                                math.max(maxVector.Z, point.Z)
-                            )
+                for _, x in ipairs({-1, 1}) do
+                    for _, y in ipairs({-1, 1}) do
+                        for _, z in ipairs({-1, 1}) do
+                            local point = cf:PointToWorldSpace(Vector3.new(
+                                half.X * x,
+                                half.Y * y,
+                                half.Z * z
+                            ))
+
+                            if not minVector then
+                                minVector = point
+                                maxVector = point
+                            else
+                                minVector = Vector3.new(
+                                    math.min(minVector.X, point.X),
+                                    math.min(minVector.Y, point.Y),
+                                    math.min(minVector.Z, point.Z)
+                                )
+                                maxVector = Vector3.new(
+                                    math.max(minVector.X, point.X),
+                                    math.max(minVector.Y, point.Y),
+                                    math.max(minVector.Z, point.Z)
+                                )
+                            end
                         end
                     end
                 end
@@ -997,7 +1013,7 @@ local function createVisual(kind, object, entry)
 
     if kind == "Key" then
         local sources = getItemParts(object, kind)
-        if #sources > 0 and makeKeyDrawerProxy(object, entry, sources) then
+        if makeKeyDrawerProxy(object, entry, sources) then
             destroyItemHelper(entry, true)
             updateLabel(kind, object, entry)
             return true
