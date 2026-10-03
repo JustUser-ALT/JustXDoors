@@ -1466,7 +1466,10 @@ local function applyInteractables(selected)
     end
 
     for label, kind in pairs(map) do
-        Enabled[kind] = state[label] == true or state[kind] == true
+        -- ValueDropdown items with sliders return their selected value/table
+        -- instead of boolean true. Gold now has two sliders, so checking
+        -- only == true silently disables Gold ESP.
+        Enabled[kind] = state[label] ~= nil or state[kind] ~= nil
     end
 
     queueScan()
