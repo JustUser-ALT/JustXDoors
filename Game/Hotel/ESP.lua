@@ -592,66 +592,61 @@ local function makeKeyDrawerProxy(object, entry, sources)
         return false
     end
 
-    -- Infinite Yield proved that HandleAdornment is the render path that
-    -- survives the Drawer Highlight. Instead of the large BoxHandleAdornment
-    -- cube, use LineHandleAdornment to draw the 12 edges of each real key
-    -- part. This keeps the AlwaysOnTop behavior while looking like a normal
-    -- thin ESP outline.
+    -- Keep the proven Infinite Yield render path (BoxHandleAdornment with
+    -- AlwaysOnTop), but make each box into a very thin edge. This avoids
+    -- LineHandleAdornment compatibility issues while removing the large
+    -- filled cube appearance.
     destroyKeyProxy(entry)
 
-    local lines = {}
+    local edges = {}
     local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
 
-    local function addLine(source, index, localCFrame, length)
-        local line = Instance.new("LineHandleAdornment")
-        line.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
-        line.Adornee = source
-        line.CFrame = localCFrame
-        line.Length = math.max(length, 0.01)
-        line.Thickness = 2
-        line.AlwaysOnTop = true
-        line.ZIndex = 10
-        line.Color3 = keyColor
-        line.Transparency = 0
-        line.Parent = VisualContainer
-        lines[#lines + 1] = line
+    local function addEdge(source, index, size, offset)
+        local edge = Instance.new("BoxHandleAdornment")
+        edge.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
+        edge.Adornee = source
+        edge.AlwaysOnTop = true
+        edge.ZIndex = 10
+        edge.Size = size
+        edge.CFrame = CFrame.new(offset)
+        edge.Transparency = 0
+        edge.Color3 = keyColor
+        edge.Parent = VisualContainer
+        edges[#edges + 1] = edge
     end
 
     for _, source in ipairs(sources) do
         if source and source.Parent and source:IsA("BasePart") then
             local size = source.Size
-            local x = size.X
-            local y = size.Y
-            local z = size.Z
+            local t = math.clamp(math.min(size.X, size.Y, size.Z) * 0.12, 0.015, 0.08)
+            local x, y, z = size.X, size.Y, size.Z
 
-            -- Four edges parallel to local Z.
-            addLine(source, #lines + 1, CFrame.new(x/2, y/2, 0), z)
-            addLine(source, #lines + 1, CFrame.new(x/2, -y/2, 0), z)
-            addLine(source, #lines + 1, CFrame.new(-x/2, y/2, 0), z)
-            addLine(source, #lines + 1, CFrame.new(-x/2, -y/2, 0), z)
+            -- 4 edges parallel to X.
+            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, y/2, z/2))
+            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, y/2, -z/2))
+            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, -y/2, z/2))
+            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, -y/2, -z/2))
 
-            -- Four edges parallel to local X.
-            local rotY = CFrame.fromOrientation(0, math.rad(90), 0)
-            addLine(source, #lines + 1, rotY + Vector3.new(0, y/2, z/2), x)
-            addLine(source, #lines + 1, rotY + Vector3.new(0, -y/2, z/2), x)
-            addLine(source, #lines + 1, rotY + Vector3.new(0, y/2, -z/2), x)
-            addLine(source, #lines + 1, rotY + Vector3.new(0, -y/2, -z/2), x)
+            -- 4 edges parallel to Y.
+            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(x/2, 0, z/2))
+            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(x/2, 0, -z/2))
+            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(-x/2, 0, z/2))
+            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(-x/2, 0, -z/2))
 
-            -- Four edges parallel to local Y.
-            local rotX = CFrame.fromOrientation(math.rad(90), 0, 0)
-            addLine(source, #lines + 1, rotX + Vector3.new(x/2, 0, z/2), y)
-            addLine(source, #lines + 1, rotX + Vector3.new(x/2, 0, -z/2), y)
-            addLine(source, #lines + 1, rotX + Vector3.new(-x/2, 0, z/2), y)
-            addLine(source, #lines + 1, rotX + Vector3.new(-x/2, 0, -z/2), y)
+            -- 4 edges parallel to Z.
+            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(x/2, y/2, 0))
+            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(x/2, -y/2, 0))
+            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(-x/2, y/2, 0))
+            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(-x/2, -y/2, 0))
         end
     end
 
-    if #lines == 0 then
+    if #edges == 0 then
         return false
     end
 
-    entry.KeyProxyBoxes = lines
-    entry.KeyProxyHighlight = lines
+    entry.KeyProxyBoxes = edges
+    entry.KeyProxyHighlight = edges
 
     return true
 end
