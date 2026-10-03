@@ -868,9 +868,42 @@ local function makeEntityHighlight(kind, object, entry)
         return false
     end
 
-    -- Dread follows the exact same Entity path as Rush/Ambush/Eyes.
+    -- Dupe is NOT part of Abyssal's RusherAliases. Therefore it must use
+    -- the normal AddESP path: Highlight.Adornee = the actual DoorFake /
+    -- FakeDoor model, with the standard 0.75 fill and no special
+    -- HighlightHumanoid/PrimaryPart workaround.
+    if kind == "Dupe" then
+        if not object:IsA("Model") then
+            return false
+        end
+
+        local color = Colors[kind] or Color3.new(1, 1, 1)
+        local highlight = entry.EntityHighlight
+
+        if not highlight or not highlight.Parent then
+            highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoorsDupeESP"
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Adornee = object
+            highlight.Parent = EntityVisualContainer
+            entry.EntityHighlight = highlight
+            entry.Highlight = highlight
+        else
+            highlight.Adornee = object
+        end
+
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.FillTransparency = 0.75
+        highlight.OutlineTransparency = 0
+        highlight.Enabled = true
+
+        return true
+    end
+
+    -- Rush/Ambush/Eyes/Dread use the special Abyssal-compatible renderer.
     -- Abyssal registers the Entity MODEL itself with AddESP, then adds
-    -- HighlightHumanoid and makes its PrimaryPart (Dread.Main) transparent.
+    -- HighlightHumanoid and makes its PrimaryPart transparent.
     local target = object
 
     if not target:IsA("Model") then
