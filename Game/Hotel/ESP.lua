@@ -574,118 +574,27 @@ local function makeKeyDrawerProxy(object, entry, sources)
         return false
     end
 
-    -- A Key inside a closed Drawer does not need another copy of its mesh.
-    -- Use one tiny invisible proxy Part around the key's real bounds and
-    -- Highlight only that Part. This keeps the cost to one Part + one
-    -- Highlight per hidden key, instead of cloning the key geometry.
-    local minVector
-    local maxVector
+    -- For a key stored in a Drawer, adorn the real KeyObtain model.
+    -- No transparent proxy geometry or cloned key mesh is used.
+    -- This matches the important part of the Abyssal-style approach:
+    -- Highlight the actual KeyObtain object with AlwaysOnTop.
+    destroyKeyProxy(entry)
 
-    -- Hidden Drawer keys can temporarily have no usable visible BasePart
-    -- (their interaction/visual parts are rebuilt by the Drawer system).
-    -- In that case use KeyObtain's model bounding box instead of requiring
-    -- getItemParts() to find a source part.
-    if #sources == 0 and object:IsA("Model") then
-        local ok, cf, size = pcall(function()
-            return object:GetBoundingBox()
-        end)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsKeyDrawerESP"
+    highlight.Adornee = object
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors.Key or Color3.fromRGB(255,225,40)
+    highlight.OutlineColor = Colors.Key or Color3.fromRGB(255,225,40)
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = true
+    highlight.Parent = VisualContainer
 
-        if ok and cf and size and size.Magnitude > 0.05 then
-            local half = size * 0.5
-            minVector = cf.Position - half
-            maxVector = cf.Position + half
-        end
-    else
-        for _, source in ipairs(sources) do
-            if source.Parent then
-                local cf = source.CFrame
-                local half = source.Size * 0.5
-
-                for _, x in ipairs({-1, 1}) do
-                    for _, y in ipairs({-1, 1}) do
-                        for _, z in ipairs({-1, 1}) do
-                            local point = cf:PointToWorldSpace(Vector3.new(
-                                half.X * x,
-                                half.Y * y,
-                                half.Z * z
-                            ))
-
-                            if not minVector then
-                                minVector = point
-                                maxVector = point
-                            else
-                                minVector = Vector3.new(
-                                    math.min(minVector.X, point.X),
-                                    math.min(minVector.Y, point.Y),
-                                    math.min(minVector.Z, point.Z)
-                                )
-                                maxVector = Vector3.new(
-                                    math.max(minVector.X, point.X),
-                                    math.max(minVector.Y, point.Y),
-                                    math.max(minVector.Z, point.Z)
-                                )
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if not minVector or not maxVector then
-        destroyKeyProxy(entry)
-        return false
-    end
-
-    local size = maxVector - minVector
-    size = Vector3.new(
-        math.max(size.X, 0.12),
-        math.max(size.Y, 0.12),
-        math.max(size.Z, 0.12)
-    )
-
-    local proxy = entry.KeyProxyPart
-    if not proxy or not proxy.Parent then
-        destroyKeyProxy(entry)
-
-        proxy = Instance.new("Part")
-        proxy.Name = "JustXDoorsKeyDrawerProxy"
-        proxy.Anchored = true
-        proxy.CanCollide = false
-        proxy.CanTouch = false
-        proxy.CanQuery = false
-        proxy.CastShadow = false
-        proxy.Transparency = 0.99
-        proxy.Material = Enum.Material.Plastic
-        proxy.Parent = VisualContainer
-
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsKeyDrawerESP"
-        highlight.Adornee = proxy
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillColor = Colors.Key or Color3.fromRGB(255,225,40)
-        highlight.OutlineColor = Colors.Key or Color3.fromRGB(255,225,40)
-        highlight.FillTransparency = 1
-        highlight.OutlineTransparency = 0
-        highlight.Parent = VisualContainer
-
-        entry.KeyProxyPart = proxy
-        entry.KeyProxyHighlight = highlight
-    end
-
-    proxy.Size = size
-    proxy.CFrame = CFrame.new((minVector + maxVector) * 0.5)
-
-    local highlight = entry.KeyProxyHighlight
-    if highlight then
-        highlight.FillColor = Colors.Key or Color3.fromRGB(255,225,40)
-        highlight.OutlineColor = Colors.Key or Color3.fromRGB(255,225,40)
-        highlight.Enabled = true
-    end
+    entry.KeyProxyHighlight = highlight
 
     return true
 end
-
 local function destroyItemHelper(entry, keepKeyProxy)
     if not keepKeyProxy then
         destroyKeyProxy(entry)
