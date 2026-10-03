@@ -304,6 +304,12 @@ local function destroyEntryVisual(entry)
         pcall(function() entry.ItemHelperModel:Destroy() end)
         entry.ItemHelperModel = nil
     end
+
+    if entry.EntityHumanoid then
+        pcall(function() entry.EntityHumanoid:Destroy() end)
+        entry.EntityHumanoid = nil
+    end
+
     entry.ItemSources = nil
     entry.ItemHumanoid = nil
 
@@ -787,6 +793,100 @@ local function makeItemHighlight(kind, object, entry)
     return true
 end
 
+local function destroyEntityVisual(entry)
+    if entry.EntityHighlight then
+        pcall(function() entry.EntityHighlight:Destroy() end)
+        entry.EntityHighlight = nil
+    elseif entry.Highlight then
+        pcall(function() entry.Highlight:Destroy() end)
+    end
+
+    if entry.EntityHumanoid then
+        pcall(function() entry.EntityHumanoid:Destroy() end)
+        entry.EntityHumanoid = nil
+    end
+
+    if entry.ItemHelperModel then
+        pcall(function() entry.ItemHelperModel:Destroy() end)
+        entry.ItemHelperModel = nil
+    end
+
+    entry.ItemSources = nil
+    entry.ItemHumanoid = nil
+    entry.Highlight = nil
+end
+
+local function makeEntityHighlight(kind, object, entry)
+    if not object or not object.Parent or not VisualContainer then
+        return false
+    end
+
+    -- Abyssal's Entity ESP targets the live entity itself with an
+    -- AlwaysOnTop Highlight and adds a Humanoid to make the renderer
+    -- consistently recognize the model. Keep that path separate from
+    -- Item/Interactable helper geometry.
+    if entry.EntityHighlight and entry.EntityHighlight.Parent then
+        local target = object
+
+        if kind == "Dread" then
+            target = object:FindFirstChild("Main", true) or object
+        end
+
+        if entry.EntityHighlight.Adornee ~= target then
+            entry.EntityHighlight.Adornee = target
+        end
+
+        entry.EntityHighlight.FillColor = Colors[kind] or Color3.new(1, 1, 1)
+        entry.EntityHighlight.OutlineColor = Colors[kind] or Color3.new(1, 1, 1)
+        entry.EntityHighlight.Enabled = true
+        return true
+    end
+
+    -- Clean up the previous generic entity renderer if this object was
+    -- already registered by an older reconciliation pass.
+    if entry.Highlight or entry.ItemHelperModel then
+        destroyEntityVisual(entry)
+    end
+
+    local target = object
+
+    -- Dread does not have an Abyssal implementation. Its stable visible
+    -- entity part is workspace.Dread.Main, so use Main as the Adornee.
+    if kind == "Dread" then
+        target = object:FindFirstChild("Main", true) or object
+    end
+
+    if not target:IsA("BasePart") and not target:IsA("Model") then
+        return false
+    end
+
+    if object:IsA("Model") and not object:FindFirstChildOfClass("Humanoid") then
+        local humanoid = Instance.new("Humanoid")
+        humanoid.Name = "JustXDoorsEntityHighlightHumanoid"
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+        humanoid.NameDisplayDistance = 0
+        humanoid.Parent = object
+        entry.EntityHumanoid = humanoid
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsEntityESP"
+    highlight.Adornee = target
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind] or Color3.new(1, 1, 1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1, 1, 1)
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = true
+    highlight.Parent = VisualContainer
+
+    entry.EntityHighlight = highlight
+    entry.Highlight = highlight
+
+    return true
+end
+
 local function createVisual(kind, object, entry)
     if not object or not object.Parent then return false end
 
@@ -919,6 +1019,23 @@ local function createVisual(kind, object, entry)
 
         updateLabel(kind, object, entry)
         return true
+    end
+
+    -- Entities use the dedicated Abyssal-style renderer. This intentionally
+    -- runs before the generic Item/Interactable Highlight path.
+    if ENTITY_KINDS[kind] then
+        if not near then
+            destroyEntityVisual(entry)
+            updateLabel(kind, object, entry)
+            return true
+        end
+
+        if makeEntityHighlight(kind, object, entry) then
+            updateLabel(kind, object, entry)
+            return true
+        end
+
+        return false
     end
 
     -- If an object moved outside the render radius, remove only its 3D visual.
@@ -1363,7 +1480,8 @@ local function scanEntities(seen)
         RushMoving="Rush",
         AmbushMoving="Ambush",
         Eyes="Eyes",
-        Lookman="Eyes",
+        -- Lookman is intentionally not mapped here. It is a different
+        -- entity and must not become Eyes ESP.
         Dread="Dread",
         SallyLingering="SallyLingering",
         SallyMoving="SallyMoving",
