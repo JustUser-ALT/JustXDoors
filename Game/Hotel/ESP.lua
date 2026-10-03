@@ -2,6 +2,7 @@ local Module = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -810,11 +811,44 @@ local function destroyEntityVisual(entry)
     entry.Highlight = nil
 end
 
--- Entity ESP intentionally follows Abyssal's ESP implementation.
--- The Highlight is NOT parented to Workspace. It lives inside a ScreenGui
--- in the hidden/player UI and uses the real Entity as its Adornee.
--- This is important for Doors entities whose geometry can be transparent
--- or otherwise rendered differently from normal room objects.
+-- This is the important part copied from Abyssal's actual Doors Entity
+-- path, not just its Highlight settings.
+--
+-- Rush/Ambush/Eyes use transparent entity geometry. Abyssal makes Roblox's
+-- Highlight renderer recognize that geometry by:
+--   1) adding a Humanoid to the Entity Model;
+--   2) forcing the Entity PrimaryPart to Transparency = 0.999;
+--   3) forcing its Material to Plastic.
+--
+-- Without this workaround the Highlight can exist correctly while producing
+-- no visible outline. Items/Interactables use a different renderer and are
+-- deliberately left untouched.
+local function prepareEntityForHighlight(kind, object, entry)
+    if kind == "Dread" then
+        return
+    end
+
+    if not object:IsA("Model") then
+        return
+    end
+
+    if not object:FindFirstChildOfClass("Humanoid") then
+        local humanoid = Instance.new("Humanoid")
+        humanoid.Name = "HighlightHumanoid"
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+        humanoid.NameDisplayDistance = 0
+        humanoid.Parent = object
+        entry.EntityHumanoid = humanoid
+    end
+
+    local root = object.PrimaryPart
+    if root and root:IsA("BasePart") then
+        root.Transparency = 0.999
+        root.Material = Enum.Material.Plastic
+    end
+end
+
 local function makeEntityHighlight(kind, object, entry)
     if not object or not object.Parent or not EntityVisualContainer then
         return false
@@ -822,7 +856,7 @@ local function makeEntityHighlight(kind, object, entry)
 
     local target = object
 
-    -- Dread is the one entity where the stable visible target is Main.
+    -- Dread is our special case: its stable visible target is Main.
     if kind == "Dread" then
         target = object:FindFirstChild("Main", true) or object
     end
@@ -831,6 +865,10 @@ local function makeEntityHighlight(kind, object, entry)
         return false
     end
 
+    -- Match Abyssal's order: prepare the Entity before relying on the
+    -- Highlight renderer.
+    prepareEntityForHighlight(kind, object, entry)
+
     local color = Colors[kind] or Color3.new(1, 1, 1)
     local highlight = entry.EntityHighlight
 
@@ -838,7 +876,7 @@ local function makeEntityHighlight(kind, object, entry)
         highlight = Instance.new("Highlight")
         highlight.Name = "JustXDoorsEntityESP"
         highlight.FillTransparency = 1
-        highlight.OutlineTransparency = 0
+        highlight.OutlineTransparency = 1
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Adornee = target
         highlight.Parent = EntityVisualContainer
@@ -851,6 +889,9 @@ local function makeEntityHighlight(kind, object, entry)
         highlight.Enabled = true
     end
 
+    -- Abyssal starts the Highlight invisible and then its ESP renderer
+    -- applies the configured Fill/Outline values. We can use the final
+    -- configured values directly because this module has no fade stage.
     highlight.FillColor = color
     highlight.OutlineColor = color
     highlight.FillTransparency = 1
@@ -2283,6 +2324,28 @@ local function hookDrops(container)
     queueScan()
 end
 
+local function getEntityHiddenUI()
+    -- Abyssal uses gethui() when available, otherwise CoreGui in executor
+    -- environments and PlayerGui in ordinary Roblox LocalScript context.
+    local ok, hidden = pcall(function()
+        if type(gethui) == "function" then
+            return gethui()
+        end
+
+        if type(getgenv) == "function" then
+            return CoreGui
+        end
+
+        return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    end)
+
+    if ok and hidden then
+        return hidden
+    end
+
+    return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
+
 local function setup()
     if VisualContainer then
         pcall(function() VisualContainer:Destroy() end)
@@ -2299,19 +2362,28 @@ local function setup()
     VisualContainer.Name = "JustXDoors_HotelESP"
     VisualContainer.Parent = workspace
 
-    -- Abyssal's ESP keeps Highlight instances in a UI container rather than
-    -- under Workspace. Mirror that architecture for Entities.
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if playerGui then
+    -- Use the same hidden UI route as Abyssal so Highlight is outside the
+    -- game's Workspace hierarchy.
+    local hiddenUI = getEntityHiddenUI()
+    if hiddenUI then
         local screenGui = Instance.new("ScreenGui")
         screenGui.Name = "JustXDoors_EntityESP"
         screenGui.ResetOnSpawn = false
         screenGui.IgnoreGuiInset = true
-        screenGui.Parent = playerGui
+        screenGui.DisplayOrder = 32767
 
-        EntityVisualContainer = Instance.new("Folder")
-        EntityVisualContainer.Name = "Highlights"
-        EntityVisualContainer.Parent = screenGui
+        local parented = pcall(function()
+            screenGui.Parent = hiddenUI
+        end)
+
+        if parented and screenGui.Parent then
+            EntityVisualContainer = Instance.new("Folder")
+            EntityVisualContainer.Name = "Highlights"
+            EntityVisualContainer.Parent = screenGui
+        else
+            pcall(function() screenGui:Destroy() end)
+            EntityVisualContainer = nil
+        end
     else
         EntityVisualContainer = nil
     end
