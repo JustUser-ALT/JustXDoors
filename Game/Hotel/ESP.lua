@@ -1493,7 +1493,10 @@ local function applyItems(selected)
         Enabled[kind] = state[label] == true or state[kind] == true
     end
 
+    -- Gold has ValueDropdown dimensions now, so selected.Gold can be a
+    -- table of slider values instead of boolean true.
     if type(selected) == "table" and selected.Gold ~= nil then
+        Enabled.Gold = true
         local value = selected.Gold
 
         if type(value) == "table" then
