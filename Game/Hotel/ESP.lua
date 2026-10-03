@@ -98,7 +98,8 @@ local DEFAULT_COLORS = {
     Seek=Color3.fromRGB(190,90,255),
     Figure=Color3.fromRGB(190,190,210),
     Snare=Color3.fromRGB(110,255,110),
-    Screech=Color3.fromRGB(255,235,90),\n    Dread=Color3.fromRGB(170,80,255),
+    Screech=Color3.fromRGB(255,235,90),
+    Dread=Color3.fromRGB(170,80,255),
 }
 
 local LABEL_NAMES = {
