@@ -49,7 +49,7 @@ local ITEM_KINDS = {
 
 local ENTITY_KINDS = {
     Rush=true, Ambush=true, Dupe=true, Eyes=true, SallyLingering=true,
-    SallyMoving=true, Seek=true, Figure=true, Snare=true, Screech=true,
+    SallyMoving=true, Seek=true, Figure=true, Snare=true, Screech=true, Dread=true,
 }
 
 local INTERACTABLE_KINDS = {
@@ -98,7 +98,7 @@ local DEFAULT_COLORS = {
     Seek=Color3.fromRGB(190,90,255),
     Figure=Color3.fromRGB(190,190,210),
     Snare=Color3.fromRGB(110,255,110),
-    Screech=Color3.fromRGB(255,235,90),
+    Screech=Color3.fromRGB(255,235,90),\n    Dread=Color3.fromRGB(170,80,255),
 }
 
 local LABEL_NAMES = {
@@ -112,7 +112,7 @@ local LABEL_NAMES = {
     Dupe="Dupe", Eyes="Eyes", SallyLingering="Sally", SallyMoving="Sally",
     Seek="Seek", Figure="Figure", Snare="Snare", Screech="Screech",
     VentGate="Vent Gate", Toolshed="Toolshed", Lever="Lever",
-    Rush="Rush", Ambush="Ambush",
+    Rush="Rush", Ambush="Ambush", Dread="Dread",
 }
 
 local function connect(signal, callback)
@@ -181,7 +181,7 @@ local function getEntityPart(kind, object)
         Seek={"Seek"},
         Figure={"HumanoidRootPart"},
         Snare={"Snare"},
-        Screech={"Screech"},
+        Screech={"Screech"},\n        Dread={"Dread"},
     }
 
     for _, name in ipairs(names[kind] or {}) do
