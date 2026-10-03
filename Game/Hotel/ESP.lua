@@ -921,6 +921,15 @@ local function makeEntityHighlight(kind, object, entry)
         end
 
         local color = Colors[kind] or Color3.new(1, 1, 1)
+
+        -- These are animated/custom rigs. Never leave the Rusher-style
+        -- HighlightHumanoid attached to them, because it can interfere
+        -- with their real Humanoid/Animator.
+        if entry.EntityHumanoid then
+            pcall(function() entry.EntityHumanoid:Destroy() end)
+            entry.EntityHumanoid = nil
+        end
+
         local highlight = entry.EntityHighlight
 
         if not highlight or not highlight.Parent then
@@ -2126,28 +2135,33 @@ local function scanEntities(seen)
         end
     end
 
-    if Rooms then
-        for _, room in ipairs(Rooms:GetChildren()) do
-            if Enabled.Seek then
-                -- SeekMovingNewClone is the complete Seek entity container.
-                -- It contains both the animated SeekRig and a separate
-                -- Figure MeshPart. Highlight the container so BOTH pieces
-                -- are covered by one ESP without touching either animation rig.
-                for _, object in ipairs(room:GetDescendants()) do
-                    if object:IsA("Model") and object.Name == "SeekMovingNewClone" then
-                        local seekRig = object:FindFirstChild("SeekRig")
-                        local figurePart = object:FindFirstChild("Figure", true)
+    if Enabled.Seek then
+        -- SeekMovingNewClone is spawned directly under workspace in the
+        -- observed hierarchy:
+        --   workspace.SeekMovingNewClone
+        --       ├─ SeekRig
+        --       └─ Figure (MeshPart)
+        -- Therefore scanning only CurrentRooms can never find it.
+        -- Register the whole container so one Highlight covers both the
+        -- Seek rig and its separate Figure MeshPart, without changing either
+        -- animated object.
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object:IsA("Model") and object.Name == "SeekMovingNewClone" then
+                local seekRig = object:FindFirstChild("SeekRig")
+                local figurePart = object:FindFirstChild("Figure", true)
 
-                        if (seekRig and seekRig:IsA("Model"))
-                            or (figurePart and figurePart:IsA("BasePart"))
-                        then
-                            seen.Seek[object] = true
-                            addObject("Seek", object, room)
-                        end
-                    end
+                if (seekRig and seekRig:IsA("Model"))
+                    or (figurePart and figurePart:IsA("BasePart"))
+                then
+                    seen.Seek[object] = true
+                    addObject("Seek", object, nil)
                 end
             end
+        end
+    end
 
+    if Rooms then
+        for _, room in ipairs(Rooms:GetChildren()) do
             if Enabled.Figure then
                 -- A room can contain FigureRig, Figure and FigureRagdoll
                 -- instances. Abyssal registers all three names individually.
