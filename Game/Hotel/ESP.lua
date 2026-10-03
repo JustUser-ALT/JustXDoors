@@ -1650,10 +1650,10 @@ local function createVisual(kind, object, entry)
             return true
         end
 
-        if ITEM_KINDS[kind] or ENTITY_KINDS[kind] then
-            -- Validate the helper against the current item/entity geometry. The
-            -- helper is welded to the real parts, so live entity changes or
-            -- mobile interaction prompts cannot take ownership of the ESP Highlight.
+        if ITEM_KINDS[kind] then
+            -- Item ESP keeps its existing helper renderer. Entity ESP is
+            -- deliberately excluded here: its renderer is the direct
+            -- Abyssal-style Entity Highlight above.
             local sources = getItemParts(object, kind)
             local valid = entry.ItemHelperModel
                 and entry.ItemHelperModel.Parent == VisualContainer
@@ -1696,27 +1696,6 @@ local function createVisual(kind, object, entry)
     end
 
     if entry.Box and entry.Box.Parent then
-        updateLabel(kind, object, entry)
-        return true
-    end
-
-    if ENTITY_KINDS[kind] then
-        local target = getEntityPart(kind, object)
-        if not target then return false end
-
-        -- Entity models can contain moving/temporary geometry. Highlighting
-        -- the live model directly is unreliable for some of them, so use the
-        -- same isolated helper geometry that already works for Items and the
-        -- mobile-interaction fixes. The helper is parented outside the entity
-        -- and is welded to every visible source part.
-        if makeItemHighlight(kind, object, entry) then
-            updateLabel(kind, object, entry)
-            return true
-        end
-
-        -- Fallback for unusual entities whose geometry cannot be cloned.
-        local adornee = object:IsA("Model") and object or target
-        makeHighlight(kind, adornee, entry, 1)
         updateLabel(kind, object, entry)
         return true
     end
