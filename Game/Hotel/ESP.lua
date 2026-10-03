@@ -264,6 +264,8 @@ local function labelName(kind, object)
 end
 
 local function destroyEntryVisual(entry)
+    destroyKeyProxy(entry)
+
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
