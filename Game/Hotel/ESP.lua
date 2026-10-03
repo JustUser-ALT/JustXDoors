@@ -475,14 +475,6 @@ local function getItemParts(object, kind)
         return parts
     end
 
-    if kind == "Gold" then
-        local holder = object:FindFirstChild("GoldVisualHolder", true)
-        if holder and holder:IsA("BasePart") and holder.Size.Magnitude > 0.05 then
-            parts[1] = holder
-            return parts
-        end
-    end
-
     if object:IsA("BasePart") then
         if object.Transparency < 1 and object.Size.Magnitude > 0.05 then
             parts[1] = object
@@ -628,13 +620,6 @@ local function destroyItemHelper(entry, keepKeyProxy)
         destroyKeyProxy(entry)
     end
 
-    if entry.GoldProxyBoxes then
-        for _, box in ipairs(entry.GoldProxyBoxes) do
-            pcall(function() box:Destroy() end)
-        end
-        entry.GoldProxyBoxes = nil
-    end
-
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
@@ -658,67 +643,6 @@ local function makeItemHighlight(kind, object, entry)
             destroyKeyProxy(entry)
         end
         return false
-    end
-
-    -- Gold lives under furniture such as Table, which can itself have
-    -- a Drawer Highlight. Use the proven AlwaysOnTop BoxHandleAdornment path
-    -- so Gold remains visible through the furniture Highlight.
-    if kind == "Gold" then
-        if entry.GoldProxyBoxes then
-            local valid = #entry.GoldProxyBoxes == #sources
-
-            if valid then
-                for index, source in ipairs(sources) do
-                    local box = entry.GoldProxyBoxes[index]
-                    if not box or not box.Parent or box.Adornee ~= source then
-                        valid = false
-                        break
-                    end
-                end
-            end
-
-            if valid then
-                local goldColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                for _, box in ipairs(entry.GoldProxyBoxes) do
-                    box.Color3 = goldColor
-                    box.AlwaysOnTop = true
-                    box.Transparency = 0.3
-                end
-                entry.Highlight = entry.GoldProxyBoxes[1]
-                return true
-            end
-
-            for _, box in ipairs(entry.GoldProxyBoxes) do
-                pcall(function() box:Destroy() end)
-            end
-            entry.GoldProxyBoxes = nil
-        end
-
-        local boxes = {}
-        local goldColor = Colors.Gold or Color3.fromRGB(255,215,0)
-
-        for index, source in ipairs(sources) do
-            if source and source.Parent and source:IsA("BasePart") then
-                local box = Instance.new("BoxHandleAdornment")
-                box.Name = "JustXDoorsGoldESP_" .. tostring(index)
-                box.Adornee = source
-                box.AlwaysOnTop = true
-                box.ZIndex = 10
-                box.Size = source.Size
-                box.Transparency = 0.3
-                box.Color3 = goldColor
-                box.Parent = VisualContainer
-                boxes[#boxes + 1] = box
-            end
-        end
-
-        if #boxes == 0 then
-            return false
-        end
-
-        entry.GoldProxyBoxes = boxes
-        entry.Highlight = boxes[1]
-        return true
     end
 
     if kind == "Key" and makeKeyDrawerProxy(object, entry, sources) then
@@ -1028,6 +952,40 @@ local function createVisual(kind, object, entry)
     end
 
     if entry.Highlight and entry.Highlight.Parent then
+        if kind == "Gold" then
+            -- Gold used to work with a direct Highlight on the actual
+            -- Gold level object (for example GoldPile.3). Keep that exact
+            -- rendering path instead of the generic transparent item helper.
+            -- GoldVisualHolder itself is transparent and is not a reliable
+            -- Highlight target.
+            local goldHighlight = entry.Highlight
+            if not goldHighlight or not goldHighlight.Parent or goldHighlight.Adornee ~= object then
+                if goldHighlight then
+                    pcall(function() goldHighlight:Destroy() end)
+                end
+
+                goldHighlight = Instance.new("Highlight")
+                goldHighlight.Name = "JustXDoorsGoldESP"
+                goldHighlight.Adornee = object
+                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.FillTransparency = 1
+                goldHighlight.OutlineTransparency = 0
+                goldHighlight.Enabled = true
+                goldHighlight.Parent = VisualContainer
+                entry.Highlight = goldHighlight
+            else
+                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                goldHighlight.Enabled = true
+            end
+
+            updateLabel(kind, object, entry)
+            return true
+        end
+
         if ITEM_KINDS[kind] then
             -- Validate the helper against the current item geometry. The
             -- helper is welded to the real parts, so the mobile finger/prompt
