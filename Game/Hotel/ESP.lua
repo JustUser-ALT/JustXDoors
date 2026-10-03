@@ -24,7 +24,7 @@ local LabelClock = 0
 
 local MAX_DISTANCE = 300
 local ITEM_VISUAL_DISTANCE = 90
-local ENTITY_VISUAL_DISTANCE = 140
+local ENTITY_VISUAL_DISTANCE = 300
 
 local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
@@ -1042,8 +1042,17 @@ local function createVisual(kind, object, entry)
         local target = getEntityPart(kind, object)
         if not target then return false end
 
-        -- Use a real Highlight on the entity/model. No transparent Humanoid
-        -- proxy is created, which avoids the previous entity FPS problem.
+        -- Entity models can contain moving/temporary geometry. Highlighting
+        -- the live model directly is unreliable for some of them, so use the
+        -- same isolated helper geometry that already works for Items and the
+        -- mobile-interaction fixes. The helper is parented outside the entity
+        -- and is welded to every visible source part.
+        if makeItemHighlight(kind, object, entry) then
+            updateLabel(kind, object, entry)
+            return true
+        end
+
+        -- Fallback for unusual entities whose geometry cannot be cloned.
         local adornee = object:IsA("Model") and object or target
         makeHighlight(kind, adornee, entry, 1)
         updateLabel(kind, object, entry)
