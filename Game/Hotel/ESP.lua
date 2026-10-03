@@ -16,6 +16,7 @@ local Display = {Name = true, Distance = false}
 local Rooms
 local Drops
 local VisualContainer
+local EntityVisualContainer
 
 local Objects = {}
 local ScanQueued = false
@@ -799,6 +800,453 @@ local function destroyEntityVisual(entry)
         entry.EntityHighlight = nil
     end
 
+    if entry.EntityHumanoid then
+        pcall(function() entry.EntityHumanoid:Destroy() end)
+        entry.EntityHumanoid = nil
+    end
+
+    entry.EntitySources = nil
+    entry.EntityProxy = nil
+    entry.Highlight = nil
+end
+
+-- Entity ESP intentionally follows Abyssal's ESP implementation.
+-- The Highlight is NOT parented to Workspace. It lives inside a ScreenGui
+-- in the hidden/player UI and uses the real Entity as its Adornee.
+-- This is important for Doors entities whose geometry can be transparent
+-- or otherwise rendered differently from normal room objects.
+local function makeEntityHighlight(kind, object, entry)
+    if not object or not object.Parent or not EntityVisualContainer then
+        return false
+    end
+
+    local target = object
+
+    -- Dread is the one entity where the stable visible target is Main.
+    if kind == "Dread" then
+        target = object:FindFirstChild("Main", true) or object
+    end
+
+    if not target:IsA("BasePart") and not target:IsA("Model") then
+        return false
+    end
+
+    local color = Colors[kind] or Color3.new(1, 1, 1)
+    local highlight = entry.EntityHighlight
+
+    if not highlight or not highlight.Parent then
+        highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsEntityESP"
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Adornee = target
+        highlight.Parent = EntityVisualContainer
+
+        entry.EntityHighlight = highlight
+        entry.Highlight = highlight
+    else
+        highlight.Adornee = target
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Enabled = true
+    end
+
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = true
+
+    return true
+end
+
+local function getItemParts(object, kind)
+    local parts = {}
+
+    if not object then return parts end
+
+    -- Keys need a stricter geometry selection than normal Items.
+    -- KeyObtain contains an interaction Hitbox, and using its parts first
+    -- can produce a flat/circular outline whose orientation follows the
+    -- interaction volume rather than the visible key.
+    if kind == "Key" then
+        local hitbox = object:FindFirstChild("Hitbox", true)
+
+        local function isInsideInteractionVolume(part)
+            local parent = part.Parent
+            while parent and parent ~= object do
+                if parent == hitbox
+                    or parent.Name == "PromptHitbox"
+                    or parent.Name == "ModulePrompt"
+                then
+                    return true
+                end
+                parent = parent.Parent
+            end
+            return false
+        end
+
+        local candidates = {}
+        for _, child in ipairs(object:GetDescendants()) do
+            if child:IsA("BasePart")
+                and child.Size.Magnitude > 0.05
+                and child.Name ~= "PromptHitbox"
+                and child.Name ~= "ModulePrompt"
+                and not isInsideInteractionVolume(child)
+            then
+                candidates[#candidates + 1] = child
+            end
+        end
+
+        for _, child in ipairs(candidates) do
+            if child:IsA("MeshPart")
+                or child.Name == "Key"
+                or child.Name == "Handle"
+                or child.Name == "Mesh"
+            then
+                parts[#parts + 1] = child
+            end
+        end
+
+        if #parts == 0 then
+            for _, child in ipairs(candidates) do
+                if child.Transparency < 1 then
+                    parts[#parts + 1] = child
+                end
+            end
+        end
+
+        if #parts == 0 and hitbox then
+            for _, child in ipairs(hitbox:GetDescendants()) do
+                if child:IsA("MeshPart")
+                    and child.Name ~= "Hitbox"
+                    and child.Name ~= "PromptHitbox"
+                    and child.Size.Magnitude > 0.05
+                then
+                    parts[#parts + 1] = child
+                end
+            end
+        end
+
+        return parts
+    end
+
+    if object:IsA("BasePart") then
+        if object.Transparency < 1 and object.Size.Magnitude > 0.05 then
+            parts[1] = object
+        end
+        return parts
+    end
+
+    local function isInteractionPart(part)
+        local parent = part.Parent
+
+        while parent and parent ~= object do
+            local name = string.lower(parent.Name)
+
+            if parent.Name == "PromptHitbox"
+                or parent.Name == "ModulePrompt"
+                or parent.Name == "Hitbox"
+                or string.find(name, "prompt", 1, true)
+                or string.find(name, "interaction", 1, true)
+            then
+                return true
+            end
+
+            parent = parent.Parent
+        end
+
+        local partName = string.lower(part.Name)
+        if part.Name == "PromptHitbox"
+            or part.Name == "ModulePrompt"
+            or part.Name == "Hitbox"
+            or string.find(partName, "prompt", 1, true)
+        then
+            return true
+        end
+
+        return false
+    end
+
+    for _, child in ipairs(object:GetDescendants()) do
+        if child:IsA("BasePart")
+            and child.Transparency < 1
+            and child.Size.Magnitude > 0.05
+            and not isInteractionPart(child)
+        then
+            parts[#parts + 1] = child
+        end
+    end
+
+    return parts
+end
+
+local function findContainingDrawer(object)
+    if not object then return nil end
+
+    local current = object.Parent
+    while current and current ~= Rooms do
+        local name = string.lower(current.Name)
+
+        -- DOORS can store a KeyObtain directly under a drawer/container
+        -- branch rather than directly under the Dresser model. Accept the
+        -- actual drawer containers as well as the known furniture roots.
+        if current.Name == "DrawerContainer"
+            or string.find(name, "drawer", 1, true)
+        then
+            return current
+        end
+
+        if current:IsA("Model")
+            and (
+                current.Name == "Dresser"
+                or current.Name == "Table"
+                or current.Name == "Rolltop_Desk"
+            )
+            and current:FindFirstChild("DrawerContainer", true)
+        then
+            return current
+        end
+
+        current = current.Parent
+    end
+
+    return nil
+end
+
+destroyKeyProxy = function(entry)
+    if entry.KeyProxyHighlight then
+        pcall(function() entry.KeyProxyHighlight:Destroy() end)
+        entry.KeyProxyHighlight = nil
+    end
+
+    if entry.KeyProxyPart then
+        pcall(function() entry.KeyProxyPart:Destroy() end)
+        entry.KeyProxyPart = nil
+    end
+end
+
+local function makeKeyDrawerProxy(object, entry, sources)
+    if not object or not VisualContainer then return false end
+
+    local drawer = findContainingDrawer(object)
+    if not drawer or #sources == 0 then
+        destroyKeyProxy(entry)
+        return false
+    end
+
+    -- A KeyObtain inside a Drawer is a special case. Highlight has a
+    -- renderer conflict here when the parent Drawer also has a Highlight.
+    -- Infinite Yield's partesp avoids that path entirely: it uses one
+    -- BoxHandleAdornment per real BasePart with AlwaysOnTop enabled.
+    -- Use the same primitive for hidden Drawer keys.
+    destroyKeyProxy(entry)
+
+    local boxes = {}
+    local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
+
+    for index, source in ipairs(sources) do
+        if source and source.Parent and source:IsA("BasePart") then
+            local box = Instance.new("BoxHandleAdornment")
+            box.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
+            box.Adornee = source
+            box.AlwaysOnTop = true
+            box.ZIndex = 10
+            box.Size = source.Size
+            box.Transparency = 0.3
+            box.Color3 = keyColor
+            box.Parent = VisualContainer
+            boxes[#boxes + 1] = box
+        end
+    end
+
+    if #boxes == 0 then
+        return false
+    end
+
+    entry.KeyProxyBoxes = boxes
+    -- Keep this field for compatibility with cleanup paths that already
+    -- know about the old single-proxy Highlight.
+    entry.KeyProxyHighlight = boxes
+
+    return true
+end
+local function destroyItemHelper(entry, keepKeyProxy)
+    if not keepKeyProxy then
+        destroyKeyProxy(entry)
+    end
+
+    if entry.Highlight then
+        pcall(function() entry.Highlight:Destroy() end)
+        entry.Highlight = nil
+    end
+
+    if entry.ItemHelperModel then
+        pcall(function() entry.ItemHelperModel:Destroy() end)
+        entry.ItemHelperModel = nil
+    end
+
+    entry.ItemSources = nil
+    entry.ItemHumanoid = nil
+end
+
+local function makeItemHighlight(kind, object, entry)
+    if not object or not VisualContainer then return false end
+
+    local sources = getItemParts(object, kind)
+    if #sources == 0 then
+        if kind == "Key" then
+            destroyKeyProxy(entry)
+        end
+        return false
+    end
+
+    if kind == "Key" and makeKeyDrawerProxy(object, entry, sources) then
+        -- Hidden keys use the lightweight proxy above. Do not clone the key
+        -- mesh into the normal Item helper; the Drawer remains fully outlined.
+        destroyItemHelper(entry, true)
+        return true
+    elseif kind == "Key" then
+        destroyKeyProxy(entry)
+    end
+
+    -- Do not rebuild the helper on every reconciliation scan. Mobile
+    -- interaction prompts can cause DescendantAdded/Removing activity while
+    -- the finger UI is visible. Recreating the Highlight during that burst
+    -- is what makes some item ESPs flicker or fragment into tiny dots.
+    -- Keep the existing helper when its source geometry is unchanged.
+    if entry.ItemHelperModel
+        and entry.Highlight
+        and entry.ItemSources
+    then
+        local sameSources = true
+        local sourceCount = 0
+
+        for source in pairs(entry.ItemSources) do
+            sourceCount += 1
+            if not source.Parent then
+                sameSources = false
+                break
+            end
+        end
+
+        if sameSources and sourceCount == #sources then
+            for _, source in ipairs(sources) do
+                if not entry.ItemSources[source] then
+                    sameSources = false
+                    break
+                end
+            end
+        else
+            sameSources = false
+        end
+
+        if sameSources then
+            entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+            entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+            entry.Highlight.Enabled = true
+            return true
+        end
+    end
+
+    destroyItemHelper(entry)
+
+    local helperModel = Instance.new("Model")
+    helperModel.Name = "JustXDoorsItemHighlightModel"
+    helperModel.Parent = VisualContainer
+
+    -- Same transparent-model technique used by the working Door ESP.
+    -- The helper parts are almost completely invisible, while the Highlight
+    -- is rendered from their actual geometry.
+    local humanoid = Instance.new("Humanoid")
+    humanoid.Name = "JustXDoorsItemHighlightHumanoid"
+    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+    humanoid.NameDisplayDistance = 0
+    humanoid.Parent = helperModel
+
+    local sourceMap = {}
+
+    for index, source in ipairs(sources) do
+        local helper
+
+        local ok, clone = pcall(function()
+            return source:Clone()
+        end)
+
+        if ok and clone and clone:IsA("BasePart") then
+            helper = clone
+
+            -- Keep only geometry-related mesh objects. Never copy prompts,
+            -- touch transmitters, scripts, constraints, etc. from the item.
+            for _, child in ipairs(helper:GetDescendants()) do
+                if not (
+                    child:IsA("SpecialMesh")
+                    or child:IsA("BlockMesh")
+                    or child:IsA("CylinderMesh")
+                ) then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        else
+            helper = Instance.new("Part")
+            helper.Shape = Enum.PartType.Block
+            helper.Size = source.Size
+        end
+
+        helper.Name = "JustXDoorsItemHighlightPart_" .. tostring(index)
+        helper.CFrame = source.CFrame
+
+        -- Texture/surface details are irrelevant to the ESP and can make
+        -- transparent MeshPart highlights produce noisy pixel artifacts.
+        if helper:IsA("MeshPart") then
+            pcall(function() helper.TextureID = "" end)
+        end
+
+        helper.Transparency = 0.999
+        helper.CanCollide = false
+        helper.CanTouch = false
+        helper.CanQuery = false
+        helper.CastShadow = false
+        helper.Anchored = false
+        helper.Massless = true
+        helper.Material = Enum.Material.Plastic
+        helper.Parent = helperModel
+
+        local weld = Instance.new("WeldConstraint")
+        weld.Name = "JustXDoorsItemHighlightWeld"
+        weld.Part0 = helper
+        weld.Part1 = source
+        weld.Parent = helper
+
+        sourceMap[source] = helper
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "JustXDoorsItemESP"
+    highlight.Adornee = helperModel
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = true
+    highlight.Parent = VisualContainer
+
+    entry.ItemHelperModel = helperModel
+    entry.ItemHumanoid = humanoid
+    entry.ItemSources = sourceMap
+    entry.Highlight = highlight
+
+    return true
+end
+
+local function destroyEntityVisual(entry)
+    if entry.EntityHighlight then
+        pcall(function() entry.EntityHighlight:Destroy() end)
+        entry.EntityHighlight = nil
+    end
+
     if entry.EntityProxy then
         pcall(function() entry.EntityProxy:Destroy() end)
         entry.EntityProxy = nil
@@ -1077,8 +1525,8 @@ local function createVisual(kind, object, entry)
         return true
     end
 
-    -- Entities use an isolated proxy renderer. Items and Interactables keep
-    -- their existing renderer below completely unchanged.
+    -- Entities use the direct Abyssal-style renderer.
+    -- Items and Interactables below remain completely unchanged.
     if ENTITY_KINDS[kind] then
         if not near then
             destroyEntityVisual(entry)
@@ -1086,7 +1534,7 @@ local function createVisual(kind, object, entry)
             return true
         end
 
-        if buildEntityProxy(kind, object, entry) then
+        if makeEntityHighlight(kind, object, entry) then
             updateLabel(kind, object, entry)
             return true
         end
@@ -1839,10 +2287,34 @@ local function setup()
     if VisualContainer then
         pcall(function() VisualContainer:Destroy() end)
     end
+    if EntityVisualContainer then
+        local screenGui = EntityVisualContainer.Parent
+        pcall(function()
+            if screenGui then screenGui:Destroy() end
+        end)
+        EntityVisualContainer = nil
+    end
 
     VisualContainer = Instance.new("Folder")
     VisualContainer.Name = "JustXDoors_HotelESP"
     VisualContainer.Parent = workspace
+
+    -- Abyssal's ESP keeps Highlight instances in a UI container rather than
+    -- under Workspace. Mirror that architecture for Entities.
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "JustXDoors_EntityESP"
+        screenGui.ResetOnSpawn = false
+        screenGui.IgnoreGuiInset = true
+        screenGui.Parent = playerGui
+
+        EntityVisualContainer = Instance.new("Folder")
+        EntityVisualContainer.Name = "Highlights"
+        EntityVisualContainer.Parent = screenGui
+    else
+        EntityVisualContainer = nil
+    end
 
     Rooms = getRooms()
     Drops = workspace:FindFirstChild("Drops")
@@ -1957,6 +2429,14 @@ function Module:Destroy()
     if VisualContainer then
         pcall(function() VisualContainer:Destroy() end)
         VisualContainer = nil
+    end
+
+    if EntityVisualContainer then
+        local screenGui = EntityVisualContainer.Parent
+        pcall(function()
+            if screenGui then screenGui:Destroy() end
+        end)
+        EntityVisualContainer = nil
     end
 
     Rooms = nil
