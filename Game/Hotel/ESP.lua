@@ -574,29 +574,44 @@ local function makeKeyDrawerProxy(object, entry, sources)
     if not object or not VisualContainer then return false end
 
     local drawer = findContainingDrawer(object)
-    if not drawer then
+    if not drawer or #sources == 0 then
         destroyKeyProxy(entry)
         return false
     end
 
-    -- For a key stored in a Drawer, adorn the real KeyObtain model.
-    -- No transparent proxy geometry or cloned key mesh is used.
-    -- This matches the important part of the Abyssal-style approach:
-    -- Highlight the actual KeyObtain object with AlwaysOnTop.
+    -- A KeyObtain inside a Drawer is a special case. Highlight has a
+    -- renderer conflict here when the parent Drawer also has a Highlight.
+    -- Infinite Yield's partesp avoids that path entirely: it uses one
+    -- BoxHandleAdornment per real BasePart with AlwaysOnTop enabled.
+    -- Use the same primitive for hidden Drawer keys.
     destroyKeyProxy(entry)
 
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "JustXDoorsKeyDrawerESP"
-    highlight.Adornee = object
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = Colors.Key or Color3.fromRGB(255,225,40)
-    highlight.OutlineColor = Colors.Key or Color3.fromRGB(255,225,40)
-    highlight.FillTransparency = 1
-    highlight.OutlineTransparency = 0
-    highlight.Enabled = true
-    highlight.Parent = VisualContainer
+    local boxes = {}
+    local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
 
-    entry.KeyProxyHighlight = highlight
+    for index, source in ipairs(sources) do
+        if source and source.Parent and source:IsA("BasePart") then
+            local box = Instance.new("BoxHandleAdornment")
+            box.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
+            box.Adornee = source
+            box.AlwaysOnTop = true
+            box.ZIndex = 10
+            box.Size = source.Size
+            box.Transparency = 0.3
+            box.Color3 = keyColor
+            box.Parent = VisualContainer
+            boxes[#boxes + 1] = box
+        end
+    end
+
+    if #boxes == 0 then
+        return false
+    end
+
+    entry.KeyProxyBoxes = boxes
+    -- Keep this field for compatibility with cleanup paths that already
+    -- know about the old single-proxy Highlight.
+    entry.KeyProxyHighlight = boxes
 
     return true
 end
