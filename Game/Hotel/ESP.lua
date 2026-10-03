@@ -32,7 +32,7 @@ local KINDS = {
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
     "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
     "Dupe","Eyes","SallyLingering","SallyMoving","Seek","Figure","Snare",
-    "Screech","VentGate","Toolshed","Lever","Rush","Ambush"
+    "Screech","VentGate","Toolshed","Lever","Rush","Ambush","Dread"
 }
 
 for _, kind in ipairs(KINDS) do
@@ -1346,19 +1346,24 @@ local function scanDrops(seen)
 end
 
 local function scanEntities(seen)
+    -- Entity instances can spawn multiple times at once. Do not use
+    -- FindFirstChild here: it returns only one sibling with a given name.
+    -- Abyssal-style ESP keeps an entry for every spawned entity.
     local globals = {
-        RushMoving="Rush", AmbushMoving="Ambush",
-        Eyes="Eyes", SallyLingering="SallyLingering",
+        RushMoving="Rush",
+        AmbushMoving="Ambush",
+        Eyes="Eyes",
+        Lookman="Eyes",
+        Dread="Dread",
+        SallyLingering="SallyLingering",
         SallyMoving="SallyMoving",
     }
 
-    for name, kind in pairs(globals) do
-        if Enabled[kind] then
-            local object = workspace:FindFirstChild(name)
-            if object then
-                seen[kind][object] = true
-                addObject(kind, object, nil)
-            end
+    for _, object in ipairs(workspace:GetChildren()) do
+        local kind = globals[object.Name]
+        if kind and Enabled[kind] then
+            seen[kind][object] = true
+            addObject(kind, object, nil)
         end
     end
 
@@ -1557,6 +1562,7 @@ local function setEntities(selected)
     Enabled.Figure = state.Figure == true
     Enabled.Snare = state.Snare == true
     Enabled.Screech = state.Screech == true
+    Enabled.Dread = state.Dread == true
 
     queueScan()
 end
