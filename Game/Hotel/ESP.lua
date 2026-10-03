@@ -628,6 +628,13 @@ local function destroyItemHelper(entry, keepKeyProxy)
         destroyKeyProxy(entry)
     end
 
+    if entry.GoldProxyBoxes then
+        for _, box in ipairs(entry.GoldProxyBoxes) do
+            pcall(function() box:Destroy() end)
+        end
+        entry.GoldProxyBoxes = nil
+    end
+
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
@@ -651,6 +658,67 @@ local function makeItemHighlight(kind, object, entry)
             destroyKeyProxy(entry)
         end
         return false
+    end
+
+    -- Gold lives under furniture such as Table, which can itself have
+    -- a Drawer Highlight. Use the proven AlwaysOnTop BoxHandleAdornment path
+    -- so Gold remains visible through the furniture Highlight.
+    if kind == "Gold" then
+        if entry.GoldProxyBoxes then
+            local valid = #entry.GoldProxyBoxes == #sources
+
+            if valid then
+                for index, source in ipairs(sources) do
+                    local box = entry.GoldProxyBoxes[index]
+                    if not box or not box.Parent or box.Adornee ~= source then
+                        valid = false
+                        break
+                    end
+                end
+            end
+
+            if valid then
+                local goldColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                for _, box in ipairs(entry.GoldProxyBoxes) do
+                    box.Color3 = goldColor
+                    box.AlwaysOnTop = true
+                    box.Transparency = 0.3
+                end
+                entry.Highlight = entry.GoldProxyBoxes[1]
+                return true
+            end
+
+            for _, box in ipairs(entry.GoldProxyBoxes) do
+                pcall(function() box:Destroy() end)
+            end
+            entry.GoldProxyBoxes = nil
+        end
+
+        local boxes = {}
+        local goldColor = Colors.Gold or Color3.fromRGB(255,215,0)
+
+        for index, source in ipairs(sources) do
+            if source and source.Parent and source:IsA("BasePart") then
+                local box = Instance.new("BoxHandleAdornment")
+                box.Name = "JustXDoorsGoldESP_" .. tostring(index)
+                box.Adornee = source
+                box.AlwaysOnTop = true
+                box.ZIndex = 10
+                box.Size = source.Size
+                box.Transparency = 0.3
+                box.Color3 = goldColor
+                box.Parent = VisualContainer
+                boxes[#boxes + 1] = box
+            end
+        end
+
+        if #boxes == 0 then
+            return false
+        end
+
+        entry.GoldProxyBoxes = boxes
+        entry.Highlight = boxes[1]
+        return true
     end
 
     if kind == "Key" and makeKeyDrawerProxy(object, entry, sources) then
