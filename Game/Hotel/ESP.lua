@@ -987,11 +987,10 @@ local function createVisual(kind, object, entry)
             return true
         end
 
-        if ITEM_KINDS[kind] then
-            -- Validate the helper against the current item geometry. The
-            -- helper is welded to the real parts, so the mobile finger/prompt
-            -- can reparent or rebuild interaction objects without owning the
-            -- ESP Highlight.
+        if ITEM_KINDS[kind] or ENTITY_KINDS[kind] then
+            -- Validate the helper against the current item/entity geometry. The
+            -- helper is welded to the real parts, so live entity changes or
+            -- mobile interaction prompts cannot take ownership of the ESP Highlight.
             local sources = getItemParts(object, kind)
             local valid = entry.ItemHelperModel
                 and entry.ItemHelperModel.Parent == VisualContainer
