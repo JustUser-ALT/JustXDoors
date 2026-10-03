@@ -181,8 +181,8 @@ local function getEntityPart(kind, object)
         Eyes={"Eyes"},
         SallyLingering={"Sally"},
         SallyMoving={"Sally"},
-        Seek={"Seek"},
-        Figure={"HumanoidRootPart"},
+        Seek={"SeekMovingNewClone","SeekMovingNew","Seek"},
+        Figure={"HumanoidRootPart","UpperTorso","Torso","Head"},
         Snare={"Snare"},
         Screech={"Screech"},
         Dread={"Dread","Main"},
@@ -890,6 +890,41 @@ local function makeEntityHighlight(kind, object, entry)
             entry.Highlight = highlight
         else
             highlight.Adornee = object
+        end
+
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.FillTransparency = 0.75
+        highlight.OutlineTransparency = 0
+        highlight.Enabled = true
+
+        return true
+    end
+
+    -- Abyssal does NOT put Figure into RusherAliases, so Figure must
+    -- use the normal AddESP path. In particular, NEVER inject a
+    -- HighlightHumanoid into Figure: Figure already owns its animation
+    -- Humanoid/Animator, and an extra Humanoid can leave the rig's
+    -- animations frozen.
+    if kind == "Figure" or kind == "Seek" then
+        if not object:IsA("Model") then
+            return false
+        end
+
+        local color = Colors[kind] or Color3.new(1, 1, 1)
+        local highlight = entry.EntityHighlight
+
+        if not highlight or not highlight.Parent then
+            highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoors" .. kind .. "ESP"
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Adornee = object
+            highlight.Parent = EntityVisualContainer
+            entry.EntityHighlight = highlight
+            entry.Highlight = highlight
+        else
+            highlight.Adornee = object
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         end
 
         highlight.FillColor = color
@@ -2085,18 +2120,37 @@ local function scanEntities(seen)
     if Rooms then
         for _, room in ipairs(Rooms:GetChildren()) do
             if Enabled.Seek then
-                local object = room:FindFirstChild("SeekMovingNewClone", true)
-                if object then
-                    seen.Seek[object] = true
-                    addObject("Seek", object, room)
+                -- Abyssal itself does not currently register SeekMovingNewClone
+                -- as an Entity ESP object. Keep our Seek detection explicit,
+                -- but register every matching clone instead of only the first.
+                for _, object in ipairs(room:GetDescendants()) do
+                    if object:IsA("Model")
+                        and (
+                            object.Name == "SeekMovingNewClone"
+                            or object.Name == "SeekMovingNew"
+                            or object.Name == "Seek"
+                        )
+                    then
+                        seen.Seek[object] = true
+                        addObject("Seek", object, room)
+                    end
                 end
             end
 
             if Enabled.Figure then
-                local object = room:FindFirstChild("FigureRig", true)
-                if object then
-                    seen.Figure[object] = true
-                    addObject("Figure", object, room)
+                -- A room can contain FigureRig, Figure and FigureRagdoll
+                -- instances. Abyssal registers all three names individually.
+                for _, object in ipairs(room:GetDescendants()) do
+                    if object:IsA("Model")
+                        and (
+                            object.Name == "FigureRig"
+                            or object.Name == "Figure"
+                            or object.Name == "FigureRagdoll"
+                        )
+                    then
+                        seen.Figure[object] = true
+                        addObject("Figure", object, room)
+                    end
                 end
             end
 
