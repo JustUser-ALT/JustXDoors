@@ -797,8 +797,11 @@ local function destroyEntityVisual(entry)
     if entry.EntityHighlight then
         pcall(function() entry.EntityHighlight:Destroy() end)
         entry.EntityHighlight = nil
-    elseif entry.Highlight then
-        pcall(function() entry.Highlight:Destroy() end)
+    end
+
+    if entry.EntityProxy then
+        pcall(function() entry.EntityProxy:Destroy() end)
+        entry.EntityProxy = nil
     end
 
     if entry.EntityHumanoid then
@@ -806,83 +809,136 @@ local function destroyEntityVisual(entry)
         entry.EntityHumanoid = nil
     end
 
-    if entry.ItemHelperModel then
-        pcall(function() entry.ItemHelperModel:Destroy() end)
-        entry.ItemHelperModel = nil
-    end
-
-    entry.ItemSources = nil
-    entry.ItemHumanoid = nil
+    entry.EntitySources = nil
     entry.Highlight = nil
 end
 
-local function makeEntityHighlight(kind, object, entry)
+local function buildEntityProxy(kind, object, entry)
     if not object or not object.Parent or not VisualContainer then
         return false
     end
 
-    -- Abyssal's Entity ESP targets the live entity itself with an
-    -- AlwaysOnTop Highlight and adds a Humanoid to make the renderer
-    -- consistently recognize the model. Keep that path separate from
-    -- Item/Interactable helper geometry.
-    if entry.EntityHighlight and entry.EntityHighlight.Parent then
-        local target = object
-
-        if kind == "Dread" then
-            target = object:FindFirstChild("Main", true) or object
-        end
-
-        if entry.EntityHighlight.Adornee ~= target then
-            entry.EntityHighlight.Adornee = target
-        end
-
-        entry.EntityHighlight.FillColor = Colors[kind] or Color3.new(1, 1, 1)
-        entry.EntityHighlight.OutlineColor = Colors[kind] or Color3.new(1, 1, 1)
-        entry.EntityHighlight.Enabled = true
-        return true
-    end
-
-    -- Clean up the previous generic entity renderer if this object was
-    -- already registered by an older reconciliation pass.
-    if entry.Highlight or entry.ItemHelperModel then
-        destroyEntityVisual(entry)
-    end
-
     local target = object
-
-    -- Dread does not have an Abyssal implementation. Its stable visible
-    -- entity part is workspace.Dread.Main, so use Main as the Adornee.
     if kind == "Dread" then
         target = object:FindFirstChild("Main", true) or object
     end
 
-    if not target:IsA("BasePart") and not target:IsA("Model") then
+    -- Build an isolated proxy from the entity's real BaseParts. This avoids
+    -- relying on the game's own materials/transparency/renderer and leaves
+    -- the original Entity completely untouched.
+    local sources = {}
+    if target:IsA("BasePart") then
+        sources[1] = target
+    elseif target:IsA("Model") then
+        for _, descendant in ipairs(target:GetDescendants()) do
+            if descendant:IsA("BasePart") and descendant.Size.Magnitude > 0.05 then
+                sources[#sources + 1] = descendant
+            end
+        end
+    end
+
+    if #sources == 0 then
         return false
     end
 
-    if object:IsA("Model") and not object:FindFirstChildOfClass("Humanoid") then
+    local proxy = entry.EntityProxy
+    if not proxy or not proxy.Parent then
+        if proxy then
+            pcall(function() proxy:Destroy() end)
+        end
+
+        proxy = Instance.new("Model")
+        proxy.Name = "JustXDoorsEntityProxy"
+
         local humanoid = Instance.new("Humanoid")
         humanoid.Name = "JustXDoorsEntityHighlightHumanoid"
         humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
         humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
         humanoid.NameDisplayDistance = 0
-        humanoid.Parent = object
+        humanoid.AutoRotate = false
+        humanoid.Parent = proxy
         entry.EntityHumanoid = humanoid
+
+        proxy.Parent = VisualContainer
+        entry.EntityProxy = proxy
+        entry.EntitySources = {}
     end
 
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "JustXDoorsEntityESP"
-    highlight.Adornee = target
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = Colors[kind] or Color3.new(1, 1, 1)
-    highlight.OutlineColor = Colors[kind] or Color3.new(1, 1, 1)
-    highlight.FillTransparency = 1
-    highlight.OutlineTransparency = 0
-    highlight.Enabled = true
-    highlight.Parent = VisualContainer
+    -- Rebuild only when the source set changes.
+    local sourceSet = entry.EntitySources or {}
+    local same = true
+    local count = 0
+    for source in pairs(sourceSet) do
+        count += 1
+        if not source.Parent then
+            same = false
+            break
+        end
+    end
+    if same and count ~= #sources then
+        same = false
+    end
+    if same then
+        for _, source in ipairs(sources) do
+            if not sourceSet[source] then
+                same = false
+                break
+            end
+        end
+    end
 
-    entry.EntityHighlight = highlight
-    entry.Highlight = highlight
+    if not same or count == 0 then
+        for _, child in ipairs(proxy:GetChildren()) do
+            if child:IsA("BasePart") then
+                child:Destroy()
+            end
+        end
+
+        sourceSet = {}
+        for index, source in ipairs(sources) do
+            local clone = source:Clone()
+            clone.Name = "EntityProxyPart_" .. index
+            clone.Transparency = 0.999
+            clone.CanCollide = false
+            clone.CanTouch = false
+            clone.CanQuery = false
+            clone.CastShadow = false
+            clone.Anchored = false
+            clone.Massless = true
+            clone.Parent = proxy
+
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = clone
+            weld.Part1 = source
+            weld.Parent = clone
+
+            sourceSet[source] = clone
+        end
+
+        entry.EntitySources = sourceSet
+    end
+
+    local color = Colors[kind] or Color3.new(1, 1, 1)
+
+    if not entry.EntityHighlight or not entry.EntityHighlight.Parent then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsEntityESP"
+        highlight.Adornee = proxy
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+        highlight.Enabled = true
+        highlight.Parent = VisualContainer
+        entry.EntityHighlight = highlight
+    else
+        entry.EntityHighlight.Adornee = proxy
+        entry.EntityHighlight.FillColor = color
+        entry.EntityHighlight.OutlineColor = color
+        entry.EntityHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        entry.EntityHighlight.Enabled = true
+    end
 
     return true
 end
@@ -1021,8 +1077,8 @@ local function createVisual(kind, object, entry)
         return true
     end
 
-    -- Entities use the dedicated Abyssal-style renderer. This intentionally
-    -- runs before the generic Item/Interactable Highlight path.
+    -- Entities use an isolated proxy renderer. Items and Interactables keep
+    -- their existing renderer below completely unchanged.
     if ENTITY_KINDS[kind] then
         if not near then
             destroyEntityVisual(entry)
@@ -1030,7 +1086,7 @@ local function createVisual(kind, object, entry)
             return true
         end
 
-        if makeEntityHighlight(kind, object, entry) then
+        if buildEntityProxy(kind, object, entry) then
             updateLabel(kind, object, entry)
             return true
         end
