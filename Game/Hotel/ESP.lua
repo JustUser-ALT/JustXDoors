@@ -263,6 +263,10 @@ local function labelName(kind, object)
     return LABEL_NAMES[kind] or kind
 end
 
+-- Forward declaration: cleanup can run before the Key Drawer proxy
+-- helpers are declared below this section.
+local destroyKeyProxy
+
 local function destroyEntryVisual(entry)
     destroyKeyProxy(entry)
 
@@ -537,7 +541,7 @@ local function findContainingDrawer(object)
     return nil
 end
 
-local function destroyKeyProxy(entry)
+destroyKeyProxy = function(entry)
     if entry.KeyProxyHighlight then
         pcall(function() entry.KeyProxyHighlight:Destroy() end)
         entry.KeyProxyHighlight = nil
