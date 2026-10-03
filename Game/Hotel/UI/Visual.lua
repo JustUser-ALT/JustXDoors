@@ -19,7 +19,7 @@ function VisualUI:Create(ctx)
     if not ctx.EntityPages then
         ctx.EntityPages = ctx.Tab:MultiSection({
             Pages = {"Entity", "Anti"},
-            Column = 2,
+            Column = 3,
             Icon = "shield",
         })
     end
