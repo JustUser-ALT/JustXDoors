@@ -389,7 +389,12 @@ local function makeHighlight(kind, adornee, entry, fillTransparency)
     highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
     highlight.FillTransparency = fillTransparency or 1
     highlight.OutlineTransparency = 0
-    highlight.Parent = adornee
+    -- Keep every ESP Highlight outside the highlighted object's hierarchy.
+    -- Roblox documents rendering issues when Highlight instances are nested
+    -- through parent/child object relationships. This is especially
+    -- important for Drawer + KeyObtain, because KeyObtain lives inside the
+    -- Drawer and must have its own AlwaysOnTop Highlight.
+    highlight.Parent = VisualContainer
 
     entry.Highlight = highlight
     return true
