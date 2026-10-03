@@ -181,7 +181,7 @@ local function getEntityPart(kind, object)
         Eyes={"Eyes"},
         SallyLingering={"Sally"},
         SallyMoving={"Sally"},
-        Seek={"SeekRig","SeekMovingNewClone","SeekMovingNew","Seek"},
+        Seek={"Figure","SeekRig","SeekMovingNewClone","SeekMovingNew","Seek"},
         Figure={"HumanoidRootPart","UpperTorso","Torso","Head"},
         Snare={"Snare"},
         Screech={"Screech"},
@@ -878,6 +878,15 @@ local function makeEntityHighlight(kind, object, entry)
         end
 
         local color = Colors[kind] or Color3.new(1, 1, 1)
+
+        -- Figure, Seek and Sally are animated/custom rigs. Never inject the
+        -- Abyssal Rusher HighlightHumanoid into them: doing so can interfere
+        -- with their existing Humanoid/Animator and freeze their animation.
+        if entry.EntityHumanoid then
+            pcall(function() entry.EntityHumanoid:Destroy() end)
+            entry.EntityHumanoid = nil
+        end
+
         local highlight = entry.EntityHighlight
 
         if not highlight or not highlight.Parent then
@@ -906,7 +915,7 @@ local function makeEntityHighlight(kind, object, entry)
     -- HighlightHumanoid into Figure: Figure already owns its animation
     -- Humanoid/Animator, and an extra Humanoid can leave the rig's
     -- animations frozen.
-    if kind == "Figure" or kind == "Seek" then
+    if kind == "Figure" or kind == "Seek" or kind == "SallyLingering" or kind == "SallyMoving" then
         if not object:IsA("Model") then
             return false
         end
@@ -2120,16 +2129,20 @@ local function scanEntities(seen)
     if Rooms then
         for _, room in ipairs(Rooms:GetChildren()) do
             if Enabled.Seek then
-                -- SeekMovingNewClone is a container. Its actual character rig
-                -- is SeekMovingNewClone.SeekRig, analogous to FigureRig.
-                -- Highlight the rig itself rather than the outer controller
-                -- model so Roblox Highlight receives the real entity geometry.
+                -- SeekMovingNewClone is the complete Seek entity container.
+                -- It contains both the animated SeekRig and a separate
+                -- Figure MeshPart. Highlight the container so BOTH pieces
+                -- are covered by one ESP without touching either animation rig.
                 for _, object in ipairs(room:GetDescendants()) do
                     if object:IsA("Model") and object.Name == "SeekMovingNewClone" then
-                        local rig = object:FindFirstChild("SeekRig")
-                        if rig and rig:IsA("Model") then
-                            seen.Seek[rig] = true
-                            addObject("Seek", rig, room)
+                        local seekRig = object:FindFirstChild("SeekRig")
+                        local figurePart = object:FindFirstChild("Figure", true)
+
+                        if (seekRig and seekRig:IsA("Model"))
+                            or (figurePart and figurePart:IsA("BasePart"))
+                        then
+                            seen.Seek[object] = true
+                            addObject("Seek", object, room)
                         end
                     end
                 end
