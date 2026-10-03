@@ -824,10 +824,6 @@ end
 -- no visible outline. Items/Interactables use a different renderer and are
 -- deliberately left untouched.
 local function prepareEntityForHighlight(kind, object, entry)
-    if kind == "Dread" then
-        return
-    end
-
     if not object:IsA("Model") then
         return
     end
@@ -872,14 +868,12 @@ local function makeEntityHighlight(kind, object, entry)
         return false
     end
 
+    -- Dread follows the exact same Entity path as Rush/Ambush/Eyes.
+    -- Abyssal registers the Entity MODEL itself with AddESP, then adds
+    -- HighlightHumanoid and makes its PrimaryPart (Dread.Main) transparent.
     local target = object
 
-    -- Dread is our special case: its stable visible target is Main.
-    if kind == "Dread" then
-        target = object:FindFirstChild("Main", true) or object
-    end
-
-    if not target:IsA("BasePart") and not target:IsA("Model") then
+    if not target:IsA("Model") then
         return false
     end
 
