@@ -475,6 +475,14 @@ local function getItemParts(object, kind)
         return parts
     end
 
+    if kind == "Gold" then
+        local holder = object:FindFirstChild("GoldVisualHolder", true)
+        if holder and holder:IsA("BasePart") and holder.Size.Magnitude > 0.05 then
+            parts[1] = holder
+            return parts
+        end
+    end
+
     if object:IsA("BasePart") then
         if object.Transparency < 1 and object.Size.Magnitude > 0.05 then
             parts[1] = object
@@ -1175,9 +1183,12 @@ local function scanRoom(room, seen)
 
         if Enabled.Gold and name == "GoldPile" then
             local foundLevel = false
+            local minLevel = math.max(1, tonumber(Module.GoldMinLevel) or 1)
+            local maxLevel = math.max(minLevel, tonumber(Module.GoldMaxLevel) or 6)
+
             for _, child in ipairs(object:GetChildren()) do
                 local level = tonumber(child.Name)
-                if level and level >= (Module.GoldLevel or 1)
+                if level and level >= minLevel and level <= maxLevel
                     and (child:IsA("Model") or child:IsA("BasePart"))
                 then
                     foundLevel = true
@@ -1452,9 +1463,36 @@ local function applyItems(selected)
     end
 
     if type(selected) == "table" and selected.Gold ~= nil then
-        Module.GoldLevel = tonumber(selected.Gold) or 1
+        local value = selected.Gold
+
+        if type(value) == "table" then
+            local minLevel = tonumber(
+                value["Min Level"]
+                or value.MinLevel
+                or value.Min
+                or value[1]
+            )
+            local maxLevel = tonumber(
+                value["Max Level"]
+                or value.MaxLevel
+                or value.Max
+                or value[2]
+            )
+
+            Module.GoldMinLevel = math.clamp(minLevel or Module.GoldMinLevel or 1, 1, 6)
+            Module.GoldMaxLevel = math.clamp(maxLevel or Module.GoldMaxLevel or 6, 1, 6)
+        else
+            -- Backward compatibility with the old single Gold slider.
+            Module.GoldMinLevel = math.clamp(tonumber(value) or 1, 1, 6)
+            Module.GoldMaxLevel = math.max(Module.GoldMaxLevel or 6, Module.GoldMinLevel)
+        end
     elseif state.Gold then
-        Module.GoldLevel = Module.GoldLevel or 1
+        Module.GoldMinLevel = Module.GoldMinLevel or 1
+        Module.GoldMaxLevel = Module.GoldMaxLevel or 6
+    end
+
+    if Module.GoldMaxLevel < Module.GoldMinLevel then
+        Module.GoldMaxLevel = Module.GoldMinLevel
     end
 
     queueScan()
@@ -1639,7 +1677,8 @@ function Module:Init(context)
         end
     end
 
-    Module.GoldLevel = Module.GoldLevel or 1
+    Module.GoldMinLevel = Module.GoldMinLevel or 1
+    Module.GoldMaxLevel = Module.GoldMaxLevel or 6
 
     setup()
 
