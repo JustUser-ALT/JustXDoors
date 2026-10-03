@@ -1208,36 +1208,30 @@ local function scanRoom(room, seen)
         end
 
         if Enabled.Gold and name == "GoldPile" then
-            local foundLevel = false
+            local minLevel = math.clamp(tonumber(Module.GoldMinLevel) or 1, 1, 6)
+            local maxLevel = math.clamp(tonumber(Module.GoldMaxLevel) or 6, minLevel, 6)
             local hasNumericLevel = false
-            local minLevel = math.max(1, tonumber(Module.GoldMinLevel) or 1)
-            local maxLevel = math.max(minLevel, tonumber(Module.GoldMaxLevel) or 6)
+            local matchesRange = false
 
             for _, child in ipairs(object:GetChildren()) do
                 local level = tonumber(child.Name)
                 if level then
                     hasNumericLevel = true
-                end
-
-                if level and level >= minLevel and level <= maxLevel
-                    and (child:IsA("Model") or child:IsA("BasePart"))
-                then
-                    foundLevel = true
-                    seen.Gold[child] = true
-                    addObject("Gold", child, room)
+                    if level >= minLevel and level <= maxLevel then
+                        matchesRange = true
+                    end
                 end
             end
 
-            -- Some versions expose GoldPile itself as the visible object.
-            -- Only use that fallback when the pile has no numeric level
-            -- children at all. If levels exist but are outside the selected
-            -- range, nothing should be displayed.
-            if not hasNumericLevel then
+            -- The original working Gold ESP targeted GoldPile itself.
+            -- Keep that target: its visible geometry is provided by the
+            -- GoldVisualHolder hierarchy, while the numeric child is only
+            -- the level selector.
+            if matchesRange or not hasNumericLevel then
                 seen.Gold[object] = true
                 addObject("Gold", object, room)
             end
         end
-
         if Enabled.Bandage and name == "Bandage" then
             seen.Bandage[object] = true
             addObject("Bandage", object, room)
