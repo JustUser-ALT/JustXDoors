@@ -594,50 +594,32 @@ local function makeKeyDrawerProxy(object, entry, sources)
 
     destroyKeyProxy(entry)
 
-    local wires = {}
+    local boxes = {}
     local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
 
     for index, source in ipairs(sources) do
         if source and source.Parent and source:IsA("BasePart") then
-            local h = source.Size / 2
-            local wire = Instance.new("WireframeHandleAdornment")
-            wire.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
-            wire.Adornee = source
-            wire.AlwaysOnTop = true
-            wire.ZIndex = 10
-            wire.Thickness = 2
-            wire.Color3 = keyColor
-            wire.Transparency = 0
-            wire.Parent = VisualContainer
-
-            wire:AddLines({
-                Vector3.new(-h.X,-h.Y,-h.Z), Vector3.new(h.X,-h.Y,-h.Z),
-                Vector3.new(-h.X,h.Y,-h.Z), Vector3.new(h.X,h.Y,-h.Z),
-                Vector3.new(-h.X,-h.Y,h.Z), Vector3.new(h.X,-h.Y,h.Z),
-                Vector3.new(-h.X,h.Y,h.Z), Vector3.new(h.X,h.Y,h.Z),
-                Vector3.new(-h.X,-h.Y,-h.Z), Vector3.new(-h.X,h.Y,-h.Z),
-                Vector3.new(h.X,-h.Y,-h.Z), Vector3.new(h.X,h.Y,-h.Z),
-                Vector3.new(-h.X,-h.Y,h.Z), Vector3.new(-h.X,h.Y,h.Z),
-                Vector3.new(h.X,-h.Y,h.Z), Vector3.new(h.X,h.Y,h.Z),
-                Vector3.new(-h.X,-h.Y,-h.Z), Vector3.new(-h.X,-h.Y,h.Z),
-                Vector3.new(h.X,-h.Y,-h.Z), Vector3.new(h.X,-h.Y,h.Z),
-                Vector3.new(-h.X,h.Y,-h.Z), Vector3.new(-h.X,h.Y,h.Z),
-                Vector3.new(h.X,h.Y,-h.Z), Vector3.new(h.X,h.Y,h.Z),
-            })
-
-            wires[#wires + 1] = wire
+            local box = Instance.new("BoxHandleAdornment")
+            box.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
+            box.Adornee = source
+            box.AlwaysOnTop = true
+            box.ZIndex = 10
+            box.Size = source.Size
+            box.Transparency = 0.3
+            box.Color3 = keyColor
+            box.Parent = VisualContainer
+            boxes[#boxes + 1] = box
         end
     end
 
-    if #wires == 0 then
+    if #boxes == 0 then
         return false
     end
 
-    entry.KeyProxyBoxes = wires
-    entry.KeyProxyHighlight = wires
+    entry.KeyProxyBoxes = boxes
+    entry.KeyProxyHighlight = boxes
     return true
 end
-
 local function destroyItemHelper(entry, keepKeyProxy)
     if not keepKeyProxy then
         destroyKeyProxy(entry)
