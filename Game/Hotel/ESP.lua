@@ -514,7 +514,147 @@ local function getItemParts(object, kind)
     return parts
 end
 
+local function findContainingDrawer(object)
+    if not object then return nil end
+
+    local current = object.Parent
+    while current and current ~= Rooms do
+        if current:IsA("Model")
+            and (
+                current.Name == "Dresser"
+                or current.Name == "Table"
+                or current.Name == "Rolltop_Desk"
+            )
+            and current:FindFirstChild("DrawerContainer", true)
+        then
+            return current
+        end
+        current = current.Parent
+    end
+
+    return nil
+end
+
+local function destroyKeyProxy(entry)
+    if entry.KeyProxyHighlight then
+        pcall(function() entry.KeyProxyHighlight:Destroy() end)
+        entry.KeyProxyHighlight = nil
+    end
+
+    if entry.KeyProxyPart then
+        pcall(function() entry.KeyProxyPart:Destroy() end)
+        entry.KeyProxyPart = nil
+    end
+end
+
+local function makeKeyDrawerProxy(object, entry, sources)
+    if not object or not VisualContainer then return false end
+
+    local drawer = findContainingDrawer(object)
+    if not drawer or #sources == 0 then
+        destroyKeyProxy(entry)
+        return false
+    end
+
+    -- A Key inside a closed Drawer does not need another copy of its mesh.
+    -- Use one tiny invisible proxy Part around the key's real bounds and
+    -- Highlight only that Part. This keeps the cost to one Part + one
+    -- Highlight per hidden key, instead of cloning the key geometry.
+    local minVector
+    local maxVector
+
+    for _, source in ipairs(sources) do
+        if source.Parent then
+            local cf = source.CFrame
+            local half = source.Size * 0.5
+
+            for _, x in ipairs({-1, 1}) do
+                for _, y in ipairs({-1, 1}) do
+                    for _, z in ipairs({-1, 1}) do
+                        local point = cf:PointToWorldSpace(Vector3.new(
+                            half.X * x,
+                            half.Y * y,
+                            half.Z * z
+                        ))
+
+                        if not minVector then
+                            minVector = point
+                            maxVector = point
+                        else
+                            minVector = Vector3.new(
+                                math.min(minVector.X, point.X),
+                                math.min(minVector.Y, point.Y),
+                                math.min(minVector.Z, point.Z)
+                            )
+                            maxVector = Vector3.new(
+                                math.max(maxVector.X, point.X),
+                                math.max(maxVector.Y, point.Y),
+                                math.max(maxVector.Z, point.Z)
+                            )
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if not minVector or not maxVector then
+        destroyKeyProxy(entry)
+        return false
+    end
+
+    local size = maxVector - minVector
+    size = Vector3.new(
+        math.max(size.X, 0.12),
+        math.max(size.Y, 0.12),
+        math.max(size.Z, 0.12)
+    )
+
+    local proxy = entry.KeyProxyPart
+    if not proxy or not proxy.Parent then
+        destroyKeyProxy(entry)
+
+        proxy = Instance.new("Part")
+        proxy.Name = "JustXDoorsKeyDrawerProxy"
+        proxy.Anchored = true
+        proxy.CanCollide = false
+        proxy.CanTouch = false
+        proxy.CanQuery = false
+        proxy.CastShadow = false
+        proxy.Transparency = 0.999
+        proxy.Material = Enum.Material.Plastic
+        proxy.Parent = VisualContainer
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsKeyDrawerESP"
+        highlight.Adornee = proxy
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = Colors.Key or Color3.fromRGB(255,225,40)
+        highlight.OutlineColor = Colors.Key or Color3.fromRGB(255,225,40)
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+        highlight.Parent = VisualContainer
+
+        entry.KeyProxyPart = proxy
+        entry.KeyProxyHighlight = highlight
+    end
+
+    proxy.Size = size
+    proxy.CFrame = CFrame.new((minVector + maxVector) * 0.5)
+
+    local highlight = entry.KeyProxyHighlight
+    if highlight then
+        highlight.FillColor = Colors.Key or Color3.fromRGB(255,225,40)
+        highlight.OutlineColor = Colors.Key or Color3.fromRGB(255,225,40)
+        highlight.Enabled = true
+    end
+
+    return true
+end
+
 local function destroyItemHelper(entry)
+    destroyKeyProxy(entry)
+
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
         entry.Highlight = nil
@@ -533,7 +673,21 @@ local function makeItemHighlight(kind, object, entry)
     if not object or not VisualContainer then return false end
 
     local sources = getItemParts(object, kind)
-    if #sources == 0 then return false end
+    if #sources == 0 then
+        if kind == "Key" then
+            destroyKeyProxy(entry)
+        end
+        return false
+    end
+
+    if kind == "Key" and makeKeyDrawerProxy(object, entry, sources) then
+        -- Hidden keys use the lightweight proxy above. Do not clone the key
+        -- mesh into the normal Item helper; the Drawer remains fully outlined.
+        destroyItemHelper(entry)
+        return true
+    elseif kind == "Key" then
+        destroyKeyProxy(entry)
+    end
 
     -- Do not rebuild the helper on every reconciliation scan. Mobile
     -- interaction prompts can cause DescendantAdded/Removing activity while
@@ -819,6 +973,17 @@ local function createVisual(kind, object, entry)
         end
         updateLabel(kind, object, entry)
         return true
+    end
+
+    if kind == "Key" then
+        local sources = getItemParts(object, kind)
+        if #sources > 0 and makeKeyDrawerProxy(object, entry, sources) then
+            destroyItemHelper(entry)
+            updateLabel(kind, object, entry)
+            return true
+        elseif entry.KeyProxyPart or entry.KeyProxyHighlight then
+            destroyKeyProxy(entry)
+        end
     end
 
     if entry.Highlight and entry.Highlight.Parent then
