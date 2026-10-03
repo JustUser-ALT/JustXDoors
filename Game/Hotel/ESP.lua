@@ -559,8 +559,21 @@ local function findContainingDrawer(object)
 end
 
 destroyKeyProxy = function(entry)
+    if entry.KeyProxyBoxes then
+        for _, box in ipairs(entry.KeyProxyBoxes) do
+            pcall(function() box:Destroy() end)
+        end
+        entry.KeyProxyBoxes = nil
+    end
+
     if entry.KeyProxyHighlight then
-        pcall(function() entry.KeyProxyHighlight:Destroy() end)
+        if typeof(entry.KeyProxyHighlight) == "Instance" then
+            pcall(function() entry.KeyProxyHighlight:Destroy() end)
+        elseif type(entry.KeyProxyHighlight) == "table" then
+            for _, box in ipairs(entry.KeyProxyHighlight) do
+                pcall(function() box:Destroy() end)
+            end
+        end
         entry.KeyProxyHighlight = nil
     end
 
