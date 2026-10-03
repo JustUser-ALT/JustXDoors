@@ -592,62 +592,49 @@ local function makeKeyDrawerProxy(object, entry, sources)
         return false
     end
 
-    -- Keep the proven Infinite Yield render path (WireframeHandleAdornment with
-    -- AlwaysOnTop), but make each box into a very thin edge. This avoids
-    -- LineHandleAdornment compatibility issues while removing the large
-    -- filled cube appearance.
     destroyKeyProxy(entry)
 
-    local edges = {}
+    local wires = {}
     local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
 
-    local function addEdge(source, index, size, offset)
-        local edge = Instance.new("WireframeHandleAdornment")
-        edge.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
-        edge.Adornee = source
-        edge.AlwaysOnTop = true
-        edge.ZIndex = 10
-        edge.Size = size
-        edge.CFrame = CFrame.new(offset)
-        edge.Transparency = 0
-        edge.Color3 = keyColor
-        edge.Parent = VisualContainer
-        edges[#edges + 1] = edge
-    end
-
-    for _, source in ipairs(sources) do
+    for index, source in ipairs(sources) do
         if source and source.Parent and source:IsA("BasePart") then
-            local size = source.Size
-            local t = math.clamp(math.min(size.X, size.Y, size.Z) * 0.12, 0.015, 0.08)
-            local x, y, z = size.X, size.Y, size.Z
+            local h = source.Size / 2
+            local wire = Instance.new("WireframeHandleAdornment")
+            wire.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
+            wire.Adornee = source
+            wire.AlwaysOnTop = true
+            wire.ZIndex = 10
+            wire.Thickness = 2
+            wire.Color3 = keyColor
+            wire.Transparency = 0
+            wire.Parent = VisualContainer
 
-            -- 4 edges parallel to X.
-            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, y/2, z/2))
-            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, y/2, -z/2))
-            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, -y/2, z/2))
-            addEdge(source, #edges + 1, Vector3.new(x, t, t), Vector3.new(0, -y/2, -z/2))
+            wire:AddLines({
+                Vector3.new(-h.X,-h.Y,-h.Z), Vector3.new(h.X,-h.Y,-h.Z),
+                Vector3.new(-h.X,h.Y,-h.Z), Vector3.new(h.X,h.Y,-h.Z),
+                Vector3.new(-h.X,-h.Y,h.Z), Vector3.new(h.X,-h.Y,h.Z),
+                Vector3.new(-h.X,h.Y,h.Z), Vector3.new(h.X,h.Y,h.Z),
+                Vector3.new(-h.X,-h.Y,-h.Z), Vector3.new(-h.X,h.Y,-h.Z),
+                Vector3.new(h.X,-h.Y,-h.Z), Vector3.new(h.X,h.Y,-h.Z),
+                Vector3.new(-h.X,-h.Y,h.Z), Vector3.new(-h.X,h.Y,h.Z),
+                Vector3.new(h.X,-h.Y,h.Z), Vector3.new(h.X,h.Y,h.Z),
+                Vector3.new(-h.X,-h.Y,-h.Z), Vector3.new(-h.X,-h.Y,h.Z),
+                Vector3.new(h.X,-h.Y,-h.Z), Vector3.new(h.X,-h.Y,h.Z),
+                Vector3.new(-h.X,h.Y,-h.Z), Vector3.new(-h.X,h.Y,h.Z),
+                Vector3.new(h.X,h.Y,-h.Z), Vector3.new(h.X,h.Y,h.Z),
+            })
 
-            -- 4 edges parallel to Y.
-            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(x/2, 0, z/2))
-            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(x/2, 0, -z/2))
-            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(-x/2, 0, z/2))
-            addEdge(source, #edges + 1, Vector3.new(t, y, t), Vector3.new(-x/2, 0, -z/2))
-
-            -- 4 edges parallel to Z.
-            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(x/2, y/2, 0))
-            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(x/2, -y/2, 0))
-            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(-x/2, y/2, 0))
-            addEdge(source, #edges + 1, Vector3.new(t, t, z), Vector3.new(-x/2, -y/2, 0))
+            wires[#wires + 1] = wire
         end
     end
 
-    if #edges == 0 then
+    if #wires == 0 then
         return false
     end
 
-    entry.KeyProxyBoxes = edges
-    entry.KeyProxyHighlight = edges
-
+    entry.KeyProxyBoxes = wires
+    entry.KeyProxyHighlight = wires
     return true
 end
 
