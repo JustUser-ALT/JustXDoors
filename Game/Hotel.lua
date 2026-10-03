@@ -59,7 +59,7 @@ function Hotel:Init(core, modules)
         RefreshLabels = function() ESP:RefreshLabels() end,
         SetEntities = function(selected)
             local state = {
-                Rush=false, Ambush=false, Dupe=false, Eyes=false, Sally=false,
+                Rush=false, Ambush=false, Dupe=false, Eyes=false, Dread=false, Sally=false,
                 Seek=false, Figure=false, Snare=false, Screech=false,
             }
             if type(selected) == "table" then

@@ -182,7 +182,8 @@ local function getEntityPart(kind, object)
         Seek={"Seek"},
         Figure={"HumanoidRootPart"},
         Snare={"Snare"},
-        Screech={"Screech"},\n        Dread={"Dread"},
+        Screech={"Screech"},
+        Dread={"Dread","Main"},
     }
 
     for _, name in ipairs(names[kind] or {}) do
