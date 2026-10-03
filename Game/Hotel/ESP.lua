@@ -181,7 +181,7 @@ local function getEntityPart(kind, object)
         Eyes={"Eyes"},
         SallyLingering={"Sally"},
         SallyMoving={"Sally"},
-        Seek={"SeekMovingNewClone","SeekMovingNew","Seek"},
+        Seek={"SeekRig","SeekMovingNewClone","SeekMovingNew","Seek"},
         Figure={"HumanoidRootPart","UpperTorso","Torso","Head"},
         Snare={"Snare"},
         Screech={"Screech"},
@@ -2120,19 +2120,17 @@ local function scanEntities(seen)
     if Rooms then
         for _, room in ipairs(Rooms:GetChildren()) do
             if Enabled.Seek then
-                -- Abyssal itself does not currently register SeekMovingNewClone
-                -- as an Entity ESP object. Keep our Seek detection explicit,
-                -- but register every matching clone instead of only the first.
+                -- SeekMovingNewClone is a container. Its actual character rig
+                -- is SeekMovingNewClone.SeekRig, analogous to FigureRig.
+                -- Highlight the rig itself rather than the outer controller
+                -- model so Roblox Highlight receives the real entity geometry.
                 for _, object in ipairs(room:GetDescendants()) do
-                    if object:IsA("Model")
-                        and (
-                            object.Name == "SeekMovingNewClone"
-                            or object.Name == "SeekMovingNew"
-                            or object.Name == "Seek"
-                        )
-                    then
-                        seen.Seek[object] = true
-                        addObject("Seek", object, room)
+                    if object:IsA("Model") and object.Name == "SeekMovingNewClone" then
+                        local rig = object:FindFirstChild("SeekRig")
+                        if rig and rig:IsA("Model") then
+                            seen.Seek[rig] = true
+                            addObject("Seek", rig, room)
+                        end
                     end
                 end
             end
