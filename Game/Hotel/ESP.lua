@@ -1955,6 +1955,17 @@ local function scanRoom(room, seen)
             seen.ElectricalKey[object] = true
             addObject("ElectricalKey", object, room)
         end
+
+        -- Abyssal treats Dupe as an Entity and registers every FakeDoor /
+        -- DoorFake instance individually. Do not use FindFirstChild here:
+        -- one room can contain multiple Dupes with the same name.
+        if Enabled.Dupe
+            and (name == "DoorFake" or name == "FakeDoor")
+            and object:FindFirstChild("Hidden")
+        then
+            seen.Dupe[object] = true
+            addObject("Dupe", object, room)
+        end
     end
 
     if Enabled.Crucifix and room.Name == "1" then
@@ -2040,14 +2051,6 @@ local function scanEntities(seen)
 
     if Rooms then
         for _, room in ipairs(Rooms:GetChildren()) do
-            if Enabled.Dupe then
-                local object = room:FindFirstChild("SideroomDupe", true)
-                if object then
-                    seen.Dupe[object] = true
-                    addObject("Dupe", object, room)
-                end
-            end
-
             if Enabled.Seek then
                 local object = room:FindFirstChild("SeekMovingNewClone", true)
                 if object then
