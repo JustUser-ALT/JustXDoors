@@ -559,21 +559,8 @@ local function findContainingDrawer(object)
 end
 
 destroyKeyProxy = function(entry)
-    if entry.KeyProxyBoxes then
-        for _, box in ipairs(entry.KeyProxyBoxes) do
-            pcall(function() box:Destroy() end)
-        end
-        entry.KeyProxyBoxes = nil
-    end
-
     if entry.KeyProxyHighlight then
-        if typeof(entry.KeyProxyHighlight) == "Instance" then
-            pcall(function() entry.KeyProxyHighlight:Destroy() end)
-        elseif type(entry.KeyProxyHighlight) == "table" then
-            for _, box in ipairs(entry.KeyProxyHighlight) do
-                pcall(function() box:Destroy() end)
-            end
-        end
+        pcall(function() entry.KeyProxyHighlight:Destroy() end)
         entry.KeyProxyHighlight = nil
     end
 
@@ -592,6 +579,11 @@ local function makeKeyDrawerProxy(object, entry, sources)
         return false
     end
 
+    -- A KeyObtain inside a Drawer is a special case. Highlight has a
+    -- renderer conflict here when the parent Drawer also has a Highlight.
+    -- Infinite Yield's partesp avoids that path entirely: it uses one
+    -- BoxHandleAdornment per real BasePart with AlwaysOnTop enabled.
+    -- Use the same primitive for hidden Drawer keys.
     destroyKeyProxy(entry)
 
     local boxes = {}
@@ -617,7 +609,10 @@ local function makeKeyDrawerProxy(object, entry, sources)
     end
 
     entry.KeyProxyBoxes = boxes
+    -- Keep this field for compatibility with cleanup paths that already
+    -- know about the old single-proxy Highlight.
     entry.KeyProxyHighlight = boxes
+
     return true
 end
 local function destroyItemHelper(entry, keepKeyProxy)
