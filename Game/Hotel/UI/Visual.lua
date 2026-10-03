@@ -44,7 +44,12 @@ function VisualUI:Create(ctx)
         Name = "Items",
         Flag = "Hotel_Items",
         Options = {"Key","Gold","Bandage","Smoothie","Flashlight","Tip Jar","Vitamins","Lighter","Candle","AlarmClock","Lockpick","Skeleton Key","Shears","Battery","Rift Candle","Rift Smoothie","Rift Jar","Donut","Crucifix","Sally Toy","Electrical Key","Breaker Pole"},
-        Values = {Gold = {Min = 1, Max = 6, Default = 1}},
+        Values = {
+            Gold = {
+                {Name = "Min Level", Min = 1, Max = 6, Default = 1},
+                {Name = "Max Level", Min = 1, Max = 6, Default = 6},
+            },
+        },
         MultiSelect = true,
         MaxSelect = 24,
         Default = {},
