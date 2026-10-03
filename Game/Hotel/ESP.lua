@@ -954,6 +954,44 @@ local function makeEntityHighlight(kind, object, entry)
         return true
     end
 
+    -- Screech and Snare use the normal Abyssal AddESP style.
+    -- Do NOT inject HighlightHumanoid into these entities.
+    if kind == "Screech" or kind == "Snare" then
+        if not (object:IsA("Model") or object:IsA("BasePart")) then
+            return false
+        end
+
+        local color = Colors[kind] or Color3.new(1, 1, 1)
+
+        if entry.EntityHumanoid then
+            pcall(function() entry.EntityHumanoid:Destroy() end)
+            entry.EntityHumanoid = nil
+        end
+
+        local highlight = entry.EntityHighlight
+
+        if not highlight or not highlight.Parent then
+            highlight = Instance.new("Highlight")
+            highlight.Name = "JustXDoors" .. kind .. "ESP"
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Adornee = object
+            highlight.Parent = EntityVisualContainer
+            entry.EntityHighlight = highlight
+            entry.Highlight = highlight
+        else
+            highlight.Adornee = object
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        end
+
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.FillTransparency = 0.75
+        highlight.OutlineTransparency = 0
+        highlight.Enabled = true
+
+        return true
+    end
+
     -- Rush/Ambush/Eyes/Dread use the special Abyssal-compatible renderer.
     -- Abyssal registers the Entity MODEL itself with AddESP, then adds
     -- HighlightHumanoid and makes its PrimaryPart transparent.
@@ -2127,11 +2165,15 @@ local function scanEntities(seen)
     end
 
     if Enabled.Screech then
-        local camera = workspace:FindFirstChild("Camera")
-        local object = camera and camera:FindFirstChild("Screech")
-        if object then
-            seen.Screech[object] = true
-            addObject("Screech", object, nil)
+        -- Screech can have multiple instances. Never use FindFirstChild:
+        -- register every Screech object currently present.
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object.Name == "Screech"
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                seen.Screech[object] = true
+                addObject("Screech", object, getRoom(object))
+            end
         end
     end
 
@@ -2180,10 +2222,15 @@ local function scanEntities(seen)
             end
 
             if Enabled.Snare then
-                local object = room:FindFirstChild("Snare", true)
-                if object then
-                    seen.Snare[object] = true
-                    addObject("Snare", object, room)
+                -- There may be several Snares in the same room. Register
+                -- every matching instance instead of only FindFirstChild().
+                for _, object in ipairs(room:GetDescendants()) do
+                    if object.Name == "Snare"
+                        and (object:IsA("Model") or object:IsA("BasePart"))
+                    then
+                        seen.Snare[object] = true
+                        addObject("Snare", object, room)
+                    end
                 end
             end
         end
