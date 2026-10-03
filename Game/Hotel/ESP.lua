@@ -652,8 +652,10 @@ local function makeKeyDrawerProxy(object, entry, sources)
     return true
 end
 
-local function destroyItemHelper(entry)
-    destroyKeyProxy(entry)
+local function destroyItemHelper(entry, keepKeyProxy)
+    if not keepKeyProxy then
+        destroyKeyProxy(entry)
+    end
 
     if entry.Highlight then
         pcall(function() entry.Highlight:Destroy() end)
@@ -683,7 +685,7 @@ local function makeItemHighlight(kind, object, entry)
     if kind == "Key" and makeKeyDrawerProxy(object, entry, sources) then
         -- Hidden keys use the lightweight proxy above. Do not clone the key
         -- mesh into the normal Item helper; the Drawer remains fully outlined.
-        destroyItemHelper(entry)
+        destroyItemHelper(entry, true)
         return true
     elseif kind == "Key" then
         destroyKeyProxy(entry)
@@ -978,7 +980,7 @@ local function createVisual(kind, object, entry)
     if kind == "Key" then
         local sources = getItemParts(object, kind)
         if #sources > 0 and makeKeyDrawerProxy(object, entry, sources) then
-            destroyItemHelper(entry)
+            destroyItemHelper(entry, true)
             updateLabel(kind, object, entry)
             return true
         elseif entry.KeyProxyPart or entry.KeyProxyHighlight then
