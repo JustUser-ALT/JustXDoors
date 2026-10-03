@@ -592,42 +592,70 @@ local function makeKeyDrawerProxy(object, entry, sources)
         return false
     end
 
-    -- A KeyObtain inside a Drawer is a special case. Highlight has a
-    -- renderer conflict here when the parent Drawer also has a Highlight.
-    -- Infinite Yield's partesp avoids that path entirely: it uses one
-    -- BoxHandleAdornment per real BasePart with AlwaysOnTop enabled.
-    -- Use the same primitive for hidden Drawer keys.
+    -- Infinite Yield proved that HandleAdornment is the render path that
+    -- survives the Drawer Highlight. Instead of the large BoxHandleAdornment
+    -- cube, use LineHandleAdornment to draw the 12 edges of each real key
+    -- part. This keeps the AlwaysOnTop behavior while looking like a normal
+    -- thin ESP outline.
     destroyKeyProxy(entry)
 
-    local boxes = {}
+    local lines = {}
     local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
 
-    for index, source in ipairs(sources) do
+    local function addLine(source, index, localCFrame, length)
+        local line = Instance.new("LineHandleAdornment")
+        line.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
+        line.Adornee = source
+        line.CFrame = localCFrame
+        line.Length = math.max(length, 0.01)
+        line.Thickness = 2
+        line.AlwaysOnTop = true
+        line.ZIndex = 10
+        line.Color3 = keyColor
+        line.Transparency = 0
+        line.Parent = VisualContainer
+        lines[#lines + 1] = line
+    end
+
+    for _, source in ipairs(sources) do
         if source and source.Parent and source:IsA("BasePart") then
-            local box = Instance.new("BoxHandleAdornment")
-            box.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
-            box.Adornee = source
-            box.AlwaysOnTop = true
-            box.ZIndex = 10
-            box.Size = source.Size
-            box.Transparency = 0.3
-            box.Color3 = keyColor
-            box.Parent = VisualContainer
-            boxes[#boxes + 1] = box
+            local size = source.Size
+            local x = size.X
+            local y = size.Y
+            local z = size.Z
+
+            -- Four edges parallel to local Z.
+            addLine(source, #lines + 1, CFrame.new(x/2, y/2, 0), z)
+            addLine(source, #lines + 1, CFrame.new(x/2, -y/2, 0), z)
+            addLine(source, #lines + 1, CFrame.new(-x/2, y/2, 0), z)
+            addLine(source, #lines + 1, CFrame.new(-x/2, -y/2, 0), z)
+
+            -- Four edges parallel to local X.
+            local rotY = CFrame.fromOrientation(0, math.rad(90), 0)
+            addLine(source, #lines + 1, rotY + Vector3.new(0, y/2, z/2), x)
+            addLine(source, #lines + 1, rotY + Vector3.new(0, -y/2, z/2), x)
+            addLine(source, #lines + 1, rotY + Vector3.new(0, y/2, -z/2), x)
+            addLine(source, #lines + 1, rotY + Vector3.new(0, -y/2, -z/2), x)
+
+            -- Four edges parallel to local Y.
+            local rotX = CFrame.fromOrientation(math.rad(90), 0, 0)
+            addLine(source, #lines + 1, rotX + Vector3.new(x/2, 0, z/2), y)
+            addLine(source, #lines + 1, rotX + Vector3.new(x/2, 0, -z/2), y)
+            addLine(source, #lines + 1, rotX + Vector3.new(-x/2, 0, z/2), y)
+            addLine(source, #lines + 1, rotX + Vector3.new(-x/2, 0, -z/2), y)
         end
     end
 
-    if #boxes == 0 then
+    if #lines == 0 then
         return false
     end
 
-    entry.KeyProxyBoxes = boxes
-    -- Keep this field for compatibility with cleanup paths that already
-    -- know about the old single-proxy Highlight.
-    entry.KeyProxyHighlight = boxes
+    entry.KeyProxyBoxes = lines
+    entry.KeyProxyHighlight = lines
 
     return true
 end
+
 local function destroyItemHelper(entry, keepKeyProxy)
     if not keepKeyProxy then
         destroyKeyProxy(entry)
