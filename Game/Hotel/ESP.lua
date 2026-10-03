@@ -592,7 +592,7 @@ local function makeKeyDrawerProxy(object, entry, sources)
         return false
     end
 
-    -- Keep the proven Infinite Yield render path (BoxHandleAdornment with
+    -- Keep the proven Infinite Yield render path (WireframeHandleAdornment with
     -- AlwaysOnTop), but make each box into a very thin edge. This avoids
     -- LineHandleAdornment compatibility issues while removing the large
     -- filled cube appearance.
@@ -602,7 +602,7 @@ local function makeKeyDrawerProxy(object, entry, sources)
     local keyColor = Colors.Key or Color3.fromRGB(255,225,40)
 
     local function addEdge(source, index, size, offset)
-        local edge = Instance.new("BoxHandleAdornment")
+        local edge = Instance.new("WireframeHandleAdornment")
         edge.Name = "JustXDoorsKeyDrawerESP_" .. tostring(index)
         edge.Adornee = source
         edge.AlwaysOnTop = true
