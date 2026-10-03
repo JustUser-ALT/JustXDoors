@@ -832,17 +832,35 @@ local function prepareEntityForHighlight(kind, object, entry)
         return
     end
 
-    if not object:FindFirstChildOfClass("Humanoid") then
-        local humanoid = Instance.new("Humanoid")
+    -- Match Abyssal exactly: this is a dedicated Humanoid used by the
+    -- Roblox Highlight renderer. Do not skip it just because the Entity
+    -- already contains another Humanoid.
+    local humanoid = object:FindFirstChild("HighlightHumanoid")
+    if not humanoid then
+        humanoid = Instance.new("Humanoid")
         humanoid.Name = "HighlightHumanoid"
         humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
         humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
         humanoid.NameDisplayDistance = 0
         humanoid.Parent = object
-        entry.EntityHumanoid = humanoid
+    end
+    entry.EntityHumanoid = humanoid
+
+    -- Abyssal waits until PrimaryPart exists before registering Entity ESP.
+    -- Our scanner can see the model a little earlier, so use the same Entity
+    -- part mapping as the fallback PrimaryPart instead of creating a
+    -- Highlight against an incompletely initialized model.
+    local root = object.PrimaryPart
+    if not root then
+        local candidate = getEntityPart(kind, object)
+        if candidate and candidate:IsA("BasePart") then
+            pcall(function()
+                object.PrimaryPart = candidate
+            end)
+            root = object.PrimaryPart
+        end
     end
 
-    local root = object.PrimaryPart
     if root and root:IsA("BasePart") then
         root.Transparency = 0.999
         root.Material = Enum.Material.Plastic
@@ -865,18 +883,17 @@ local function makeEntityHighlight(kind, object, entry)
         return false
     end
 
-    -- Match Abyssal's order: prepare the Entity before relying on the
-    -- Highlight renderer.
-    prepareEntityForHighlight(kind, object, entry)
-
     local color = Colors[kind] or Color3.new(1, 1, 1)
     local highlight = entry.EntityHighlight
 
+    -- Match Abyssal's actual AddESP order:
+    -- create/register the Highlight first, then add HighlightHumanoid and
+    -- apply the transparent PrimaryPart workaround.
     if not highlight or not highlight.Parent then
         highlight = Instance.new("Highlight")
-        highlight.Name = "JustXDoorsEntityESP"
         highlight.FillTransparency = 1
         highlight.OutlineTransparency = 1
+        highlight.Name = "JustXDoorsEntityESP"
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Adornee = target
         highlight.Parent = EntityVisualContainer
@@ -889,9 +906,8 @@ local function makeEntityHighlight(kind, object, entry)
         highlight.Enabled = true
     end
 
-    -- Abyssal starts the Highlight invisible and then its ESP renderer
-    -- applies the configured Fill/Outline values. We can use the final
-    -- configured values directly because this module has no fade stage.
+    prepareEntityForHighlight(kind, object, entry)
+
     highlight.FillColor = color
     highlight.OutlineColor = color
     highlight.FillTransparency = 1
