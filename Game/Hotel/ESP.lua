@@ -1183,11 +1183,16 @@ local function scanRoom(room, seen)
 
         if Enabled.Gold and name == "GoldPile" then
             local foundLevel = false
+            local hasNumericLevel = false
             local minLevel = math.max(1, tonumber(Module.GoldMinLevel) or 1)
             local maxLevel = math.max(minLevel, tonumber(Module.GoldMaxLevel) or 6)
 
             for _, child in ipairs(object:GetChildren()) do
                 local level = tonumber(child.Name)
+                if level then
+                    hasNumericLevel = true
+                end
+
                 if level and level >= minLevel and level <= maxLevel
                     and (child:IsA("Model") or child:IsA("BasePart"))
                 then
@@ -1198,7 +1203,10 @@ local function scanRoom(room, seen)
             end
 
             -- Some versions expose GoldPile itself as the visible object.
-            if not foundLevel then
+            -- Only use that fallback when the pile has no numeric level
+            -- children at all. If levels exist but are outside the selected
+            -- range, nothing should be displayed.
+            if not hasNumericLevel then
                 seen.Gold[object] = true
                 addObject("Gold", object, room)
             end
