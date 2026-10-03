@@ -525,6 +525,17 @@ local function findContainingDrawer(object)
 
     local current = object.Parent
     while current and current ~= Rooms do
+        local name = string.lower(current.Name)
+
+        -- DOORS can store a KeyObtain directly under a drawer/container
+        -- branch rather than directly under the Dresser model. Accept the
+        -- actual drawer containers as well as the known furniture roots.
+        if current.Name == "DrawerContainer"
+            or string.find(name, "drawer", 1, true)
+        then
+            return current
+        end
+
         if current:IsA("Model")
             and (
                 current.Name == "Dresser"
@@ -535,6 +546,7 @@ local function findContainingDrawer(object)
         then
             return current
         end
+
         current = current.Parent
     end
 
@@ -627,7 +639,7 @@ local function makeKeyDrawerProxy(object, entry, sources)
         proxy.CanTouch = false
         proxy.CanQuery = false
         proxy.CastShadow = false
-        proxy.Transparency = 0.999
+        proxy.Transparency = 0.99
         proxy.Material = Enum.Material.Plastic
         proxy.Parent = VisualContainer
 
