@@ -1054,7 +1054,19 @@ local function createVisual(kind, object, entry)
     local adornee = object:IsA("Model") and object or getPart(object)
     if not adornee then return false end
 
-    if ITEM_KINDS[kind] then
+    -- Some interactables use live interaction/prompt parts that can take
+    -- over the Highlight renderer when the mobile finger prompt appears.
+    -- Use the same isolated helper geometry as Items for those objects.
+    -- Do not apply this to Drawers/Closets: their live Highlight behavior is
+    -- intentionally kept because of the Key-inside-Drawer workaround.
+    local HELPER_INTERACTABLES = {
+        VentGate = true,
+        Lever = true,
+        Toolshed = true,
+        Chest = true,
+    }
+
+    if ITEM_KINDS[kind] or HELPER_INTERACTABLES[kind] then
         makeItemHighlight(kind, object, entry)
     else
         makeHighlight(kind, adornee, entry, 1)
