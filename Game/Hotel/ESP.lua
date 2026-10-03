@@ -471,10 +471,41 @@ local function getItemParts(object, kind)
         return parts
     end
 
+    local function isInteractionPart(part)
+        local parent = part.Parent
+
+        while parent and parent ~= object do
+            local name = string.lower(parent.Name)
+
+            if parent.Name == "PromptHitbox"
+                or parent.Name == "ModulePrompt"
+                or parent.Name == "Hitbox"
+                or string.find(name, "prompt", 1, true)
+                or string.find(name, "interaction", 1, true)
+            then
+                return true
+            end
+
+            parent = parent.Parent
+        end
+
+        local partName = string.lower(part.Name)
+        if part.Name == "PromptHitbox"
+            or part.Name == "ModulePrompt"
+            or part.Name == "Hitbox"
+            or string.find(partName, "prompt", 1, true)
+        then
+            return true
+        end
+
+        return false
+    end
+
     for _, child in ipairs(object:GetDescendants()) do
         if child:IsA("BasePart")
             and child.Transparency < 1
             and child.Size.Magnitude > 0.05
+            and not isInteractionPart(child)
         then
             parts[#parts + 1] = child
         end
@@ -503,6 +534,45 @@ local function makeItemHighlight(kind, object, entry)
 
     local sources = getItemParts(object, kind)
     if #sources == 0 then return false end
+
+    -- Do not rebuild the helper on every reconciliation scan. Mobile
+    -- interaction prompts can cause DescendantAdded/Removing activity while
+    -- the finger UI is visible. Recreating the Highlight during that burst
+    -- is what makes some item ESPs flicker or fragment into tiny dots.
+    -- Keep the existing helper when its source geometry is unchanged.
+    if entry.ItemHelperModel
+        and entry.Highlight
+        and entry.ItemSources
+    then
+        local sameSources = true
+        local sourceCount = 0
+
+        for source in pairs(entry.ItemSources) do
+            sourceCount += 1
+            if not source.Parent then
+                sameSources = false
+                break
+            end
+        end
+
+        if sameSources and sourceCount == #sources then
+            for _, source in ipairs(sources) do
+                if not entry.ItemSources[source] then
+                    sameSources = false
+                    break
+                end
+            end
+        else
+            sameSources = false
+        end
+
+        if sameSources then
+            entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+            entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+            entry.Highlight.Enabled = true
+            return true
+        end
+    end
 
     destroyItemHelper(entry)
 
@@ -551,6 +621,13 @@ local function makeItemHighlight(kind, object, entry)
 
         helper.Name = "JustXDoorsItemHighlightPart_" .. tostring(index)
         helper.CFrame = source.CFrame
+
+        -- Texture/surface details are irrelevant to the ESP and can make
+        -- transparent MeshPart highlights produce noisy pixel artifacts.
+        if helper:IsA("MeshPart") then
+            pcall(function() helper.TextureID = "" end)
+        end
+
         helper.Transparency = 0.999
         helper.CanCollide = false
         helper.CanTouch = false
@@ -1074,8 +1151,15 @@ local function scanDrops(seen)
                 root = root.Parent
             end
 
-            seen[kind][root] = true
-            addObject(kind, root, nil)
+            -- Only the actual top-level Drop is valid for this kind.
+            -- Example: Drops.BatteryPack.Handle.Battery must NOT become
+            -- a Battery ESP, because BatteryPack is a different item.
+            -- The same-name nested object in Drops.Candle/RiftCandle is
+            -- harmless because its resolved root keeps the matching name.
+            if root.Name == object.Name then
+                seen[kind][root] = true
+                addObject(kind, root, nil)
+            end
         end
     end
 end
