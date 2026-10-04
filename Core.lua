@@ -79,6 +79,9 @@ function Core:Create()
     self.Sections = {}
     self.Flags = JL.Flags
     self.SettingsCreated = false
+    self.CleanupHandlers = {}
+    self.CleanupOrder = {}
+    self.Destroying = false
 
     Window:Open()
 
@@ -186,6 +189,29 @@ function Core:GetWindow()
     return self.Window
 end
 
+function Core:RegisterCleanup(name, callback)
+    if type(callback) ~= "function" then
+        return false
+    end
+
+    self.CleanupHandlers = self.CleanupHandlers or {}
+    self.CleanupOrder = self.CleanupOrder or {}
+
+    local key = name or tostring(#self.CleanupOrder + 1)
+    if self.CleanupHandlers[key] == nil then
+        table.insert(self.CleanupOrder, key)
+    end
+
+    self.CleanupHandlers[key] = callback
+    return true
+end
+
+function Core:UnregisterCleanup(name)
+    if self.CleanupHandlers then
+        self.CleanupHandlers[name] = nil
+    end
+end
+
 function Core:GetPlayer()
     return Players.LocalPlayer
 end
@@ -209,6 +235,43 @@ function Core:GetRoot()
 end
 
 function Core:Destroy()
+    if self.Destroying then
+        return
+    end
+
+    self.Destroying = true
+
+    -- Modules must restore everything they changed before the UI disappears.
+    -- Run cleanup handlers in reverse registration order so dependent systems
+    -- (Hotel/Anti) are stopped before the shared Main systems are torn down.
+    local handlers = self.CleanupHandlers or {}
+    local order = self.CleanupOrder or {}
+
+    for index = #order, 1, -1 do
+        local name = order[index]
+        local callback = handlers[name]
+        if callback then
+            pcall(callback)
+        end
+    end
+
+    for name, callback in pairs(handlers) do
+        local alreadyRun = false
+        for _, orderedName in ipairs(order) do
+            if orderedName == name then
+                alreadyRun = true
+                break
+            end
+        end
+
+        if not alreadyRun and callback then
+            pcall(callback)
+        end
+    end
+
+    table.clear(handlers)
+    self.CleanupOrder = {}
+
     if self.Window and self.Window.Destroy then
         pcall(function()
             self.Window:Destroy()
@@ -220,6 +283,7 @@ function Core:Destroy()
     self.Tabs = {}
     self.Sections = {}
     self.SettingsCreated = false
+    self.Destroying = false
 end
 
 return Core
