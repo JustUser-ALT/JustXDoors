@@ -646,6 +646,22 @@ local function applyPositionSpoofState(enabled)
 end
 
 local function updatePositionSpoof()
+    -- Roblox's Humanoid needs its normal spatial/collision behavior to enter
+    -- and maintain the Climbing state. Temporarily suspend Position Spoof
+    -- while the player is actually climbing a ladder.
+    if PositionSpoofEnabled
+        and Character
+        and Humanoid
+        and RootPart
+        and Humanoid:GetState() == Enum.HumanoidStateType.Climbing
+    then
+        if PositionSpoofApplied then
+            applyPositionSpoofState(false)
+            restoreCollisionSpoof()
+        end
+        return
+    end
+
     if not PositionSpoofEnabled or not Character or not Humanoid or not RootPart then
         if PositionSpoofApplied then
             applyPositionSpoofState(false)
