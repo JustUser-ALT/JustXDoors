@@ -10,9 +10,9 @@ function NotificationsUI:Create(ctx)
     ctx.Elements.NotificationEntities = page:Dropdown({
         Name = "Entities",
         Flag = "Hotel_NotificationEntities",
-        Options = {"Rush","Ambush","Glitch Rush","Glitch Ambush","Dupe","Eyes","Sally","Seek","Figure","Screech"},
+        Options = {"Rush","Ambush","Glitch Rush","Glitch Ambush","Glitch Screech","Dupe","Eyes","Sally","Seek","Figure","Screech"},
         MultiSelect = true,
-        MaxSelect = 10,
+        MaxSelect = 11,
         Default = {},
         Search = true,
         Callback = function() end,
