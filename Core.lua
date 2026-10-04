@@ -76,6 +76,25 @@ function Core:Create()
 
     self.Window = Window
 
+    -- JustLib Settings -> Close Hub destroys its ScreenGui directly.
+    -- It does not call Window:Destroy() or shared._JLActive.destroy().
+    -- ScreenGui.Destroying is therefore the reliable unload signal.
+    pcall(function()
+        local CoreGui = game:GetService("CoreGui")
+        local PlayerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        local gui = CoreGui:FindFirstChild("JustLib")
+            or (PlayerGui and PlayerGui:FindFirstChild("JustLib"))
+
+        if gui then
+            self.GUI = gui
+            self.GUIDestroyConnection = gui.Destroying:Connect(function()
+                if not self.Destroying then
+                    self:Destroy()
+                end
+            end)
+        end
+    end)
+
     -- JustLib's Settings -> Close Hub path does NOT call Window:Destroy().
     -- It calls shared._JLActive.destroy() directly. Hook that path as well,
     -- otherwise the UI disappears while Main/Hotel keep all runtime features.
