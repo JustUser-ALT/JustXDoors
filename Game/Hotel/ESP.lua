@@ -658,8 +658,6 @@ local function makeItemHighlight(kind, object, entry)
     -- its visible item geometry is not suitable for the cloned helper-model
     -- renderer. Use the live Model/BasePart directly in this one case.
     if kind == "ElectricalKey" then
-        destroyItemHelper(entry)
-
         local target = object
         if not target:IsA("Model") and not target:IsA("BasePart") then
             target = getPart(object)
@@ -668,6 +666,16 @@ local function makeItemHighlight(kind, object, entry)
         if not target then
             return false
         end
+
+        if entry.Highlight and entry.Highlight.Parent then
+            entry.Highlight.Adornee = target
+            entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+            entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+            entry.Highlight.Enabled = true
+            return true
+        end
+
+        destroyItemHelper(entry)
 
         local highlight = Instance.new("Highlight")
         highlight.Name = "JustXDoorsElectricalKeyESP"
