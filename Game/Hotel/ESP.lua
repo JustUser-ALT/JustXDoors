@@ -654,41 +654,141 @@ end
 local function makeItemHighlight(kind, object, entry)
     if not object or not VisualContainer then return false end
 
-    -- ElectricalKeyObtain can expose a valid BasePart for its label while
-    -- its visible item geometry is not suitable for the cloned helper-model
-    -- renderer. Use the live Model/BasePart directly in this one case.
+    -- ElectricalKeyObtain keeps its visible key geometry inside:
+    --   ElectricalKeyObtain.Hitbox.Key
+    --   ElectricalKeyObtain.Hitbox.inset
+    --   ElectricalKeyObtain.Hitbox.end
+    -- The normal item geometry filter intentionally ignores Hitbox/Prompt
+    -- descendants, so ElectricalKey needs its own renderer.
     if kind == "ElectricalKey" then
-        local target = object
-        if not target:IsA("Model") and not target:IsA("BasePart") then
-            target = getPart(object)
-        end
-
-        if not target then
+        local hitbox = object:FindFirstChild("Hitbox", true)
+        if not hitbox then
             return false
         end
 
-        if entry.Highlight and entry.Highlight.Parent then
-            entry.Highlight.Adornee = target
-            entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
-            entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-            entry.Highlight.Enabled = true
-            return true
+        local sources = {}
+        for _, child in ipairs(hitbox:GetDescendants()) do
+            if child:IsA("BasePart")
+                and (child.Name == "Key" or child.Name == "inset" or child.Name == "end")
+                and child.Transparency < 1
+                and child.Size.Magnitude > 0.05
+            then
+                sources[#sources + 1] = child
+            end
+        end
+
+        if #sources == 0 then
+            return false
+        end
+
+        -- Reuse the normal transparent helper-model technique, but only
+        -- with the three actual Electrical Key geometry parts.
+        if entry.ItemHelperModel and entry.Highlight and entry.ItemSources then
+            local sameSources = true
+            local count = 0
+
+            for source in pairs(entry.ItemSources) do
+                count += 1
+                if not source.Parent then
+                    sameSources = false
+                    break
+                end
+            end
+
+            if sameSources and count == #sources then
+                for _, source in ipairs(sources) do
+                    if not entry.ItemSources[source] then
+                        sameSources = false
+                        break
+                    end
+                end
+            else
+                sameSources = false
+            end
+
+            if sameSources then
+                entry.Highlight.Enabled = true
+                entry.Highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+                entry.Highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+                return true
+            end
         end
 
         destroyItemHelper(entry)
 
+        local helperModel = Instance.new("Model")
+        helperModel.Name = "JustXDoorsElectricalKeyESPModel"
+        helperModel.Parent = VisualContainer
+
+        local humanoid = Instance.new("Humanoid")
+        humanoid.Name = "JustXDoorsElectricalKeyESPHumanoid"
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+        humanoid.NameDisplayDistance = 0
+        humanoid.Parent = helperModel
+
+        local sourceMap = {}
+
+        for index, source in ipairs(sources) do
+            local helper
+
+            local ok, clone = pcall(function()
+                return source:Clone()
+            end)
+
+            if ok and clone and clone:IsA("BasePart") then
+                helper = clone
+
+                for _, child in ipairs(helper:GetDescendants()) do
+                    if not (
+                        child:IsA("SpecialMesh")
+                        or child:IsA("BlockMesh")
+                        or child:IsA("CylinderMesh")
+                    ) then
+                        pcall(function() child:Destroy() end)
+                    end
+                end
+            else
+                helper = Instance.new("Part")
+                helper.Size = source.Size
+            end
+
+            helper.Name = "JustXDoorsElectricalKeyPart_" .. tostring(index)
+            helper.CFrame = source.CFrame
+            helper.Transparency = 0.999
+            helper.CanCollide = false
+            helper.CanTouch = false
+            helper.CanQuery = false
+            helper.CastShadow = false
+            helper.Anchored = false
+            helper.Massless = true
+            helper.Material = Enum.Material.Plastic
+            helper.Parent = helperModel
+
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = helper
+            weld.Part1 = source
+            weld.Parent = helper
+
+            sourceMap[source] = helper
+        end
+
         local highlight = Instance.new("Highlight")
         highlight.Name = "JustXDoorsElectricalKeyESP"
-        highlight.Adornee = target
+        highlight.Adornee = helperModel
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
         highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
-        highlight.FillTransparency = 0.75
+        highlight.FillTransparency = 1
         highlight.OutlineTransparency = 0
         highlight.Enabled = true
         highlight.Parent = VisualContainer
 
+        entry.ItemHelperModel = helperModel
+        entry.ItemHumanoid = humanoid
+        entry.ItemSources = sourceMap
         entry.Highlight = highlight
+
         return true
     end
 
