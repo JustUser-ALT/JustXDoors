@@ -111,6 +111,14 @@ function Connector:Load()
     if CoreInstance.CreateSettings then
         CoreInstance:CreateSettings()
     end
+    task.defer(function()
+        if Main and Main.ReapplyEnabledFeatures then
+            pcall(function() Main:ReapplyEnabledFeatures() end)
+        end
+        if Hotel and Hotel.ReapplyEnabledFeatures then
+            pcall(function() Hotel:ReapplyEnabledFeatures() end)
+        end
+    end)
 
     -- Register module cleanup with Core so closing the hub and re-running
     -- the loader use exactly the same restoration path.
