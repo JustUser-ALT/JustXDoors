@@ -10,6 +10,7 @@ local AntiAmbushEnabled = false
 local AntiDupeEnabled = false
 local AntiDreadEnabled = false
 local AntiScreechEnabled = false
+local AntiGlitchScreechEnabled = false
 local AntiSnareEnabled = false
 local DetectionDistance = 150
 
@@ -266,14 +267,18 @@ end
 local function setAntiScreech(value)
     AntiScreechEnabled = value == true
 
-    local screech, glitchScreech = getScreechModules()
-
+    local screech = getScreechModules()
     if screech and screech:IsA("ModuleScript") then
         screech.Name = AntiScreechEnabled and "Screech_Disabled" or "Screech"
     end
+end
 
+local function setAntiGlitchScreech(value)
+    AntiGlitchScreechEnabled = value == true
+
+    local _, glitchScreech = getScreechModules()
     if glitchScreech and glitchScreech:IsA("ModuleScript") then
-        glitchScreech.Name = AntiScreechEnabled and "GlitchScreech_Disabled" or "GlitchScreech"
+        glitchScreech.Name = AntiGlitchScreechEnabled and "GlitchScreech_Disabled" or "GlitchScreech"
     end
 end
 
@@ -460,6 +465,15 @@ function AntiUI:Create(ctx)
         end,
     })
 
+    ctx.Elements.AntiGlitchScreech = page:Toggle({
+        Name = "Anti Glitch Screech",
+        Flag = "Hotel_AntiGlitchScreech",
+        Default = false,
+        Callback = function(value)
+            setAntiGlitchScreech(value)
+        end,
+    })
+
     ctx.Elements.AntiSnare = page:Toggle({
         Name = "Anti Snare",
         Flag = "Hotel_AntiSnare",
@@ -479,7 +493,7 @@ function AntiUI:Create(ctx)
     })
 
     page:Label({
-        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Anti Screech disables Screech and GlitchScreech. Anti Snare disables Snare touch damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
+        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Anti Screech disables Screech. Anti Glitch Screech disables GlitchScreech. Anti Snare disables Snare touch damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
     })
 
     start()
@@ -492,11 +506,13 @@ function AntiUI:Destroy()
     AntiEyesEnabled = false
     AntiDreadEnabled = false
     AntiScreechEnabled = false
+    AntiGlitchScreechEnabled = false
     AntiSnareEnabled = false
 
     setAntiEyes(false)
     setAntiDread(false)
     setAntiScreech(false)
+    setAntiGlitchScreech(false)
     setAntiSnare(false)
     setPositionSpoof(false)
     setDupeBypass(false)
