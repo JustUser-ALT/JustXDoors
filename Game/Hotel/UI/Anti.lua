@@ -251,14 +251,32 @@ end
 
 local function setAntiScreech(value)
     AntiScreechEnabled = value == true
-    local module = getScreechModule()
-    if module then setModuleDisabled(module, AntiScreechEnabled, "Screech") end
+
+    if AntiScreechEnabled then
+        local cameraContainer = workspace:FindFirstChild("Camera")
+        if cameraContainer then
+            for _, object in ipairs(cameraContainer:GetChildren()) do
+                if object.Name == "Screech" then
+                    pcall(function() object:Destroy() end)
+                end
+            end
+        end
+    end
 end
 
 local function setAntiGlitchScreech(value)
     AntiGlitchScreechEnabled = value == true
-    local module = getGlitchScreechModule()
-    if module then setModuleDisabled(module, AntiGlitchScreechEnabled, "GlitchScreech") end
+
+    if AntiGlitchScreechEnabled then
+        local cameraContainer = workspace:FindFirstChild("Camera")
+        if cameraContainer then
+            for _, object in ipairs(cameraContainer:GetChildren()) do
+                if object.Name == "GlitchScreech" then
+                    pcall(function() object:Destroy() end)
+                end
+            end
+        end
+    end
 end
 
 local function setAntiDread(value)
