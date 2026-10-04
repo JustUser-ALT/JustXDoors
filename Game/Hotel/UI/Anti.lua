@@ -9,11 +9,14 @@ local AntiRushEnabled = false
 local AntiAmbushEnabled = false
 local AntiDupeEnabled = false
 local AntiDreadEnabled = false
+local AntiScreechEnabled = false
+local AntiSnareEnabled = false
 local DetectionDistance = 150
 
 local HeartbeatConnection
 local CharacterConnection
 local DupeConnection
+local SnareConnection
 local SetPositionSpoof
 local PositionSpoofState = false
 
@@ -244,6 +247,85 @@ local function getDreadModule()
     return modules:FindFirstChild("Dread") or modules:FindFirstChild("Dread_Disabled")
 end
 
+local function getScreechModules()
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+    local mainUI = playerGui and playerGui:FindFirstChild("MainUI")
+    local initiator = mainUI and mainUI:FindFirstChild("Initiator")
+    local mainGame = initiator and initiator:FindFirstChild("Main_Game")
+    local remoteListener = mainGame and mainGame:FindFirstChild("RemoteListener")
+    local modules = remoteListener and remoteListener:FindFirstChild("Modules")
+
+    if not modules then
+        return nil, nil
+    end
+
+    return modules:FindFirstChild("Screech") or modules:FindFirstChild("Screech_Disabled"),
+        modules:FindFirstChild("GlitchScreech") or modules:FindFirstChild("GlitchScreech_Disabled")
+end
+
+local function setAntiScreech(value)
+    AntiScreechEnabled = value == true
+
+    local screech, glitchScreech = getScreechModules()
+
+    if screech and screech:IsA("ModuleScript") then
+        screech.Name = AntiScreechEnabled and "Screech_Disabled" or "Screech"
+    end
+
+    if glitchScreech and glitchScreech:IsA("ModuleScript") then
+        glitchScreech.Name = AntiScreechEnabled and "GlitchScreech_Disabled" or "GlitchScreech"
+    end
+end
+
+local function applySnareBypass(object)
+    if not AntiSnareEnabled or not object or object.Name ~= "Snare" then
+        return
+    end
+
+    for _, part in ipairs(object:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanTouch = false
+        end
+    end
+end
+
+local function setAntiSnare(value)
+    AntiSnareEnabled = value == true
+
+    if SnareConnection then
+        SnareConnection:Disconnect()
+        SnareConnection = nil
+    end
+
+    if AntiSnareEnabled then
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object.Name == "Snare" then
+                applySnareBypass(object)
+            end
+        end
+
+        SnareConnection = workspace.DescendantAdded:Connect(function(object)
+            if object.Name ~= "Snare" then
+                return
+            end
+
+            task.defer(function()
+                applySnareBypass(object)
+            end)
+        end)
+    else
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object.Name == "Snare" then
+                for _, part in ipairs(object:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanTouch = true
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function setAntiDread(value)
     AntiDreadEnabled = value == true
 
@@ -369,6 +451,24 @@ function AntiUI:Create(ctx)
         end,
     })
 
+    ctx.Elements.AntiScreech = page:Toggle({
+        Name = "Anti Screech",
+        Flag = "Hotel_AntiScreech",
+        Default = false,
+        Callback = function(value)
+            setAntiScreech(value)
+        end,
+    })
+
+    ctx.Elements.AntiSnare = page:Toggle({
+        Name = "Anti Snare",
+        Flag = "Hotel_AntiSnare",
+        Default = false,
+        Callback = function(value)
+            setAntiSnare(value)
+        end,
+    })
+
     ctx.Elements.AntiDupe = page:Toggle({
         Name = "Anti Dupe",
         Flag = "Hotel_AntiDupe",
@@ -379,7 +479,7 @@ function AntiUI:Create(ctx)
     })
 
     page:Label({
-        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Anti Eyes bypasses Eyes only; Lookman is not affected.",
+        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Anti Screech disables Screech and GlitchScreech. Anti Snare disables Snare touch damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
     })
 
     start()
@@ -391,9 +491,13 @@ function AntiUI:Destroy()
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
     AntiDreadEnabled = false
+    AntiScreechEnabled = false
+    AntiSnareEnabled = false
 
     setAntiEyes(false)
     setAntiDread(false)
+    setAntiScreech(false)
+    setAntiSnare(false)
     setPositionSpoof(false)
     setDupeBypass(false)
 
