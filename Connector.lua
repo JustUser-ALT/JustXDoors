@@ -66,6 +66,7 @@ function Connector:Load()
     local Hotel = load("Game/Hotel.lua")
 
     local HotelModules = {
+        Main = Main,
         Game = HotelGame,
         ESP = HotelESP,
         Notifications = HotelNotifications,
