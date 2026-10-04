@@ -19,6 +19,9 @@ local HeartbeatConnection
 local CharacterConnection
 local DupeConnection
 local SnareConnection
+local ScreechConnection
+local GlitchScreechConnection
+local CameraConnection
 local SetPositionSpoof
 local PositionSpoofState = false
 
@@ -330,34 +333,81 @@ local function setModuleDisabled(module, disabled, normalName)
     module.Name = disabled and (normalName .. "_Disabled") or normalName
 end
 
-local function setAntiScreech(value)
-    AntiScreechEnabled = value == true
+local function clearScreechConnections()
+    if ScreechConnection then pcall(function() ScreechConnection:Disconnect() end) end
+    if GlitchScreechConnection then pcall(function() GlitchScreechConnection:Disconnect() end) end
+    if CameraConnection then pcall(function() CameraConnection:Disconnect() end) end
+    ScreechConnection = nil
+    GlitchScreechConnection = nil
+    CameraConnection = nil
+end
+
+local function removeScreechChildren(cameraContainer)
+    if not cameraContainer then return end
+
+    for _, object in ipairs(cameraContainer:GetChildren()) do
+        if (AntiScreechEnabled and object.Name == "Screech")
+            or (AntiGlitchScreechEnabled and object.Name == "GlitchScreech")
+        then
+            pcall(function() object:Destroy() end)
+        end
+    end
+end
+
+local function bindScreechContainer(cameraContainer)
+    if not cameraContainer then return end
+
+    removeScreechChildren(cameraContainer)
 
     if AntiScreechEnabled then
+        ScreechConnection = cameraContainer.ChildAdded:Connect(function(object)
+            if object.Name == "Screech" then
+                task.defer(function()
+                    if AntiScreechEnabled and object.Parent == cameraContainer then
+                        pcall(function() object:Destroy() end)
+                    end
+                end)
+            end
+        end)
+    end
+
+    if AntiGlitchScreechEnabled then
+        GlitchScreechConnection = cameraContainer.ChildAdded:Connect(function(object)
+            if object.Name == "GlitchScreech" then
+                task.defer(function()
+                    if AntiGlitchScreechEnabled and object.Parent == cameraContainer then
+                        pcall(function() object:Destroy() end)
+                    end
+                end)
+            end
+        end)
+    end
+end
+
+local function setAntiScreech(value)
+    AntiScreechEnabled = value == true
+    clearScreechConnections()
+
+    if AntiScreechEnabled or AntiGlitchScreechEnabled then
         local cameraContainer = workspace:FindFirstChild("Camera")
         if cameraContainer then
-            for _, object in ipairs(cameraContainer:GetChildren()) do
-                if object.Name == "Screech" then
-                    pcall(function() object:Destroy() end)
-                end
-            end
+            bindScreechContainer(cameraContainer)
         end
+
+        CameraConnection = workspace.ChildAdded:Connect(function(object)
+            if object.Name ~= "Camera" then return end
+            task.defer(function()
+                if AntiScreechEnabled or AntiGlitchScreechEnabled then
+                    bindScreechContainer(object)
+                end
+            end)
+        end)
     end
 end
 
 local function setAntiGlitchScreech(value)
     AntiGlitchScreechEnabled = value == true
-
-    if AntiGlitchScreechEnabled then
-        local cameraContainer = workspace:FindFirstChild("Camera")
-        if cameraContainer then
-            for _, object in ipairs(cameraContainer:GetChildren()) do
-                if object.Name == "GlitchScreech" then
-                    pcall(function() object:Destroy() end)
-                end
-            end
-        end
-    end
+    setAntiScreech(AntiScreechEnabled)
 end
 
 local function setAntiDread(value)
@@ -722,6 +772,7 @@ function AntiUI:Create(ctx)
 end
 
 function AntiUI:Destroy()
+    clearScreechConnections()
     AntiRushEnabled = false
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
