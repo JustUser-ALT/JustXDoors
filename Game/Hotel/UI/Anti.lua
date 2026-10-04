@@ -143,8 +143,8 @@ end
 local EntityNames = {
     RushMoving = 85,
     AmbushMoving = 150,
-    ["RNIUSHCG=="] = 90,
-    AR0xMBUSH = 175,
+    GlitchRush = 90,
+    GlitchAmbush = 175,
 }
 
 local function getCharacterRoot()
@@ -180,9 +180,9 @@ end
 
 local function shouldPositionSpoof()
     return (AntiRushEnabled
-        and (isEntityNearby("RushMoving", 85) or isEntityNearby("RNIUSHCG==", 90)))
+        and (isEntityNearby("RushMoving", 85) or isEntityNearby("GlitchRush", 90)))
         or (AntiAmbushEnabled
-        and (isEntityNearby("AmbushMoving", 150) or isEntityNearby("AR0xMBUSH", 175)))
+        and (isEntityNearby("AmbushMoving", 150) or isEntityNearby("GlitchAmbush", 175)))
 end
 
 local function setPositionSpoof(value)
@@ -374,22 +374,54 @@ local function start()
     local replicatedStorage = game:GetService("ReplicatedStorage")
     local connections = {}
 
-    local function handleModule(object)
+    -- Screech and GlitchScreech are actual runtime models under
+    -- workspace.Camera. Anti simply removes those models instead of
+    -- renaming ModuleScripts.
+    local function removeCameraEntity(object)
+        if not object then return end
+        if AntiScreechEnabled and object.Name == "Screech" then
+            pcall(function() object:Destroy() end)
+            return
+        end
+        if AntiGlitchScreechEnabled and object.Name == "GlitchScreech" then
+            pcall(function() object:Destroy() end)
+        end
+    end
+
+    local function scanCameraEntities()
+        local cameraContainer = workspace:FindFirstChild("Camera")
+        if not cameraContainer then return end
+
+        for _, object in ipairs(cameraContainer:GetChildren()) do
+            removeCameraEntity(object)
+        end
+    end
+
+    local cameraContainer = workspace:FindFirstChild("Camera")
+    if cameraContainer then
+        table.insert(connections, cameraContainer.ChildAdded:Connect(function(object)
+            task.defer(removeCameraEntity, object)
+        end))
+        scanCameraEntities()
+    end
+
+    table.insert(connections, workspace.ChildAdded:Connect(function(object)
+        if object.Name ~= "Camera" then return end
+
+        task.defer(function()
+            if not object:IsA("Model") and not object:IsA("Folder") then return end
+
+            table.insert(connections, object.ChildAdded:Connect(function(child)
+                task.defer(removeCameraEntity, child)
+            end))
+
+            scanCameraEntities()
+        end)
+    end))
+
+    -- Dread remains module-based.
+    local function handleDreadModule(object)
         if not object or not object:IsA("ModuleScript") then
-            return
-        end
-
-        if AntiGlitchScreechEnabled
-            and (object.Name == "GlitchScreech" or object.Name == "GlitchScreech_Disabled")
-        then
-            setModuleDisabled(object, true, "GlitchScreech")
-            return
-        end
-
-        if AntiScreechEnabled
-            and (object.Name == "Screech" or object.Name == "Screech_Disabled")
-        then
-            setModuleDisabled(object, true, "Screech")
             return
         end
 
@@ -400,45 +432,25 @@ local function start()
         end
     end
 
-    -- Watch the actual Abyssal locations, including containers/modules that
-    -- appear after Anti.lua has already started.
     table.insert(connections, replicatedStorage.DescendantAdded:Connect(function(object)
-        if object.Name == "GlitchScreech"
-            or object.Name == "GlitchScreech_Disabled"
-            or object.Name == "Screech"
-            or object.Name == "Screech_Disabled"
-            or object.Name == "Dread"
-            or object.Name == "Dread_Disabled"
-        then
-            task.defer(handleModule, object)
+        if object.Name == "Dread" or object.Name == "Dread_Disabled" then
+            task.defer(handleDreadModule, object)
         end
     end))
 
     local playerGui = Player:FindFirstChildOfClass("PlayerGui")
     if playerGui then
         table.insert(connections, playerGui.DescendantAdded:Connect(function(object)
-            if object.Name == "Screech"
-                or object.Name == "Screech_Disabled"
-                or object.Name == "Dread"
-                or object.Name == "Dread_Disabled"
-            then
-                task.defer(handleModule, object)
+            if object.Name == "Dread" or object.Name == "Dread_Disabled" then
+                task.defer(handleDreadModule, object)
             end
         end))
     end
 
-    -- Apply immediately to modules that already exist.
     local modules = getUIModules()
     if modules then
         for _, object in ipairs(modules:GetChildren()) do
-            handleModule(object)
-        end
-    end
-
-    local floorReplicated = replicatedStorage:FindFirstChild("FloorReplicated")
-    if floorReplicated then
-        for _, object in ipairs(floorReplicated:GetDescendants()) do
-            handleModule(object)
+            handleDreadModule(object)
         end
     end
 
