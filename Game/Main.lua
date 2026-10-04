@@ -61,6 +61,8 @@ local VelocityManipulationEnabled = false
 local VelocityManipulationMode = "Velocity"
 local ManipulateBody
 local CrouchSpoofEnabled = false
+local PositionSpoofEnabled = false
+local PositionSpoofApplied = false
 local OldHipHeight = 2.396
 local getFloor
 local isCrouching
@@ -617,6 +619,96 @@ local function tryInfiniteCrucifix()
                     break
                 end
             end
+        end
+    end
+end
+
+local function applyPositionSpoofState(enabled)
+    if not Character or not Humanoid or not RootPart or not RootPart.Parent then
+        return
+    end
+
+    if getFloor() == "Fools" or getFloor() == "OldHotel" then
+        PositionSpoofApplied = false
+        return
+    end
+
+    if enabled and not PositionSpoofApplied then
+        RootPart.CFrame = RootPart.CFrame * CFrame.new(0, -2.346, 0)
+        Humanoid.HipHeight = 0.05
+        PositionSpoofApplied = true
+    elseif not enabled and PositionSpoofApplied then
+        RootPart.CFrame = RootPart.CFrame * CFrame.new(0, 2.346, 0)
+        Humanoid.HipHeight = 2.396
+        PositionSpoofApplied = false
+    end
+end
+
+local function updatePositionSpoof()
+    if not PositionSpoofEnabled or not Character or not Humanoid or not RootPart then
+        if PositionSpoofApplied then
+            applyPositionSpoofState(false)
+        end
+        return
+    end
+
+    if getFloor() == "Fools" or getFloor() == "OldHotel" then
+        applyPositionSpoofState(false)
+        return
+    end
+
+    applyPositionSpoofState(true)
+
+    -- Abyssal keeps the crouch state forced while Position Spoof is active.
+    if tick() - CrouchThrottle > 0.1 then
+        CrouchThrottle = tick()
+        local remotes = getRemotes()
+        local crouch = remotes and remotes:FindFirstChild("Crouch")
+        if crouch and crouch:IsA("RemoteEvent") then
+            pcall(function()
+                crouch:FireServer(true, true)
+            end)
+        end
+    end
+
+    -- Match Abyssal's collision layout used while Position Spoof is enabled.
+    if Collision and Collision.Parent then
+        Collision.CanCollide = false
+        Collision.Position = RootPart.Position + Vector3.new(0, 2.328, 0)
+
+        local crouch = Collision:FindFirstChild("CollisionCrouch")
+        if crouch then
+            crouch.CanCollide = false
+            crouch.Position = RootPart.Position + Vector3.new(0, 1.328, 0)
+        end
+    end
+
+    if CollisionPart and CollisionPart:IsA("BasePart") and CollisionPart.Parent then
+        CollisionPart.CanCollide = false
+        CollisionPart.Position = RootPart.Position + Vector3.new(0, 2.328, 0)
+    end
+
+    if CollisionClone and CollisionClone.Parent then
+        CollisionClone.CollisionGroup = Collision and Collision.CollisionGroup or CollisionClone.CollisionGroup
+        CollisionClone.Position = RootPart.Position + Vector3.new(0, 1.75, 0)
+        CollisionClone.CanCollide = false
+
+        local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+        if cloneCrouch then
+            cloneCrouch.CanCollide = false
+            cloneCrouch.Position = RootPart.Position + Vector3.new(0, 0.75, 0)
+        end
+    end
+
+    local lowerTorso = Character:FindFirstChild("LowerTorso")
+    local rootMotor = lowerTorso and lowerTorso:FindFirstChild("Root")
+    if rootMotor and OriginalC1 then
+        rootMotor.C1 = OriginalC1 * CFrame.new(0, -2.346, 0)
+    end
+
+    for _, part in ipairs(Character:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
         end
     end
 end
@@ -1826,6 +1918,7 @@ local function setupConnections()
         OriginalC1 = nil
         CollisionOriginalCanCollide = nil
         setupCollisionSpoof()
+        if PositionSpoofEnabled then applyPositionSpoofState(true) end
         setupFootstepSounds()
         applyRemoveInteractingSounds()
         applyRemoveJamminMusic()
@@ -2037,6 +2130,7 @@ local function setupConnections()
     end)
 
     connect(RunService.RenderStepped, function()
+        updatePositionSpoof()
         updateCollisionSpoof()
 
         if VelocityManipulationEnabled and RootPart and Character then
@@ -2088,6 +2182,17 @@ local function setupConnections()
     end)
 end
 
+function Main:SetPositionSpoof(value)
+    PositionSpoofEnabled = value == true
+    if PositionSpoofEnabled then
+        setupCollisionSpoof()
+        applyPositionSpoofState(true)
+    else
+        applyPositionSpoofState(false)
+        restoreCollisionSpoof()
+    end
+end
+
 function Main:Init(core, modules)
     if self.Initialized then
         return self
@@ -2134,6 +2239,9 @@ function Main:Destroy()
     resetAnticheatState()
     VelocityManipulationEnabled = false
     CrouchSpoofEnabled = false
+    PositionSpoofEnabled = false
+    applyPositionSpoofState(false)
+    PositionSpoofApplied = false
     InfiniteItemsEnabled = false
     InfiniteItemsSelection = {}
     InfiniteCrucifixEnabled = false
