@@ -84,7 +84,7 @@ local function isEntityObject(object)
         or name == "RNIUSHCG==" or name == "RNIUSHCg=="
         or name == "AR0xMBUSH" or name == "Eyes"
         or name == "SallyLingering" or name == "SallyMoving"
-        or name == "SeekMovingNewClone" or name == "FigureRig"
+        or name == "SeekMovingNewClone"
         or name == "Dread"
     then
         return object.Parent == workspace
