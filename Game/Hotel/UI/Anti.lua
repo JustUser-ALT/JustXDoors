@@ -140,7 +140,7 @@ end
 local EntityNames = {
     RushMoving = true,
     AmbushMoving = true,
-    RNIUSHCG== true,
+    ["RNIUSHCG=="] = true,
     AR0xMBUSH = true,
 }
 
