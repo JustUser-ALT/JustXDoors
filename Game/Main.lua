@@ -2354,7 +2354,35 @@ function Main:Destroy()
     end
 
     restoreCollisionSpoof()
+
+    -- These clones are created exclusively by JustXDoors and must not survive
+    -- an unload/reload cycle.
+    for _, object in ipairs({
+        CollisionClone,
+        CollisionPartClone,
+        Character and Character:FindFirstChild("JustXDoorsCollisionClone"),
+        Character and Character:FindFirstChild("JustXDoorsCollisionPartClone"),
+    }) do
+        if object and object.Parent then
+            pcall(function()
+                object:Destroy()
+            end)
+        end
+    end
+
+    CollisionClone = nil
+    CollisionPartClone = nil
+    Collision = nil
+    CollisionPart = nil
+    OriginalC1 = nil
     CollisionOriginalCanCollide = nil
+
+    if InfinitePromptContainer then
+        pcall(function()
+            InfinitePromptContainer:Destroy()
+        end)
+        InfinitePromptContainer = nil
+    end
 
     -- Restore custom physical properties before discarding the snapshots.
     RemoveAccelEnabled = false
