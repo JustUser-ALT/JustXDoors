@@ -6,42 +6,53 @@ local RunService = game:GetService("RunService")
 local Player = Players.LocalPlayer
 
 local AntiRushEnabled = false
+local AntiAmbushEnabled = false
 local DetectionDistance = 150
+
 local HeartbeatConnection
 local CharacterConnection
 local SetPositionSpoof
+local PositionSpoofState = false
+
+local EntityNames = {
+    RushMoving = true,
+    AmbushMoving = true,
+}
 
 local function getCharacterRoot()
     local character = Player.Character
     return character and character:FindFirstChild("HumanoidRootPart")
 end
 
-local function getRushPosition(rush)
-    if rush:IsA("BasePart") then
-        return rush.Position
+local function getEntityPosition(entity)
+    if entity:IsA("BasePart") then
+        return entity.Position
     end
 
-    if not rush:IsA("Model") then
+    if not entity:IsA("Model") then
         return nil
     end
 
-    local primary = rush.PrimaryPart
-        or rush:FindFirstChild("RushNew")
-        or rush:FindFirstChild("HumanoidRootPart")
-        or rush:FindFirstChildWhichIsA("BasePart", true)
+    local primary = entity.PrimaryPart
+        or entity:FindFirstChild("RushNew")
+        or entity:FindFirstChild("HumanoidRootPart")
+        or entity:FindFirstChildWhichIsA("BasePart", true)
 
     return primary and primary:IsA("BasePart") and primary.Position or nil
 end
 
-local function isRushNearby()
+local function isEntityNearby(entityName)
     local rootPart = getCharacterRoot()
     if not rootPart then
         return false
     end
 
     for _, object in ipairs(workspace:GetChildren()) do
-        if object.Name == "RushMoving" and (object:IsA("Model") or object:IsA("BasePart")) then
-            local position = getRushPosition(object)
+        if object.Name == entityName
+            and EntityNames[object.Name]
+            and (object:IsA("Model") or object:IsA("BasePart"))
+        then
+            local position = getEntityPosition(object)
 
             if position and (rootPart.Position - position).Magnitude <= DetectionDistance then
                 return true
@@ -52,10 +63,28 @@ local function isRushNearby()
     return false
 end
 
-local function updateAntiRush()
-    if SetPositionSpoof then
-        SetPositionSpoof(AntiRushEnabled and isRushNearby())
+local function shouldPositionSpoof()
+    return (AntiRushEnabled and isEntityNearby("RushMoving"))
+        or (AntiAmbushEnabled and isEntityNearby("AmbushMoving"))
+end
+
+local function setPositionSpoof(value)
+    value = value == true
+
+    -- Avoid calling Main:SetPositionSpoof every Heartbeat when nothing changed.
+    if PositionSpoofState == value then
+        return
     end
+
+    PositionSpoofState = value
+
+    if SetPositionSpoof then
+        SetPositionSpoof(value)
+    end
+end
+
+local function updateAnti()
+    setPositionSpoof(shouldPositionSpoof())
 end
 
 local function start()
@@ -63,15 +92,17 @@ local function start()
         HeartbeatConnection:Disconnect()
     end
 
-    HeartbeatConnection = RunService.Heartbeat:Connect(updateAntiRush)
+    HeartbeatConnection = RunService.Heartbeat:Connect(updateAnti)
 
     if CharacterConnection then
         CharacterConnection:Disconnect()
     end
 
     CharacterConnection = Player.CharacterAdded:Connect(function()
-        if AntiRushEnabled then
-            task.defer(updateAntiRush)
+        setPositionSpoof(false)
+
+        if AntiRushEnabled or AntiAmbushEnabled then
+            task.defer(updateAnti)
         end
     end)
 end
@@ -91,12 +122,22 @@ function AntiUI:Create(ctx)
         Default = false,
         Callback = function(value)
             AntiRushEnabled = value == true
-            updateAntiRush()
+            updateAnti()
+        end,
+    })
+
+    ctx.Elements.AntiAmbush = page:Toggle({
+        Name = "Anti Ambush",
+        Flag = "Hotel_AntiAmbush",
+        Default = false,
+        Callback = function(value)
+            AntiAmbushEnabled = value == true
+            updateAnti()
         end,
     })
 
     page:Label({
-        Text = "Automatically activates Position Spoof when Rush is within 150 studs.",
+        Text = "Activates Position Spoof when Rush or Ambush is within 150 studs.",
     })
 
     start()
@@ -105,10 +146,9 @@ end
 
 function AntiUI:Destroy()
     AntiRushEnabled = false
+    AntiAmbushEnabled = false
 
-    if SetPositionSpoof then
-        SetPositionSpoof(false)
-    end
+    setPositionSpoof(false)
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
@@ -121,6 +161,7 @@ function AntiUI:Destroy()
     end
 
     SetPositionSpoof = nil
+    PositionSpoofState = false
 end
 
 return AntiUI
