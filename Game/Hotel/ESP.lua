@@ -56,7 +56,7 @@ local ENTITY_KINDS = {
 
 local INTERACTABLE_KINDS = {
     Doors=true, Drawers=true, Closets=true, Chest=true,
-    VentGate=true, Lever=true, Toolshed=true, LockedChest=true,
+    VentGate=true, Lever=true, Toolshed=true, GlitchCube=true, LockedChest=true,
 }
 
 local DEFAULT_COLORS = {
