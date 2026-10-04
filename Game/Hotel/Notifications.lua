@@ -152,7 +152,7 @@ local function isValidItemObject(item)
             root = root.Parent
         end
 
-        return root == item or root.Name == item.Name
+        return root == item
     end
 
     if not isRoomObject(item) then return false end
