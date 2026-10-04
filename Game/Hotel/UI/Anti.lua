@@ -7,10 +7,12 @@ local Player = Players.LocalPlayer
 
 local AntiRushEnabled = false
 local AntiAmbushEnabled = false
+local AntiDupeEnabled = false
 local DetectionDistance = 150
 
 local HeartbeatConnection
 local CharacterConnection
+local DupeConnection
 local SetPositionSpoof
 local PositionSpoofState = false
 
@@ -83,6 +85,78 @@ local function setPositionSpoof(value)
     end
 end
 
+local function applyDupeBypass(object)
+    if not AntiDupeEnabled then
+        return
+    end
+
+    if not object or not (object:IsA("Model") or object:IsA("Folder")) then
+        return
+    end
+
+    if object.Name ~= "DoorFake" and object.Name ~= "FakeDoor" then
+        return
+    end
+
+    local hidden = object:FindFirstChild("Hidden")
+    if hidden and hidden:IsA("BasePart") then
+        hidden.CanTouch = false
+    end
+
+    local lock = object:FindFirstChild("Lock")
+    if lock then
+        local unlockPrompt = lock:FindFirstChild("UnlockPrompt")
+        if unlockPrompt and unlockPrompt:IsA("ProximityPrompt") then
+            unlockPrompt.Enabled = false
+        end
+    end
+end
+
+local function setDupeBypass(value)
+    AntiDupeEnabled = value == true
+
+    if DupeConnection then
+        DupeConnection:Disconnect()
+        DupeConnection = nil
+    end
+
+    if AntiDupeEnabled then
+        -- Exact Abyssal behavior: update every existing fake Dupe door.
+        for _, object in ipairs(workspace:GetDescendants()) do
+            applyDupeBypass(object)
+        end
+
+        -- Keep the bypass active for Dupe doors that spawn later.
+        DupeConnection = workspace.DescendantAdded:Connect(function(object)
+            if object.Name ~= "DoorFake" and object.Name ~= "FakeDoor" then
+                return
+            end
+
+            task.defer(function()
+                applyDupeBypass(object)
+            end)
+        end)
+    else
+        -- Exact Abyssal behavior on disable: restore touch/prompt interaction.
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object.Name == "DoorFake" or object.Name == "FakeDoor" then
+                local hidden = object:FindFirstChild("Hidden")
+                if hidden and hidden:IsA("BasePart") then
+                    hidden.CanTouch = true
+                end
+
+                local lock = object:FindFirstChild("Lock")
+                if lock then
+                    local unlockPrompt = lock:FindFirstChild("UnlockPrompt")
+                    if unlockPrompt and unlockPrompt:IsA("ProximityPrompt") then
+                        unlockPrompt.Enabled = true
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function updateAnti()
     setPositionSpoof(shouldPositionSpoof())
 end
@@ -136,8 +210,17 @@ function AntiUI:Create(ctx)
         end,
     })
 
+    ctx.Elements.AntiDupe = page:Toggle({
+        Name = "Anti Dupe",
+        Flag = "Hotel_AntiDupe",
+        Default = false,
+        Callback = function(value)
+            setDupeBypass(value)
+        end,
+    })
+
     page:Label({
-        Text = "Activates Position Spoof when Rush or Ambush is within 150 studs.",
+        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage.",
     })
 
     start()
@@ -149,6 +232,7 @@ function AntiUI:Destroy()
     AntiAmbushEnabled = false
 
     setPositionSpoof(false)
+    setDupeBypass(false)
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
