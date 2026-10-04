@@ -2176,6 +2176,24 @@ local function scanRoom(room, seen)
             addObject("Smoothie", object, room)
         end
 
+        if Enabled.Flashlight and name == "Flashlight" then
+            local cursor = object.Parent
+            local inRiftShop = false
+
+            while cursor and cursor ~= room do
+                if cursor.Name:lower():find("riftroom", 1, true) then
+                    inRiftShop = true
+                    break
+                end
+                cursor = cursor.Parent
+            end
+
+            if inRiftShop then
+                seen.Flashlight[object] = true
+                addObject("Flashlight", object, room)
+            end
+        end
+
         local special = {
             Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
             AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
