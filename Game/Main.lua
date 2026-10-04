@@ -2275,6 +2275,32 @@ function Main:SetPositionSpoof(value)
     end
 end
 
+function Main:ReapplyEnabledFeatures()
+    local function enabled(element)
+        if not element or type(element.Get) ~= "function" then return false end
+        local ok, value = pcall(function() return element:Get() end)
+        return ok and value == true
+    end
+
+    if Elements.EnableJump then
+        applyJump(enabled(Elements.EnableJump))
+    end
+
+    if Elements.EnableSlide then
+        applySlide(enabled(Elements.EnableSlide))
+    end
+
+    if Elements.InfiniteJump then
+        InfiniteJumpEnabled = enabled(Elements.InfiniteJump)
+        if InfiniteJumpEnabled then
+            bindInfiniteJumpButton()
+        else
+            disconnect(InfiniteJumpButtonConnection)
+            InfiniteJumpButtonConnection = nil
+        end
+    end
+end
+
 function Main:Init(core, modules)
     if self.Initialized then
         return self
