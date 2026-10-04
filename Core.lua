@@ -75,6 +75,25 @@ function Core:Create()
     end
 
     self.Window = Window
+
+    -- JustLib's close button calls Window:Destroy() directly. Wrap that
+    -- method so a normal UI close performs the same full cleanup as a reload.
+    local rawWindowDestroy = Window.Destroy
+    if type(rawWindowDestroy) == "function" then
+        self.RawWindowDestroy = rawWindowDestroy
+
+        pcall(function()
+            Window.Destroy = function(window, ...)
+                if window == self.Window and not self.Destroying then
+                    self:Destroy()
+                    return
+                end
+
+                return rawWindowDestroy(window, ...)
+            end
+        end)
+    end
+
     self.Tabs = {}
     self.Sections = {}
     self.Flags = JL.Flags
@@ -272,17 +291,25 @@ function Core:Destroy()
     table.clear(handlers)
     self.CleanupOrder = {}
 
-    if self.Window and self.Window.Destroy then
-        pcall(function()
-            self.Window:Destroy()
-        end)
-    end
+    local window = self.Window
+    local rawWindowDestroy = self.RawWindowDestroy
 
     self.Window = nil
+
+    if window and rawWindowDestroy then
+        pcall(function()
+            rawWindowDestroy(window)
+        end)
+    elseif window and window.Destroy then
+        pcall(function()
+            window:Destroy()
+        end)
+    end
     self.Library = nil
     self.Tabs = {}
     self.Sections = {}
     self.SettingsCreated = false
+    self.RawWindowDestroy = nil
     self.Destroying = false
 end
 
