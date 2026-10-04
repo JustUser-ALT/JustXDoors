@@ -4,6 +4,7 @@ local Core
 local Elements
 local Connection
 local HeartbeatConnection
+local FigureHeartbeatConnection
 local NotifiedEntities = {}
 local LastNotifiedAt = {}
 local NOTIFICATION_DEBOUNCE = 1.5
@@ -276,6 +277,34 @@ local function notifyEntity(entity)
     end)
 end
 
+local function scanFigures()
+    if not Elements or not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then
+        return
+    end
+
+    local rooms = workspace:FindFirstChild("CurrentRooms")
+    if not rooms then return end
+
+    -- Figure is special: in Rooms 50/100 the game builds FigureSetup first
+    -- and can create/rename the actual Figure model afterwards. A dedicated
+    -- low-frequency reconciliation is more reliable than relying only on
+    -- DescendantAdded, while still being cheap because only Figure names are
+    -- checked and only the active room container is traversed.
+    for _, room in ipairs(rooms:GetChildren()) do
+        if room.Name == "50" or room.Name == "100" then
+            for _, object in ipairs(room:GetDescendants()) do
+                if object:IsA("Model")
+                    and (object.Name == "FigureRig"
+                        or object.Name == "FigureRagdoll"
+                        or object.Name == "Figure")
+                then
+                    notifyEntity(object)
+                end
+            end
+        end
+    end
+end
+
 local function scan()
     if not Elements or not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then
         table.clear(NotifiedEntities)
@@ -314,6 +343,17 @@ function Notifications:Init(context)
     -- unrelated entity spawns must not cause an old Eyes instance to notify.
     HeartbeatConnection = nil
 
+    -- Figure gets its own lightweight reconciliation because its hierarchy
+    -- is assembled differently from the normal workspace entities.
+    local figureElapsed = 0
+    FigureHeartbeatConnection = game:GetService("RunService").Heartbeat:Connect(function(dt)
+        figureElapsed += dt
+        if figureElapsed >= 0.25 then
+            figureElapsed = 0
+            scanFigures()
+        end
+    end)
+
     task.defer(scan)
 
     self.Enabled = true
@@ -340,8 +380,10 @@ end
 function Notifications:Destroy()
     if Connection then pcall(function() Connection:Disconnect() end) end
     if HeartbeatConnection then pcall(function() HeartbeatConnection:Disconnect() end) end
+    if FigureHeartbeatConnection then pcall(function() FigureHeartbeatConnection:Disconnect() end) end
     Connection = nil
     HeartbeatConnection = nil
+    FigureHeartbeatConnection = nil
     table.clear(NotifiedEntities)
     table.clear(LastNotifiedAt)
     Core = nil
