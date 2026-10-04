@@ -652,26 +652,16 @@ local function updatePositionSpoof()
         return
     end
 
-    if getFloor() == "Fools" or getFloor() == "OldHotel" then
+    local floor = getFloor()
+    if floor == "Fools" or floor == "OldHotel" then
         applyPositionSpoofState(false)
         return
     end
 
+    -- PositionSpoof's root offset is applied once when enabling.
     applyPositionSpoofState(true)
 
-    -- Abyssal keeps the crouch state forced while Position Spoof is active.
-    if tick() - CrouchThrottle > 0.1 then
-        CrouchThrottle = tick()
-        local remotes = getRemotes()
-        local crouch = remotes and remotes:FindFirstChild("Crouch")
-        if crouch and crouch:IsA("RemoteEvent") then
-            pcall(function()
-                crouch:FireServer(true, true)
-            end)
-        end
-    end
-
-    -- Match Abyssal's collision layout used while Position Spoof is enabled.
+    -- Keep the exact collision representation used by Abyssal's Position Spoof.
     if Collision and Collision.Parent then
         Collision.CanCollide = false
         Collision.Position = RootPart.Position + Vector3.new(0, 2.328, 0)
@@ -684,19 +674,21 @@ local function updatePositionSpoof()
     end
 
     if CollisionPart and CollisionPart:IsA("BasePart") and CollisionPart.Parent then
-        CollisionPart.CanCollide = false
         CollisionPart.Position = RootPart.Position + Vector3.new(0, 2.328, 0)
     end
 
     if CollisionClone and CollisionClone.Parent then
-        CollisionClone.CollisionGroup = Collision and Collision.CollisionGroup or CollisionClone.CollisionGroup
+        if Collision then
+            CollisionClone.CollisionGroup = Collision.CollisionGroup
+        end
         CollisionClone.Position = RootPart.Position + Vector3.new(0, 1.75, 0)
-        CollisionClone.CanCollide = false
 
         local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
         if cloneCrouch then
-            cloneCrouch.CanCollide = false
             cloneCrouch.Position = RootPart.Position + Vector3.new(0, 0.75, 0)
+            if Collision then
+                cloneCrouch.CollisionGroup = Collision.CollisionGroup
+            end
         end
     end
 
@@ -706,6 +698,19 @@ local function updatePositionSpoof()
         rootMotor.C1 = OriginalC1 * CFrame.new(0, -2.346, 0)
     end
 
+    -- Abyssal forces the server-side crouch state while spoofing.
+    if tick() - CrouchThrottle > 0.1 then
+        CrouchThrottle = tick()
+        local remotes = getRemotes()
+        local crouch = remotes and remotes:FindFirstChild("Crouch")
+        if crouch and crouch:IsA("RemoteEvent") then
+            pcall(function()
+                crouch:FireServer(true, true)
+            end)
+        end
+    end
+
+    -- The original loop disables character collision every frame.
     for _, part in ipairs(Character:GetChildren()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
