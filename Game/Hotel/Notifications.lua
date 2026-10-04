@@ -22,6 +22,8 @@ local EntityAliases = {
     SideroomDupe = "Dupe",
     SeekMovingNewClone = "Seek",
     FigureRig = "Figure",
+    Figure = "Figure",
+    FigureRagdoll = "Figure",
     Dread = "Dread",
     Snare = "Snare",
     Screech = "Screech",
@@ -95,6 +97,11 @@ local function isEntityObject(object)
             and (object:IsA("Model") or object:IsA("BasePart"))
     end
 
+    if name == "Figure" or name == "FigureRagdoll" then
+        return isRoomObject(object)
+            and (object:IsA("Model") or object:IsA("BasePart"))
+    end
+
     if name == "Snare" then
         return isRoomObject(object)
             and (object:IsA("Model") or object:IsA("BasePart"))
@@ -117,12 +124,47 @@ local function selected(value, name)
     return value == name
 end
 
+local function findItemRoot(object, room)
+    local root = object
+    local parent = object.Parent
+
+    while parent and parent ~= room do
+        if parent.Name == object.Name then
+            root = parent
+        end
+        parent = parent.Parent
+    end
+
+    return root
+end
+
+local function isValidItemObject(item)
+    if not item or not isRoomObject(item) then return false end
+
+    local rooms = workspace:FindFirstChild("CurrentRooms")
+    local room = nil
+    local cursor = item
+    while cursor and cursor.Parent and cursor.Parent ~= rooms do
+        cursor = cursor.Parent
+    end
+    if cursor and cursor.Parent == rooms then
+        room = cursor
+    end
+
+    -- Match Hotel Items ESP: nested decorative copies (for example the
+    -- Lighter inside a Bookcase) are not real obtainable items. Real room
+    -- items expose ModulePrompt and are the root item instance.
+    if not room then return false end
+    if findItemRoot(item, room) ~= item then return false end
+    return item:FindFirstChild("ModulePrompt", true) ~= nil
+end
+
 local function notifyItem(item)
     if not item or NotifiedEntities[item] then return end
     if not Elements or not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then return end
 
     local alias = ItemAliases[item.Name]
-    if not alias or not isRoomObject(item) then return end
+    if not alias or not isValidItemObject(item) then return end
 
     local picked = Elements.NotificationItems and Elements.NotificationItems:Get()
     if not selected(picked, alias) then return end
@@ -190,7 +232,7 @@ local function notifyEntity(entity)
         Core:Notify({
             Title = "Entity '" .. alias .. "' has spawned.",
             Desc = desc,
-            Type = "Warning",
+            Type = "Warn",
             Duration = 5,
         })
     end
