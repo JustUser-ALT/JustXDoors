@@ -289,7 +289,11 @@ local function renameModule(module, disabled, fallbackName)
     end
 
     if not OriginalModuleNames[module] then
-        OriginalModuleNames[module] = module.Name
+        local originalName = module.Name
+        if originalName:sub(-9) == "_Disabled" then
+            originalName = originalName:sub(1, -10)
+        end
+        OriginalModuleNames[module] = originalName
     end
 
     if disabled then
