@@ -2182,6 +2182,30 @@ local function scanEntities(seen)
         end
     end
 
+    if Enabled.GlitchRush or Enabled.GlitchAmbush or Enabled.GlitchScreech then
+        -- Glitch Fragment entities are client-side and can be parented below
+        -- another workspace container instead of directly under Workspace.
+        -- Register every matching instance, not only Workspace children.
+        for _, object in ipairs(workspace:GetDescendants()) do
+            local kind
+
+            if object.Name == "RNIUSHCG==" or object.Name == "RNIUSHCg==" then
+                kind = "GlitchRush"
+            elseif object.Name == "AR0xMBUSH" then
+                kind = "GlitchAmbush"
+            elseif object.Name == "SCJVEREECH" or object.Name == "GlitchScreech" then
+                kind = "GlitchScreech"
+            end
+
+            if kind and Enabled[kind]
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                seen[kind][object] = true
+                addObject(kind, object, getRoom(object))
+            end
+        end
+    end
+
     if Enabled.Screech then
         -- Screech can have multiple instances. Never use FindFirstChild:
         -- register every Screech object currently present.
