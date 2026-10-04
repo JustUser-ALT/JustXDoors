@@ -8,22 +8,103 @@ local NotifiedEntities = {}
 local LastNotifiedAt = {}
 local NOTIFICATION_DEBOUNCE = 1.5
 
-local Aliases = {
+local EntityAliases = {
     RushMoving = "Rush",
     AmbushMoving = "Ambush",
     ["RNIUSHCG=="] = "Glitch Rush",
+    ["RNIUSHCg=="] = "Glitch Rush",
     AR0xMBUSH = "Glitch Ambush",
     SCJVEREECH = "Glitch Screech",
     GlitchScreech = "Glitch Screech",
-    ["RNIUSHCg=="] = "Glitch Rush",
     Eyes = "Eyes",
     SallyLingering = "Sally",
     SallyMoving = "Sally",
     SideroomDupe = "Dupe",
     SeekMovingNewClone = "Seek",
     FigureRig = "Figure",
+    Dread = "Dread",
+    Snare = "Snare",
     Screech = "Screech",
+    DoorFake = "Dupe",
+    FakeDoor = "Dupe",
 }
+
+-- The same item set used by Hotel Item ESP.
+local ItemAliases = {
+    KeyObtain = "Key",
+    GoldPile = "Gold",
+    Bandage = "Bandage",
+    Smoothie = "Smoothie",
+    Vitamins = "Vitamins",
+    Lighter = "Lighter",
+    Candle = "Candle",
+    AlarmClock = "Alarm Clock",
+    Lockpick = "Lockpick",
+    SkeletonKey = "Skeleton Key",
+    Shears = "Shears",
+    RiftCandle = "Rift Candle",
+    RiftSmoothie = "Rift Smoothie",
+    RiftJar = "Rift Jar",
+    Donut = "Donut",
+    Crucifix = "Crucifix",
+    SallyToyObtain = "Sally Toy",
+    LiveBreakerPolePickup = "Breaker Pole",
+    ElectricalKeyObtain = "Electrical Key",
+    GlitchCube = "Glitch Cube",
+}
+
+local EntityOptions = {
+    "Rush","Ambush","Glitch Rush","Glitch Ambush","Glitch Screech",
+    "Dupe","Eyes","Sally","Seek","Figure","Dread","Snare","Screech",
+}
+
+local ItemOptions = {
+    "Key","Gold","Bandage","Smoothie","Vitamins","Lighter","Candle",
+    "Alarm Clock","Lockpick","Skeleton Key","Shears","Rift Candle",
+    "Rift Smoothie","Rift Jar","Donut","Crucifix","Sally Toy",
+    "Electrical Key","Breaker Pole","Glitch Cube",
+}
+
+local function isRoomObject(object)
+    if not object or not object.Parent then return false end
+    local rooms = workspace:FindFirstChild("CurrentRooms")
+    return rooms and object:IsDescendantOf(rooms)
+end
+
+local function isEntityObject(object)
+    if not object or not object.Parent then return false end
+    local name = object.Name
+
+    if name == "RushMoving" or name == "AmbushMoving"
+        or name == "RNIUSHCG==" or name == "RNIUSHCg=="
+        or name == "AR0xMBUSH" or name == "Eyes"
+        or name == "SallyLingering" or name == "SallyMoving"
+        or name == "SeekMovingNewClone" or name == "FigureRig"
+        or name == "Dread"
+    then
+        return object.Parent == workspace
+            and (object:IsA("Model") or object:IsA("BasePart"))
+    end
+
+    if name == "Screech" or name == "SCJVEREECH" or name == "GlitchScreech" then
+        local camera = workspace:FindFirstChild("Camera")
+        return camera ~= nil and object.Parent == camera
+            and (object:IsA("Model") or object:IsA("BasePart"))
+    end
+
+    if name == "Snare" then
+        return isRoomObject(object)
+            and (object:IsA("Model") or object:IsA("BasePart"))
+    end
+
+    if name == "DoorFake" or name == "FakeDoor" then
+        return isRoomObject(object)
+            and (object:IsA("Model") or object:IsA("BasePart"))
+            and object:FindFirstChild("Hidden") ~= nil
+    end
+
+    return false
+end
 
 local function selected(value, name)
     if type(value) == "table" then
@@ -33,12 +114,47 @@ local function selected(value, name)
     return value == name
 end
 
+local function notifyItem(item)
+    if not item or NotifiedEntities[item] then return end
+    if not Elements or not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then return end
+
+    local alias = ItemAliases[item.Name]
+    if not alias or not isRoomObject(item) then return end
+
+    local picked = Elements.NotificationItems and Elements.NotificationItems:Get()
+    if not selected(picked, alias) then return end
+
+    local now = os.clock()
+    local key = "Item:" .. alias
+    if LastNotifiedAt[key] and now - LastNotifiedAt[key] < NOTIFICATION_DEBOUNCE then
+        NotifiedEntities[item] = true
+        item.Destroying:Once(function() NotifiedEntities[item] = nil end)
+        return
+    end
+
+    LastNotifiedAt[key] = now
+    NotifiedEntities[item] = true
+
+    if Core then
+        Core:Notify({
+            Title = "Item '" .. alias .. "' found.",
+            Desc = alias .. " has spawned.",
+            Type = "Info",
+            Duration = 5,
+        })
+    end
+
+    item.Destroying:Once(function()
+        NotifiedEntities[item] = nil
+    end)
+end
+
 local function notifyEntity(entity)
     if not entity or NotifiedEntities[entity] then return end
     if not Elements or not Elements.NotifyEntities or not Elements.NotifyEntities:Get() then return end
 
-    local alias = Aliases[entity.Name]
-    if not alias then return end
+    local alias = EntityAliases[entity.Name]
+    if not alias or not isEntityObject(entity) then return end
 
     local picked = Elements.NotificationEntities and Elements.NotificationEntities:Get()
     if not selected(picked, alias) then return end
@@ -63,6 +179,9 @@ local function notifyEntity(entity)
             or alias == "Seek" and "Seek has spawned."
             or alias == "Figure" and "Figure has spawned."
             or alias == "Screech" and "Screech has spawned."
+            or alias == "Dread" and "Dread has spawned."
+            or alias == "Snare" and "Snare has spawned."
+            or alias == "Dupe" and "Dupe has spawned."
             or "Find a hiding spot."
 
         Core:Notify({
@@ -85,8 +204,10 @@ local function scan()
     end
 
     for _, object in ipairs(workspace:GetDescendants()) do
-        if Aliases[object.Name] then
+        if EntityAliases[object.Name] then
             notifyEntity(object)
+        elseif ItemAliases[object.Name] then
+            notifyItem(object)
         end
     end
 end
@@ -99,33 +220,16 @@ function Notifications:Init(context)
     if HeartbeatConnection then pcall(function() HeartbeatConnection:Disconnect() end) end
 
     Connection = workspace.DescendantAdded:Connect(function(object)
-        local valid = false
-
-        if object.Name == "Eyes" then
-            valid = object.Parent == workspace
-        elseif object.Name == "RushMoving"
-            or object.Name == "AmbushMoving"
-            or object.Name == "RNIUSHCG=="
-            or object.Name == "AR0xMBUSH"
-            or object.Name == "RNIUSHCg=="
-        then
-            valid = object.Parent == workspace
-        elseif object.Name == "Screech" or object.Name == "SCJVEREECH" or object.Name == "GlitchScreech" then
-            local camera = workspace:FindFirstChild("Camera")
-            valid = object.Name == "Screech" and camera ~= nil and object.Parent == camera
-                or object.Name ~= "Screech" and (object:IsA("Model") or object:IsA("BasePart"))
-        elseif object.Name == "SallyLingering" or object.Name == "SallyMoving" then
-            valid = object.Parent == workspace
-        elseif Aliases[object.Name] then
-            valid = object:IsA("Model") or object:IsA("BasePart")
-        end
-
-        if valid then
+        if EntityAliases[object.Name] then
             task.defer(function()
                 notifyEntity(object)
             end)
+        elseif ItemAliases[object.Name] then
+            task.defer(function()
+                notifyItem(object)
+            end)
         end
-    end)
+    end)d)
 
     -- Notifications are event-driven. Do not continuously scan Workspace:
     -- unrelated entity spawns must not cause an old Eyes instance to notify.
