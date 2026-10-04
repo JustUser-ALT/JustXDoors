@@ -34,7 +34,7 @@ local KINDS = {
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
     "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
     "Dupe","Eyes","SallyLingering","SallyMoving","Seek","Figure","Snare",
-    "GlitchRush","GlitchAmbush","Screech","VentGate","Toolshed","Lever","Rush","Ambush","Dread"
+    "GlitchRush","GlitchAmbush","GlitchScreech","Screech","VentGate","Toolshed","Lever","Rush","Ambush","Dread"
 }
 
 for _, kind in ipairs(KINDS) do
@@ -50,7 +50,7 @@ local ITEM_KINDS = {
 }
 
 local ENTITY_KINDS = {
-    Rush=true, Ambush=true, GlitchRush=true, GlitchAmbush=true, Dupe=true, Eyes=true, SallyLingering=true,
+    Rush=true, Ambush=true, GlitchRush=true, GlitchAmbush=true, GlitchScreech=true, Dupe=true, Eyes=true, SallyLingering=true,
     SallyMoving=true, Seek=true, Figure=true, Snare=true, Screech=true, Dread=true,
 }
 
@@ -96,6 +96,7 @@ local DEFAULT_COLORS = {
     Ambush=Color3.fromRGB(205,45,45),
     GlitchRush=Color3.fromRGB(255,80,255),
     GlitchAmbush=Color3.fromRGB(150,70,255),
+    GlitchScreech=Color3.fromRGB(255,90,255),
     Dupe=Color3.fromRGB(255,140,40),
     Eyes=Color3.fromRGB(120,235,255),
     SallyLingering=Color3.fromRGB(255,105,210),
@@ -118,7 +119,7 @@ local LABEL_NAMES = {
     Dupe="Dupe", Eyes="Eyes", SallyLingering="Sally", SallyMoving="Sally",
     Seek="Seek", Figure="Figure", Snare="Snare", Screech="Screech",
     VentGate="Vent Gate", Toolshed="Toolshed", Lever="Lever",
-    Rush="Rush", Ambush="Ambush", GlitchRush="Glitch Rush", GlitchAmbush="Glitch Ambush", Dread="Dread",
+    Rush="Rush", Ambush="Ambush", GlitchRush="Glitch Rush", GlitchAmbush="Glitch Ambush", GlitchScreech="Glitch Screech", Dread="Dread",
 }
 
 local function connect(signal, callback)
@@ -182,6 +183,7 @@ local function getEntityPart(kind, object)
         Ambush={"RushNew","AmbushNew"},
         GlitchRush={"RushNew","RNIUSHCG=="},
         GlitchAmbush={"RushNew","AmbushNew","AR0xMBUSH"},
+        GlitchScreech={"SCJVEREECH","GlitchScreech","Screech"},
         Dupe={"DoorFake"},
         Eyes={"Eyes"},
         SallyLingering={"Sally"},
@@ -2150,7 +2152,8 @@ local function scanEntities(seen)
     local globals = {
         RushMoving="Rush",
         AmbushMoving="Ambush",
-        RNIUSHCG=="GlitchRush",
+        ["RNIUSHCG=="]="GlitchRush",
+        ["RNIUSHCg=="]="GlitchRush",
         AR0xMBUSH="GlitchAmbush",
         Eyes="Eyes",
         -- Lookman is intentionally not mapped here. It is a different
@@ -2165,6 +2168,17 @@ local function scanEntities(seen)
         if kind and Enabled[kind] then
             seen[kind][object] = true
             addObject(kind, object, nil)
+        end
+    end
+
+    if Enabled.GlitchScreech then
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if (object.Name == "SCJVEREECH" or object.Name == "GlitchScreech")
+                and (object:IsA("Model") or object:IsA("BasePart"))
+            then
+                seen.GlitchScreech[object] = true
+                addObject("GlitchScreech", object, getRoom(object))
+            end
         end
     end
 
@@ -2384,6 +2398,7 @@ local function setEntities(selected)
     Enabled.Ambush = state.Ambush == true
     Enabled.GlitchRush = state["Glitch Rush"] == true or state.GlitchRush == true
     Enabled.GlitchAmbush = state["Glitch Ambush"] == true or state.GlitchAmbush == true
+    Enabled.GlitchScreech = state["Glitch Screech"] == true or state.GlitchScreech == true
     Enabled.Dupe = state.Dupe == true
     Enabled.Eyes = state.Eyes == true
     Enabled.SallyLingering = state.Sally == true or state.SallyLingering == true
