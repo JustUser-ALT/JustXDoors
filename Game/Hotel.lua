@@ -16,6 +16,7 @@ function Hotel:Init(core, modules)
 
     local ESP = modules.ESP
     local Notifications = modules.Notifications
+    local Main = modules.Main
 
     if type(ESP) ~= "table" or type(ESP.Init) ~= "function" then
         warn("[JustXDoors Hotel] ESP module is missing.")
@@ -76,6 +77,11 @@ function Hotel:Init(core, modules)
             ESP:SetEntities(state)
         end,
         Notifications = Notifications,
+        SetPositionSpoof = function(value)
+            if Main and type(Main.SetPositionSpoof) == "function" then
+                Main:SetPositionSpoof(value)
+            end
+        end,
     }
 
     if type(Notifications) == "table" and type(Notifications.Init) == "function" then
