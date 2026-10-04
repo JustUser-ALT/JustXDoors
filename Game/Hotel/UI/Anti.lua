@@ -11,6 +11,7 @@ local AntiDupeEnabled = false
 local AntiDreadEnabled = false
 local AntiScreechEnabled = false
 local AntiGlitchScreechEnabled = false
+local AntiHaltEnabled = false
 local AntiSnareEnabled = false
 local DetectionDistance = 150
 
@@ -309,6 +310,21 @@ local function getGlitchScreechModule()
     return floorReplicated:FindFirstChild("GlitchScreech", true) or floorReplicated:FindFirstChild("GlitchScreech_Disabled", true)
 end
 
+-- Abyssal's exact Remove Halt implementation:
+-- ReplicatedStorage.ClientModules.EntityModules.Shade
+-- is renamed to Shade_Disabled while the toggle is enabled.
+local function getHaltModule()
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local clientModules = replicatedStorage:FindFirstChild("ClientModules")
+    local entityModules = clientModules and clientModules:FindFirstChild("EntityModules")
+    if not entityModules then
+        return nil
+    end
+
+    return entityModules:FindFirstChild("Shade")
+        or entityModules:FindFirstChild("Shade_Disabled")
+end
+
 local function setModuleDisabled(module, disabled, normalName)
     if not module or not module:IsA("ModuleScript") then return end
     module.Name = disabled and (normalName .. "_Disabled") or normalName
@@ -348,6 +364,16 @@ local function setAntiDread(value)
     AntiDreadEnabled = value == true
     local module = getDreadModule()
     if module then setModuleDisabled(module, AntiDreadEnabled, "Dread") end
+end
+
+local function setAntiHalt(value)
+    AntiHaltEnabled = value == true
+
+    local module = getHaltModule()
+    if module then
+        -- This is Remove Halt, not No Halt Damage.
+        setModuleDisabled(module, AntiHaltEnabled, "Shade")
+    end
 end
 
 local function applySnareBypass(object)
@@ -520,9 +546,28 @@ local function start()
         end
     end
 
+    local function handleHaltModule(object)
+        if not object or not object:IsA("ModuleScript") then
+            return
+        end
+
+        if AntiHaltEnabled
+            and (object.Name == "Shade" or object.Name == "Shade_Disabled")
+            and object.Parent
+            and object.Parent.Name == "EntityModules"
+        then
+            -- Exact Abyssal behavior: disable the Shade module by name.
+            setModuleDisabled(object, true, "Shade")
+        end
+    end
+
     table.insert(connections, replicatedStorage.DescendantAdded:Connect(function(object)
         if object.Name == "Dread" or object.Name == "Dread_Disabled" then
             task.defer(handleDreadModule, object)
+        end
+
+        if object.Name == "Shade" or object.Name == "Shade_Disabled" then
+            task.defer(handleHaltModule, object)
         end
     end))
 
@@ -542,6 +587,11 @@ local function start()
         end
     end
 
+    local haltModule = getHaltModule()
+    if haltModule and AntiHaltEnabled then
+        setModuleDisabled(haltModule, true, "Shade")
+    end
+
     EntityConnection = {
         Disconnect = function()
             for _, connection in ipairs(connections) do
@@ -557,6 +607,7 @@ local function start()
             if AntiScreechEnabled then setAntiScreech(true) end
             if AntiGlitchScreechEnabled then setAntiGlitchScreech(true) end
             if AntiDreadEnabled then setAntiDread(true) end
+            if AntiHaltEnabled then setAntiHalt(true) end
             if AntiEyesEnabled then
                 bindEyesHealthGuard()
                 fireEyesBypass()
@@ -567,6 +618,7 @@ local function start()
     if AntiScreechEnabled then setAntiScreech(true) end
     if AntiGlitchScreechEnabled then setAntiGlitchScreech(true) end
     if AntiDreadEnabled then setAntiDread(true) end
+    if AntiHaltEnabled then setAntiHalt(true) end
 end
 
 function AntiUI:Create(ctx)
@@ -616,6 +668,15 @@ function AntiUI:Create(ctx)
         end,
     })
 
+    ctx.Elements.RemoveHalt = page:Toggle({
+        Name = "Remove Halt",
+        Flag = "Hotel_RemoveHalt",
+        Default = false,
+        Callback = function(value)
+            setAntiHalt(value)
+        end,
+    })
+
     ctx.Elements.AntiScreech = page:Toggle({
         Name = "Anti Screech",
         Flag = "Hotel_AntiScreech",
@@ -653,7 +714,7 @@ function AntiUI:Create(ctx)
     })
 
     page:Label({
-        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Anti Screech disables Screech. Anti Glitch Screech disables GlitchScreech. Anti Snare disables Snare touch damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
+        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Remove Halt disables the Shade module so Halt does not spawn. Anti Screech disables Screech. Anti Glitch Screech disables GlitchScreech. Anti Snare disables Snare touch damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
     })
 
     start()
@@ -665,12 +726,14 @@ function AntiUI:Destroy()
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
     AntiDreadEnabled = false
+    AntiHaltEnabled = false
     AntiScreechEnabled = false
     AntiGlitchScreechEnabled = false
     AntiSnareEnabled = false
 
     setAntiEyes(false)
     setAntiDread(false)
+    setAntiHalt(false)
     setAntiScreech(false)
     setAntiGlitchScreech(false)
     setAntiSnare(false)
