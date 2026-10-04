@@ -181,8 +181,8 @@ local function getEntityPart(kind, object)
     local names = {
         Rush={"RushNew"},
         Ambush={"RushNew","AmbushNew"},
-        GlitchRush={"RushNew","RNIUSHCG=="},
-        GlitchAmbush={"RushNew","AmbushNew","AR0xMBUSH"},
+        GlitchRush={"RushNew","GlitchRush"},
+        GlitchAmbush={"RushNew","AmbushNew","GlitchAmbush"},
         GlitchScreech={"SCJVEREECH","GlitchScreech","Screech"},
         Dupe={"DoorFake"},
         Eyes={"Eyes"},
@@ -2152,9 +2152,8 @@ local function scanEntities(seen)
     local globals = {
         RushMoving="Rush",
         AmbushMoving="Ambush",
-        ["RNIUSHCG=="]="GlitchRush",
-        ["RNIUSHCg=="]="GlitchRush",
-        AR0xMBUSH="GlitchAmbush",
+        GlitchRush="GlitchRush",
+        GlitchAmbush="GlitchAmbush",
         Eyes="Eyes",
         -- Lookman is intentionally not mapped here. It is a different
         -- entity and must not become Eyes ESP.
@@ -2171,37 +2170,30 @@ local function scanEntities(seen)
         end
     end
 
-    if Enabled.GlitchScreech then
-        for _, object in ipairs(workspace:GetDescendants()) do
-            if (object.Name == "SCJVEREECH" or object.Name == "GlitchScreech")
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
-                seen.GlitchScreech[object] = true
-                addObject("GlitchScreech", object, getRoom(object))
+    -- Screech and GlitchScreech are rendered as physical models under
+    -- workspace.Camera in the actual game. Keep their scan local to that
+    -- container instead of searching every Workspace descendant.
+    local cameraContainer = workspace:FindFirstChild("Camera")
+    if cameraContainer then
+        if Enabled.Screech then
+            for _, object in ipairs(cameraContainer:GetChildren()) do
+                if object.Name == "Screech"
+                    and (object:IsA("Model") or object:IsA("BasePart"))
+                then
+                    seen.Screech[object] = true
+                    addObject("Screech", object, nil)
+                end
             end
         end
-    end
 
-    if Enabled.GlitchRush or Enabled.GlitchAmbush or Enabled.GlitchScreech then
-        -- Glitch Fragment entities are client-side and can be parented below
-        -- another workspace container instead of directly under Workspace.
-        -- Register every matching instance, not only Workspace children.
-        for _, object in ipairs(workspace:GetDescendants()) do
-            local kind
-
-            if object.Name == "RNIUSHCG==" or object.Name == "RNIUSHCg==" then
-                kind = "GlitchRush"
-            elseif object.Name == "AR0xMBUSH" then
-                kind = "GlitchAmbush"
-            elseif object.Name == "SCJVEREECH" or object.Name == "GlitchScreech" then
-                kind = "GlitchScreech"
-            end
-
-            if kind and Enabled[kind]
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
-                seen[kind][object] = true
-                addObject(kind, object, getRoom(object))
+        if Enabled.GlitchScreech then
+            for _, object in ipairs(cameraContainer:GetChildren()) do
+                if object.Name == "GlitchScreech"
+                    and (object:IsA("Model") or object:IsA("BasePart"))
+                then
+                    seen.GlitchScreech[object] = true
+                    addObject("GlitchScreech", object, nil)
+                end
             end
         end
     end
