@@ -20,9 +20,9 @@ function EntitiesUI:Create(ctx)
     ctx.Elements.Entities = page:Dropdown({
         Name = "Entities",
         Flag = "Hotel_Entities",
-        Options = {"Rush","Ambush","Dupe","Eyes","Dread","Sally","Seek","Figure","Snare","Screech"},
+        Options = {"Rush","Ambush","Glitch Rush","Glitch Ambush","Dupe","Eyes","Dread","Sally","Seek","Figure","Snare","Screech"},
         MultiSelect = true,
-        MaxSelect = 10,
+        MaxSelect = 12,
         Default = {},
         Search = true,
         Callback = function(selected)
