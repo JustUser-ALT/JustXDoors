@@ -654,6 +654,36 @@ end
 local function makeItemHighlight(kind, object, entry)
     if not object or not VisualContainer then return false end
 
+    -- ElectricalKeyObtain can expose a valid BasePart for its label while
+    -- its visible item geometry is not suitable for the cloned helper-model
+    -- renderer. Use the live Model/BasePart directly in this one case.
+    if kind == "ElectricalKey" then
+        destroyItemHelper(entry)
+
+        local target = object
+        if not target:IsA("Model") and not target:IsA("BasePart") then
+            target = getPart(object)
+        end
+
+        if not target then
+            return false
+        end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "JustXDoorsElectricalKeyESP"
+        highlight.Adornee = target
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = Colors[kind] or Color3.new(1,1,1)
+        highlight.OutlineColor = Colors[kind] or Color3.new(1,1,1)
+        highlight.FillTransparency = 0.75
+        highlight.OutlineTransparency = 0
+        highlight.Enabled = true
+        highlight.Parent = VisualContainer
+
+        entry.Highlight = highlight
+        return true
+    end
+
     local sources = getItemParts(object, kind)
     if #sources == 0 then
         if kind == "Key" then
@@ -963,7 +993,7 @@ local function makeEntityHighlight(kind, object, entry)
 
     -- Screech and Snare use the normal Abyssal AddESP style.
     -- Do NOT inject HighlightHumanoid into these entities.
-    if kind == "Screech" or kind == "Snare" then
+    if kind == "Screech" or kind == "Snare" or kind == "GlitchRush" or kind == "GlitchAmbush" then
         if not (object:IsA("Model") or object:IsA("BasePart")) then
             return false
         end
@@ -2198,19 +2228,6 @@ local function scanEntities(seen)
         end
     end
 
-    if Enabled.Screech then
-        -- Screech can have multiple instances. Never use FindFirstChild:
-        -- register every Screech object currently present.
-        for _, object in ipairs(workspace:GetDescendants()) do
-            if object.Name == "Screech"
-                and (object:IsA("Model") or object:IsA("BasePart"))
-            then
-                seen.Screech[object] = true
-                addObject("Screech", object, getRoom(object))
-            end
-        end
-    end
-
     if Enabled.Seek then
         -- SeekMovingNewClone is spawned directly under workspace in the
         -- observed hierarchy:
@@ -2261,6 +2278,7 @@ local function scanEntities(seen)
                 for _, object in ipairs(room:GetDescendants()) do
                     if object.Name == "Snare"
                         and (object:IsA("Model") or object:IsA("BasePart"))
+                        and not (object.Parent and object.Parent.Name == "Snare")
                     then
                         seen.Snare[object] = true
                         addObject("Snare", object, room)
