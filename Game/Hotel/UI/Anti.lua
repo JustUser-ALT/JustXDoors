@@ -153,14 +153,13 @@ local function getCharacterRoot()
 end
 
 local function getEntityPosition(entity)
-    if not entity or not (entity:IsA("Model") or entity:IsA("BasePart")) then
+    -- Match Abyssal: entity distance is measured from the entity's
+    -- PrimaryPart, not an arbitrary descendant BasePart.
+    if not entity or not entity:IsA("Model") then
         return nil
     end
-    if entity:IsA("BasePart") then return entity.Position end
+
     local primary = entity.PrimaryPart
-        or entity:FindFirstChild("RushNew")
-        or entity:FindFirstChild("HumanoidRootPart")
-        or entity:FindFirstChildWhichIsA("BasePart", true)
     return primary and primary.Position or nil
 end
 
@@ -373,36 +372,74 @@ local function start()
     HeartbeatConnection = RunService.Heartbeat:Connect(updateAnti)
 
     local replicatedStorage = game:GetService("ReplicatedStorage")
-    local floorReplicated = replicatedStorage:FindFirstChild("FloorReplicated")
-
     local connections = {}
 
-    if floorReplicated then
-        table.insert(connections, floorReplicated.DescendantAdded:Connect(function(object)
-            if AntiGlitchScreechEnabled
-                and object.Name == "GlitchScreech"
-                and object:IsA("ModuleScript")
+    local function handleModule(object)
+        if not object or not object:IsA("ModuleScript") then
+            return
+        end
+
+        if AntiGlitchScreechEnabled
+            and (object.Name == "GlitchScreech" or object.Name == "GlitchScreech_Disabled")
+        then
+            setModuleDisabled(object, true, "GlitchScreech")
+            return
+        end
+
+        if AntiScreechEnabled
+            and (object.Name == "Screech" or object.Name == "Screech_Disabled")
+        then
+            setModuleDisabled(object, true, "Screech")
+            return
+        end
+
+        if AntiDreadEnabled
+            and (object.Name == "Dread" or object.Name == "Dread_Disabled")
+        then
+            setModuleDisabled(object, true, "Dread")
+        end
+    end
+
+    -- Watch the actual Abyssal locations, including containers/modules that
+    -- appear after Anti.lua has already started.
+    table.insert(connections, replicatedStorage.DescendantAdded:Connect(function(object)
+        if object.Name == "GlitchScreech"
+            or object.Name == "GlitchScreech_Disabled"
+            or object.Name == "Screech"
+            or object.Name == "Screech_Disabled"
+            or object.Name == "Dread"
+            or object.Name == "Dread_Disabled"
+        then
+            task.defer(handleModule, object)
+        end
+    end))
+
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        table.insert(connections, playerGui.DescendantAdded:Connect(function(object)
+            if object.Name == "Screech"
+                or object.Name == "Screech_Disabled"
+                or object.Name == "Dread"
+                or object.Name == "Dread_Disabled"
             then
-                task.defer(setAntiGlitchScreech, true)
+                task.defer(handleModule, object)
             end
         end))
     end
 
+    -- Apply immediately to modules that already exist.
     local modules = getUIModules()
     if modules then
-        table.insert(connections, modules.DescendantAdded:Connect(function(object)
-            if object:IsA("ModuleScript") then
-                if AntiScreechEnabled
-                    and (object.Name == "Screech" or object.Name == "Screech_Disabled")
-                then
-                    task.defer(setAntiScreech, true)
-                elseif AntiDreadEnabled
-                    and (object.Name == "Dread" or object.Name == "Dread_Disabled")
-                then
-                    task.defer(setAntiDread, true)
-                end
-            end
-        end))
+        for _, object in ipairs(modules:GetChildren()) do
+            handleModule(object)
+        end
+    end
+
+    local floorReplicated = replicatedStorage:FindFirstChild("FloorReplicated")
+    if floorReplicated then
+        for _, object in ipairs(floorReplicated:GetDescendants()) do
+            handleModule(object)
+        end
     end
 
     EntityConnection = {
