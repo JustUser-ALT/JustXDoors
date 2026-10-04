@@ -29,7 +29,7 @@ local ITEM_VISUAL_DISTANCE = 90
 local ENTITY_VISUAL_DISTANCE = 300
 
 local KINDS = {
-    "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
+    "Doors","Drawers","Closets","Key","Gold","Chest","GlitchCube","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
     "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
@@ -64,6 +64,7 @@ local DEFAULT_COLORS = {
     Drawers=Color3.fromRGB(255,170,70),
     Closets=Color3.fromRGB(125,75,45),
     Toolshed=Color3.fromRGB(180,110,55),
+    GlitchCube=Color3.fromRGB(190,90,255),
     Chest=Color3.fromRGB(255,165,0),
     VentGate=Color3.fromRGB(125,190,255),
     Lever=Color3.fromRGB(255,150,40),
@@ -106,7 +107,7 @@ local DEFAULT_COLORS = {
 
 local LABEL_NAMES = {
     Doors="Door", Drawers="Drawer", Closets="Closet", Key="Key", Gold="Gold",
-    Chest="Chest", Bandage="Bandage", Smoothie="Smoothie", Flashlight="Flashlight",
+    Chest="Chest", GlitchCube="Glitch Cube", Bandage="Bandage", Smoothie="Smoothie", Flashlight="Flashlight",
     TipJar="Tip Jar", Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
     AlarmClock="Alarm Clock", Lockpick="Lockpick", SkeletonKey="Skeleton Key",
     Shears="Shears", RiftCandle="Rift Candle", RiftSmoothie="Rift Smoothie",
@@ -1750,40 +1751,6 @@ local function createVisual(kind, object, entry)
     end
 
     if entry.Highlight and entry.Highlight.Parent then
-        if kind == "Gold" then
-            -- Gold used to work with a direct Highlight on the actual
-            -- Gold level object (for example GoldPile.3). Keep that exact
-            -- rendering path instead of the generic transparent item helper.
-            -- GoldVisualHolder itself is transparent and is not a reliable
-            -- Highlight target.
-            local goldHighlight = entry.Highlight
-            if not goldHighlight or not goldHighlight.Parent or goldHighlight.Adornee ~= object then
-                if goldHighlight then
-                    pcall(function() goldHighlight:Destroy() end)
-                end
-
-                goldHighlight = Instance.new("Highlight")
-                goldHighlight.Name = "JustXDoorsGoldESP"
-                goldHighlight.Adornee = object
-                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.FillTransparency = 1
-                goldHighlight.OutlineTransparency = 0
-                goldHighlight.Enabled = true
-                goldHighlight.Parent = VisualContainer
-                entry.Highlight = goldHighlight
-            else
-                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                goldHighlight.Enabled = true
-            end
-
-            updateLabel(kind, object, entry)
-            return true
-        end
-
         if ITEM_KINDS[kind] then
             -- Item ESP keeps its existing helper renderer. Entity ESP is
             -- deliberately excluded here: its renderer is the direct
@@ -1849,6 +1816,7 @@ local function createVisual(kind, object, entry)
         Lever = true,
         Toolshed = true,
         Chest = true,
+        GlitchCube = true,
     }
 
     if ITEM_KINDS[kind] or HELPER_INTERACTABLES[kind] then
@@ -2053,6 +2021,11 @@ local function scanRoom(room, seen)
         then
             seen[kind][object] = true
             addObject(kind, object, room)
+        end
+
+        if Enabled.GlitchCube and name == "GlitchCube" then
+            seen.GlitchCube[object] = true
+            addObject("GlitchCube", object, room)
         end
 
         if Enabled.VentGate and name == "VentGrate" then
@@ -2298,7 +2271,7 @@ local function applyInteractables(selected)
 
     local map = {
         Doors="Doors", Drawers="Drawers", Closets="Closets",
-        Chest="Chest", LockedChest="LockedChest",
+        Chest="Chest", LockedChest="LockedChest", ["Glitch Cube"]="GlitchCube",
         ["Vent Gate"]="VentGate", Lever="Lever", Toolshed="Toolshed",
     }
 
@@ -2409,7 +2382,31 @@ local function hookRoom(room)
     local list = {}
     RoomConnections[room] = list
 
-    local function onChange()
+    local function isPromptNoise(object)
+        if not object then return false end
+
+        local name = object.Name
+        if name == "ProximityPrompt"
+            or name == "PromptHitbox"
+            or name == "ModulePrompt"
+            or name == "TouchInterest"
+            or name == "TouchTransmitter"
+        then
+            return true
+        end
+
+        local className = object.ClassName
+        return className == "ProximityPrompt"
+    end
+
+    local function onChange(object)
+        -- Mobile ProximityPrompt/finger UI can create/remove helper objects.
+        -- Those are deliberately excluded from item geometry, so rescanning
+        -- the entire room for them only adds FPS spikes and can recreate
+        -- visual state unnecessarily.
+        if isPromptNoise(object) then
+            return
+        end
         queueScan()
     end
 
@@ -2464,12 +2461,22 @@ local function hookDrops(container)
     end)
 
     -- A Drop can build its model after the root is replicated.
-    connect(container.DescendantAdded, function()
-        queueScan()
+    connect(container.DescendantAdded, function(object)
+        if object.Name ~= "ProximityPrompt"
+            and object.Name ~= "PromptHitbox"
+            and object.Name ~= "ModulePrompt"
+        then
+            queueScan()
+        end
     end)
 
-    connect(container.DescendantRemoving, function()
-        queueScan()
+    connect(container.DescendantRemoving, function(object)
+        if object.Name ~= "ProximityPrompt"
+            and object.Name ~= "PromptHitbox"
+            and object.Name ~= "ModulePrompt"
+        then
+            queueScan()
+        end
     end)
 
     queueScan()
