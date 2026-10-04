@@ -16,6 +16,122 @@ local DupeConnection
 local SetPositionSpoof
 local PositionSpoofState = false
 
+local AntiEyesEnabled = false
+local EyesConnection
+local EyesHookInstalled = false
+local OriginalNamecall
+
+local function getFloorName()
+    local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
+    local floor = gameData and gameData:FindFirstChild("Floor")
+    return floor and floor.Value or nil
+end
+
+local function isEyesActive()
+    for _, object in ipairs(workspace:GetChildren()) do
+        if object.Name == "Eyes" then
+            return true
+        end
+    end
+    return false
+end
+
+local function applyEyesReplication(args)
+    if not AntiEyesEnabled or not isEyesActive() then
+        return args
+    end
+
+    local floor = getFloorName()
+    if floor == "Fools" or floor == "OldHotel" then
+        args[1] = 0
+        args[2] = 65
+        args[3] = 0
+        args[4] = false
+    else
+        args[1] = -650
+    end
+
+    return args
+end
+
+local function fireEyesBypass()
+    if not AntiEyesEnabled or not isEyesActive() then
+        return
+    end
+
+    local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("RemotesFolder")
+    local motorReplication = remotes and remotes:FindFirstChild("MotorReplication")
+    if not motorReplication or not motorReplication:IsA("RemoteEvent") then
+        return
+    end
+
+    local floor = getFloorName()
+    if floor == "Fools" or floor == "OldHotel" then
+        motorReplication:FireServer(0, 65, 0, false)
+    else
+        motorReplication:FireServer(-650)
+    end
+end
+
+local function installEyesHook()
+    if EyesHookInstalled then
+        return
+    end
+
+    if type(hookmetamethod) ~= "function"
+        or type(getnamecallmethod) ~= "function"
+        or type(newcclosure) ~= "function"
+    then
+        return
+    end
+
+    EyesHookInstalled = true
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+
+        if AntiEyesEnabled
+            and method == "FireServer"
+            and self
+            and self.Name == "MotorReplication"
+            and isEyesActive()
+        then
+            local args = { ... }
+            applyEyesReplication(args)
+            return oldNamecall(self, table.unpack(args))
+        end
+
+        return oldNamecall(self, ...)
+    end))
+
+    OriginalNamecall = oldNamecall
+end
+
+local function setAntiEyes(value)
+    AntiEyesEnabled = value == true
+
+    if EyesConnection then
+        EyesConnection:Disconnect()
+        EyesConnection = nil
+    end
+
+    if AntiEyesEnabled then
+        installEyesHook()
+        fireEyesBypass()
+
+        EyesConnection = workspace.ChildAdded:Connect(function(object)
+            if object.Name ~= "Eyes" then
+                return
+            end
+
+            task.defer(function()
+                fireEyesBypass()
+            end)
+        end)
+    end
+end
+
 local EntityNames = {
     RushMoving = true,
     AmbushMoving = true,
@@ -210,6 +326,15 @@ function AntiUI:Create(ctx)
         end,
     })
 
+    ctx.Elements.AntiEyes = page:Toggle({
+        Name = "Anti Eyes",
+        Flag = "Hotel_AntiEyes",
+        Default = false,
+        Callback = function(value)
+            setAntiEyes(value)
+        end,
+    })
+
     ctx.Elements.AntiDupe = page:Toggle({
         Name = "Anti Dupe",
         Flag = "Hotel_AntiDupe",
@@ -220,7 +345,7 @@ function AntiUI:Create(ctx)
     })
 
     page:Label({
-        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage.",
+        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
     })
 
     start()
@@ -230,7 +355,9 @@ end
 function AntiUI:Destroy()
     AntiRushEnabled = false
     AntiAmbushEnabled = false
+    AntiEyesEnabled = false
 
+    setAntiEyes(false)
     setPositionSpoof(false)
     setDupeBypass(false)
 
