@@ -139,9 +139,24 @@ local function findItemRoot(object, room)
 end
 
 local function isValidItemObject(item)
-    if not item or not isRoomObject(item) then return false end
+    if not item then return false end
 
     local rooms = workspace:FindFirstChild("CurrentRooms")
+    local drops = workspace:FindFirstChild("Drops")
+
+    -- Match Hotel Items ESP for workspace.Drops. Only the actual top-level
+    -- Drop is valid; decorative same-name descendants must not notify.
+    if drops and item:IsDescendantOf(drops) then
+        local root = item
+        while root.Parent and root.Parent ~= drops do
+            root = root.Parent
+        end
+
+        return root == item or root.Name == item.Name
+    end
+
+    if not isRoomObject(item) then return false end
+
     local room = nil
     local cursor = item
     while cursor and cursor.Parent and cursor.Parent ~= rooms do
@@ -150,11 +165,25 @@ local function isValidItemObject(item)
     if cursor and cursor.Parent == rooms then
         room = cursor
     end
+    if not room then return false end
+
+    -- These room items are valid by their exact discovery marker and do not
+    -- need the generic ModulePrompt rule used by the normal item set.
+    if item.Name == "KeyObtain" or item.Name == "GoldPile"
+        or item.Name == "Bandage" or item.Name == "Smoothie"
+        or item.Name == "LiveBreakerPolePickup"
+    then
+        return findItemRoot(item, room) == item
+    end
+
+    -- Electrical Key is a special room-100 item in the ESP implementation.
+    if item.Name == "ElectricalKeyObtain" then
+        return room.Name == "100" and findItemRoot(item, room) == item
+    end
 
     -- Match Hotel Items ESP: nested decorative copies (for example the
     -- Lighter inside a Bookcase) are not real obtainable items. Real room
     -- items expose ModulePrompt and are the root item instance.
-    if not room then return false end
     if findItemRoot(item, room) ~= item then return false end
     return item:FindFirstChild("ModulePrompt", true) ~= nil
 end
