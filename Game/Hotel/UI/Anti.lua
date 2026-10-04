@@ -679,6 +679,7 @@ function AntiUI:Create(ctx)
     if not page then return false end
 
     SetPositionSpoof = ctx.SetPositionSpoof
+    ctxElements = ctx.Elements
 
     ctx.Elements.AntiRush = page:Toggle({
         Name = "Anti Rush",
@@ -769,6 +770,27 @@ function AntiUI:Create(ctx)
 
     start()
     return true
+end
+
+function AntiUI:ReapplyEnabledFeatures()
+    local function enabled(element)
+        if not element or type(element.Get) ~= "function" then return false end
+        local ok, value = pcall(function() return element:Get() end)
+        return ok and value == true
+    end
+
+    if ctxElements then
+        setAntiEyes(enabled(ctxElements.AntiEyes))
+        setAntiDread(enabled(ctxElements.AntiDread))
+        setAntiHalt(enabled(ctxElements.RemoveHalt))
+        setAntiScreech(enabled(ctxElements.AntiScreech))
+        setAntiGlitchScreech(enabled(ctxElements.AntiGlitchScreech))
+        setAntiSnare(enabled(ctxElements.AntiSnare))
+        setDupeBypass(enabled(ctxElements.AntiDupe))
+        AntiRushEnabled = enabled(ctxElements.AntiRush)
+        AntiAmbushEnabled = enabled(ctxElements.AntiAmbush)
+        updateAnti()
+    end
 end
 
 function AntiUI:Destroy()
