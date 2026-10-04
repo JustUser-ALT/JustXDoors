@@ -13,6 +13,9 @@ local Aliases = {
     AmbushMoving = "Ambush",
     ["RNIUSHCG=="] = "Glitch Rush",
     AR0xMBUSH = "Glitch Ambush",
+    SCJVEREECH = "Glitch Screech",
+    GlitchScreech = "Glitch Screech",
+    ["RNIUSHCg=="] = "Glitch Rush",
     Eyes = "Eyes",
     SallyLingering = "Sally",
     SallyMoving = "Sally",
@@ -104,11 +107,13 @@ function Notifications:Init(context)
             or object.Name == "AmbushMoving"
             or object.Name == "RNIUSHCG=="
             or object.Name == "AR0xMBUSH"
+            or object.Name == "RNIUSHCg=="
         then
             valid = object.Parent == workspace
-        elseif object.Name == "Screech" then
+        elseif object.Name == "Screech" or object.Name == "SCJVEREECH" or object.Name == "GlitchScreech" then
             local camera = workspace:FindFirstChild("Camera")
-            valid = camera ~= nil and object.Parent == camera
+            valid = object.Name == "Screech" and camera ~= nil and object.Parent == camera
+                or object.Name ~= "Screech" and (object:IsA("Model") or object:IsA("BasePart"))
         elseif object.Name == "SallyLingering" or object.Name == "SallyMoving" then
             valid = object.Parent == workspace
         elseif Aliases[object.Name] then
