@@ -30,9 +30,9 @@ function VisualUI:Create(ctx)
     ctx.Elements.Interactables = page:ValueDropdown({
         Name = "Interactables",
         Flag = "Hotel_Interactables",
-        Options = {"Doors","Drawers","Closets","Chest","LockedChest","Vent Gate","Lever","Toolshed","All"},
+        Options = {"Doors","Drawers","Closets","Chest","LockedChest","Vent Gate","Lever","Toolshed","Glitch Cube","All"},
         MultiSelect = true,
-        MaxSelect = 8,
+        MaxSelect = 9,
         Default = {},
         Search = true,
         Callback = function(selected)
