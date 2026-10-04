@@ -31,6 +31,9 @@ local OriginalNamecall
 local EntityConnection
 local EntityRegistry = {}
 local OriginalModuleNames = setmetatable({}, {__mode = "k"})
+local SnareCanTouchBackup = setmetatable({}, {__mode = "k"})
+local DupeCanTouchBackup = setmetatable({}, {__mode = "k"})
+local DupePromptEnabledBackup = setmetatable({}, {__mode = "k"})
 
 local function getFloorName()
     local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
@@ -263,6 +266,9 @@ local function applyDupeBypass(object)
 
     local hidden = object:FindFirstChild("Hidden")
     if hidden and hidden:IsA("BasePart") then
+        if DupeCanTouchBackup[hidden] == nil then
+            DupeCanTouchBackup[hidden] = hidden.CanTouch
+        end
         hidden.CanTouch = false
     end
 
@@ -270,6 +276,9 @@ local function applyDupeBypass(object)
     if lock then
         local unlockPrompt = lock:FindFirstChild("UnlockPrompt")
         if unlockPrompt and unlockPrompt:IsA("ProximityPrompt") then
+            if DupePromptEnabledBackup[unlockPrompt] == nil then
+                DupePromptEnabledBackup[unlockPrompt] = unlockPrompt.Enabled
+            end
             unlockPrompt.Enabled = false
         end
     end
@@ -348,6 +357,9 @@ local function applySnareBypass(object)
 
     for _, part in ipairs(object:GetDescendants()) do
         if part:IsA("BasePart") then
+            if SnareCanTouchBackup[part] == nil then
+                SnareCanTouchBackup[part] = part.CanTouch
+            end
             part.CanTouch = false
         end
     end
@@ -378,15 +390,14 @@ local function setAntiSnare(value)
             end)
         end)
     else
-        for _, object in ipairs(workspace:GetDescendants()) do
-            if object.Name == "Snare" then
-                for _, part in ipairs(object:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanTouch = true
-                    end
-                end
+        for part, original in pairs(SnareCanTouchBackup) do
+            if part and part.Parent then
+                pcall(function()
+                    part.CanTouch = original
+                end)
             end
         end
+        table.clear(SnareCanTouchBackup)
     end
 end
 
@@ -415,23 +426,24 @@ local function setDupeBypass(value)
             end)
         end)
     else
-        -- Exact Abyssal behavior on disable: restore touch/prompt interaction.
-        for _, object in ipairs(workspace:GetDescendants()) do
-            if object.Name == "DoorFake" or object.Name == "FakeDoor" then
-                local hidden = object:FindFirstChild("Hidden")
-                if hidden and hidden:IsA("BasePart") then
-                    hidden.CanTouch = true
-                end
-
-                local lock = object:FindFirstChild("Lock")
-                if lock then
-                    local unlockPrompt = lock:FindFirstChild("UnlockPrompt")
-                    if unlockPrompt and unlockPrompt:IsA("ProximityPrompt") then
-                        unlockPrompt.Enabled = true
-                    end
-                end
+        -- Restore exactly what was present before Anti Dupe touched it.
+        for part, original in pairs(DupeCanTouchBackup) do
+            if part and part.Parent then
+                pcall(function()
+                    part.CanTouch = original
+                end)
             end
         end
+        table.clear(DupeCanTouchBackup)
+
+        for prompt, original in pairs(DupePromptEnabledBackup) do
+            if prompt and prompt.Parent then
+                pcall(function()
+                    prompt.Enabled = original
+                end)
+            end
+        end
+        table.clear(DupePromptEnabledBackup)
     end
 end
 
@@ -677,6 +689,11 @@ function AntiUI:Destroy()
 
     SetPositionSpoof = nil
     PositionSpoofState = false
+
+    table.clear(SnareCanTouchBackup)
+    table.clear(DupeCanTouchBackup)
+    table.clear(DupePromptEnabledBackup)
+    table.clear(OriginalModuleNames)
 end
 
 return AntiUI
