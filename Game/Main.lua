@@ -17,6 +17,7 @@ local Elements = {}
 local Character
 local Humanoid
 local RootPart
+local OriginalWalkSpeed
 
 local OldJump = false
 local OldSlide = false
@@ -44,6 +45,7 @@ local RemoveInteractingSoundsEnabled = false
 local RemoveJamminMusicEnabled = false
 local FootstepConnection
 local JamMuffle
+local JamMuffleOriginalEnabled
 
 local LightingBackup
 local AtmosphereBackup = {}
@@ -71,6 +73,7 @@ local InfiniteItemsSelection = {}
 local InfiniteItemConnections = {}
 local FakePrompts = {}
 local InfinitePromptObjects = {}
+local InfinitePromptEnabledBackup = {}
 local Collision
 local CollisionClone
 local CollisionPart
@@ -114,6 +117,10 @@ local function getCharacter()
     Character = Player.Character or Player.CharacterAdded:Wait()
     Humanoid = Character:FindFirstChildOfClass("Humanoid")
     RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    if Humanoid and OriginalWalkSpeed == nil then
+        OriginalWalkSpeed = Humanoid.WalkSpeed
+    end
 
     return Character
 end
@@ -236,6 +243,10 @@ local function applyRemoveJamminMusic()
 
     if jamming and jamming:IsA("EqualizerSoundEffect") then
         JamMuffle = jamming
+
+        if JamMuffleOriginalEnabled == nil then
+            JamMuffleOriginalEnabled = jamming.Enabled
+        end
 
         local liveModifiers = workspace:FindFirstChild("LiveModifiers")
             or ReplicatedStorage:FindFirstChild("LiveModifiers")
@@ -393,6 +404,10 @@ local function makeInfinitePrompt(prompt)
 
     local originalEnabled = prompt.Enabled
 
+    if InfinitePromptEnabledBackup[prompt] == nil then
+        InfinitePromptEnabledBackup[prompt] = originalEnabled
+    end
+
     local fake = prompt:Clone()
     fake:SetAttribute("FakePrompt", true)
 
@@ -458,6 +473,15 @@ local function restoreInfinitePrompts()
 
     table.clear(FakePrompts)
     table.clear(InfinitePromptObjects)
+
+    for prompt, originalEnabled in pairs(InfinitePromptEnabledBackup) do
+        if prompt and prompt.Parent then
+            pcall(function()
+                prompt.Enabled = originalEnabled
+            end)
+        end
+    end
+    table.clear(InfinitePromptEnabledBackup)
 
     for _, connection in ipairs(InfiniteItemConnections) do
         disconnect(connection)
@@ -1959,6 +1983,7 @@ local function setupConnections()
 
         Humanoid = character:WaitForChild("Humanoid", 10)
         RootPart = character:WaitForChild("HumanoidRootPart", 10)
+        OriginalWalkSpeed = Humanoid and Humanoid.WalkSpeed or nil
 
         OldJump = character:GetAttribute("CanJump") or false
         OldSlide = character:GetAttribute("CanSlide") or false
@@ -2284,66 +2309,106 @@ function Main:Init(core, modules)
 end
 
 function Main:Destroy()
+    -- Stop all feature state first, then restore every property/object that
+    -- this module changed. Do not simply destroy the UI: the game must be
+    -- left in the state it had before JustXDoors was loaded.
+
     disableFly()
+
+    -- Restore prompt modifications while their backup tables still exist.
     disableInstantInteract()
     restorePromptProperties()
-    NoclipEnabled = false
-    table.clear(NoclipProperties)
-    CollisionOriginalCanCollide = nil
+
+    -- Restore Noclip before clearing its original CanCollide snapshots.
+    if NoclipEnabled then
+        NoclipEnabled = false
+        applyNoclip()
+    else
+        table.clear(NoclipProperties)
+    end
+
     DoorReachEnabled = false
     AutoTpNextDoorEnabled = false
+
     AnticheatBypassEnabled = false
     resetAnticheatState()
+
     VelocityManipulationEnabled = false
     CrouchSpoofEnabled = false
+
     PositionSpoofEnabled = false
     applyPositionSpoofState(false)
     PositionSpoofApplied = false
+
     InfiniteItemsEnabled = false
     InfiniteItemsSelection = {}
     InfiniteCrucifixEnabled = false
     restoreInfinitePrompts()
-    for _, connection in ipairs(InfiniteItemConnections) do
-        disconnect(connection)
-    end
-    table.clear(InfiniteItemConnections)
 
     if ManipulateBody then
         pcall(function()
+            ManipulateBody.Parent = nil
             ManipulateBody:Destroy()
         end)
         ManipulateBody = nil
     end
 
+    restoreCollisionSpoof()
+    CollisionOriginalCanCollide = nil
+
+    -- Restore custom physical properties before discarding the snapshots.
     RemoveAccelEnabled = false
     applyRemoveAcceleration()
 
-    FullBrightEnabled = false
-    NoFogEnabled = false
+    -- Restore audio before disconnecting the listeners and clearing state.
     RemoveFootstepSoundsEnabled = false
     RemoveInteractingSoundsEnabled = false
     RemoveJamminMusicEnabled = false
 
+    applyRemoveFootstepSounds()
+    applyRemoveInteractingSounds()
+    applyRemoveJamminMusic()
+
     disconnect(FootstepConnection)
     FootstepConnection = nil
 
+    if JamMuffle and JamMuffle.Parent and JamMuffleOriginalEnabled ~= nil then
+        pcall(function()
+            JamMuffle.Enabled = JamMuffleOriginalEnabled
+        end)
+    end
+    JamMuffle = nil
+    JamMuffleOriginalEnabled = nil
+
+    -- Restore lighting while the backup is still valid. The old code cleared
+    -- the feature flags first, causing restoreLighting() to return early.
+    FullBrightEnabled = false
+    NoFogEnabled = false
     restoreLighting()
 
-    disconnectAll()
+    -- Restore the exact WalkSpeed that existed when this session took control.
+    if Humanoid and Humanoid.Parent and OriginalWalkSpeed ~= nil then
+        pcall(function()
+            Humanoid.WalkSpeed = OriginalWalkSpeed
+        end)
+    end
+    OriginalWalkSpeed = nil
 
     if Character then
         applyJump(false)
         applySlide(false)
     end
 
+    disconnectAll()
+
     table.clear(Elements)
     table.clear(PartProperties)
     table.clear(ModifiedPrompts)
+    table.clear(InfinitePromptEnabledBackup)
 
     Tab = nil
     Core = nil
 
     self.Initialized = false
 end
-
 return Main
