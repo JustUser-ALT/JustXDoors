@@ -140,6 +140,8 @@ end
 local EntityNames = {
     RushMoving = true,
     AmbushMoving = true,
+    RNIUSHCG== true,
+    AR0xMBUSH = true,
 }
 
 local function getCharacterRoot()
@@ -187,8 +189,8 @@ local function isEntityNearby(entityName)
 end
 
 local function shouldPositionSpoof()
-    return (AntiRushEnabled and isEntityNearby("RushMoving"))
-        or (AntiAmbushEnabled and isEntityNearby("AmbushMoving"))
+    return (AntiRushEnabled and (isEntityNearby("RushMoving") or isEntityNearby("RNIUSHCG==")))
+        or (AntiAmbushEnabled and (isEntityNearby("AmbushMoving") or isEntityNearby("AR0xMBUSH")))
 end
 
 local function setPositionSpoof(value)
