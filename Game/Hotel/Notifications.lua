@@ -98,11 +98,12 @@ local function isEntityObject(object)
     end
 
     if name == "FigureRig" or name == "Figure" or name == "FigureRagdoll" then
-        if not (object:IsA("Model") and object:FindFirstChildOfClass("Humanoid")) then
+        if not object:IsA("Model") then
             return false
         end
 
-        return object:IsDescendantOf(workspace.CurrentRooms)
+        local rooms = workspace:FindFirstChild("CurrentRooms")
+        return (rooms and object:IsDescendantOf(rooms))
             or object.Parent == workspace
     end
 
