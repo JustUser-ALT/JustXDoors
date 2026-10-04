@@ -34,7 +34,7 @@ local KINDS = {
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
     "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
     "Dupe","Eyes","SallyLingering","SallyMoving","Seek","Figure","Snare",
-    "Screech","VentGate","Toolshed","Lever","Rush","Ambush","Dread"
+    "GlitchRush","GlitchAmbush","Screech","VentGate","Toolshed","Lever","Rush","Ambush","Dread"
 }
 
 for _, kind in ipairs(KINDS) do
@@ -50,7 +50,7 @@ local ITEM_KINDS = {
 }
 
 local ENTITY_KINDS = {
-    Rush=true, Ambush=true, Dupe=true, Eyes=true, SallyLingering=true,
+    Rush=true, Ambush=true, GlitchRush=true, GlitchAmbush=true, Dupe=true, Eyes=true, SallyLingering=true,
     SallyMoving=true, Seek=true, Figure=true, Snare=true, Screech=true, Dread=true,
 }
 
@@ -94,6 +94,8 @@ local DEFAULT_COLORS = {
 
     Rush=Color3.fromRGB(255,60,60),
     Ambush=Color3.fromRGB(205,45,45),
+    GlitchRush=Color3.fromRGB(255,80,255),
+    GlitchAmbush=Color3.fromRGB(150,70,255),
     Dupe=Color3.fromRGB(255,140,40),
     Eyes=Color3.fromRGB(120,235,255),
     SallyLingering=Color3.fromRGB(255,105,210),
@@ -116,7 +118,7 @@ local LABEL_NAMES = {
     Dupe="Dupe", Eyes="Eyes", SallyLingering="Sally", SallyMoving="Sally",
     Seek="Seek", Figure="Figure", Snare="Snare", Screech="Screech",
     VentGate="Vent Gate", Toolshed="Toolshed", Lever="Lever",
-    Rush="Rush", Ambush="Ambush", Dread="Dread",
+    Rush="Rush", Ambush="Ambush", GlitchRush="Glitch Rush", GlitchAmbush="Glitch Ambush", Dread="Dread",
 }
 
 local function connect(signal, callback)
@@ -178,6 +180,8 @@ local function getEntityPart(kind, object)
     local names = {
         Rush={"RushNew"},
         Ambush={"RushNew","AmbushNew"},
+        GlitchRush={"RushNew","RNIUSHCG=="},
+        GlitchAmbush={"RushNew","AmbushNew","AR0xMBUSH"},
         Dupe={"DoorFake"},
         Eyes={"Eyes"},
         SallyLingering={"Sally"},
@@ -1751,6 +1755,31 @@ local function createVisual(kind, object, entry)
     end
 
     if entry.Highlight and entry.Highlight.Parent then
+        if kind == "Gold" then
+            local goldHighlight = entry.Highlight
+            if not goldHighlight or not goldHighlight.Parent or goldHighlight.Adornee ~= object then
+                if goldHighlight then pcall(function() goldHighlight:Destroy() end) end
+                goldHighlight = Instance.new("Highlight")
+                goldHighlight.Name = "JustXDoorsGoldESP"
+                goldHighlight.Adornee = object
+                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.FillTransparency = 1
+                goldHighlight.OutlineTransparency = 0
+                goldHighlight.Enabled = true
+                goldHighlight.Parent = VisualContainer
+                entry.Highlight = goldHighlight
+            else
+                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
+                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                goldHighlight.Enabled = true
+            end
+            updateLabel(kind, object, entry)
+            return true
+        end
+
         if ITEM_KINDS[kind] then
             -- Item ESP keeps its existing helper renderer. Entity ESP is
             -- deliberately excluded here: its renderer is the direct
@@ -2121,6 +2150,8 @@ local function scanEntities(seen)
     local globals = {
         RushMoving="Rush",
         AmbushMoving="Ambush",
+        RNIUSHCG=="GlitchRush",
+        AR0xMBUSH="GlitchAmbush",
         Eyes="Eyes",
         -- Lookman is intentionally not mapped here. It is a different
         -- entity and must not become Eyes ESP.
@@ -2351,6 +2382,8 @@ local function setEntities(selected)
 
     Enabled.Rush = state.Rush == true
     Enabled.Ambush = state.Ambush == true
+    Enabled.GlitchRush = state["Glitch Rush"] == true or state.GlitchRush == true
+    Enabled.GlitchAmbush = state["Glitch Ambush"] == true or state.GlitchAmbush == true
     Enabled.Dupe = state.Dupe == true
     Enabled.Eyes = state.Eyes == true
     Enabled.SallyLingering = state.Sally == true or state.SallyLingering == true
