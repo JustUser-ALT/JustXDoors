@@ -94,6 +94,7 @@ function Hotel:Init(core, modules)
     end
 
     Hotel.UI = modules.UI
+    self.AntiUI = Hotel.UI and Hotel.UI.Anti
     if type(Hotel.UI) ~= "table" then
         warn("[JustXDoors Hotel] UI modules are missing.")
         return self
@@ -125,6 +126,14 @@ function Hotel:Init(core, modules)
     return self
 end
 
+function Hotel:ReapplyEnabledFeatures()
+    if self.AntiUI and type(self.AntiUI.ReapplyEnabledFeatures) == "function" then
+        pcall(function()
+            self.AntiUI:ReapplyEnabledFeatures()
+        end)
+    end
+end
+
 function Hotel:Destroy()
     -- UI modules may own runtime connections/state independently of JustLib.
     -- Destroy them before their shared ESP/notification modules disappear.
@@ -146,6 +155,7 @@ function Hotel:Destroy()
     end
     self.ESP = nil
     self.Notifications = nil
+    self.AntiUI = nil
     self.Initialized = false
     table.clear(Elements)
     table.clear(Connections)
