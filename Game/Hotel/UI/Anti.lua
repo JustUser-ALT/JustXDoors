@@ -231,18 +231,18 @@ end
 
 local function getDreadModule()
     local modules = getUIModules()
-    return modules and modules:FindFirstChild("Dread")
+    return modules and (modules:FindFirstChild("Dread") or modules:FindFirstChild("Dread_Disabled"))
 end
 
 local function getScreechModule()
     local modules = getUIModules()
-    return modules and modules:FindFirstChild("Screech")
+    return modules and (modules:FindFirstChild("Screech") or modules:FindFirstChild("Screech_Disabled"))
 end
 
 local function getGlitchScreechModule()
     local floorReplicated = game:GetService("ReplicatedStorage"):FindFirstChild("FloorReplicated")
     if not floorReplicated then return nil end
-    return floorReplicated:FindFirstChild("GlitchScreech", true)
+    return floorReplicated:FindFirstChild("GlitchScreech", true) or floorReplicated:FindFirstChild("GlitchScreech_Disabled", true)
 end
 
 local function setModuleDisabled(module, disabled, normalName)
