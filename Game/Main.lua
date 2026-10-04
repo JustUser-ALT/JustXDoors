@@ -753,13 +753,20 @@ local function updatePositionSpoof()
         end
     end
 
-    -- Save the original collision state before forcing it off.
-    for _, part in ipairs(Character:GetChildren()) do
-        if part:IsA("BasePart") then
-            if CollisionCanCollideBackup[part] == nil then
-                CollisionCanCollideBackup[part] = part.CanCollide
-            end
-            part.CanCollide = false
+    -- Keep the normal player collision body intact.
+    -- Abyssal does not disable collision on every character part here.
+    if RootPart then
+        RootPart.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled)
+    end
+
+    if CollisionClone then
+        CollisionClone.CanCollide =
+            not (NoclipEnabled or VelocityManipulationEnabled or isCrouching())
+
+        local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+        if cloneCrouch then
+            cloneCrouch.CanCollide =
+                not (NoclipEnabled or VelocityManipulationEnabled or not isCrouching())
         end
     end
 end
