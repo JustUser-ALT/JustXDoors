@@ -76,8 +76,26 @@ function Core:Create()
 
     self.Window = Window
 
-    -- JustLib's close button calls Window:Destroy() directly. Wrap that
-    -- method so a normal UI close performs the same full cleanup as a reload.
+    -- JustLib's Settings -> Close Hub path does NOT call Window:Destroy().
+    -- It calls shared._JLActive.destroy() directly. Hook that path as well,
+    -- otherwise the UI disappears while Main/Hotel keep all runtime features.
+    pcall(function()
+        if type(shared) == "table" and type(shared._JLActive) == "table"
+            and type(shared._JLActive.destroy) == "function" then
+
+            local libraryDestroy = shared._JLActive.destroy
+            self.LibraryDestroy = libraryDestroy
+
+            shared._JLActive.destroy = function(...)
+                if not self.Destroying then
+                    self:Destroy()
+                end
+            end
+        end
+    end)
+
+    -- Window:Destroy() is the second close path used by JustLib itself.
+    -- Keep it wrapped as well so every unload route reaches Core cleanup.
     local rawWindowDestroy = Window.Destroy
     if type(rawWindowDestroy) == "function" then
         self.RawWindowDestroy = rawWindowDestroy
