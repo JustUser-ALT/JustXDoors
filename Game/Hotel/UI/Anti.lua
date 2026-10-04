@@ -165,11 +165,6 @@ end
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
 
-    if EyesConnection then
-        EyesConnection:Disconnect()
-        EyesConnection = nil
-    end
-
     if EyesHealthConnection then
         EyesHealthConnection:Disconnect()
         EyesHealthConnection = nil
