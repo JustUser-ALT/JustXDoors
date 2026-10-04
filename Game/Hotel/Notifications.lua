@@ -51,6 +51,9 @@ local ItemAliases = {
     LiveBreakerPolePickup = "Breaker Pole",
     ElectricalKeyObtain = "Electrical Key",
     GlitchCube = "Glitch Cube",
+    Flashlight = "Flashlight",
+    TipJar = "Tip Jar",
+    Battery = "Battery",
 }
 
 local EntityOptions = {
@@ -59,10 +62,10 @@ local EntityOptions = {
 }
 
 local ItemOptions = {
-    "Key","Gold","Bandage","Smoothie","Vitamins","Lighter","Candle",
-    "Alarm Clock","Lockpick","Skeleton Key","Shears","Rift Candle",
-    "Rift Smoothie","Rift Jar","Donut","Crucifix","Sally Toy",
-    "Electrical Key","Breaker Pole","Glitch Cube",
+    "Key","Gold","Bandage","Smoothie","Flashlight","Tip Jar","Vitamins",
+    "Lighter","Candle","Alarm Clock","Lockpick","Skeleton Key","Shears",
+    "Rift Candle","Rift Smoothie","Rift Jar","Donut","Crucifix","Sally Toy",
+    "Electrical Key","Breaker Pole","Battery","Glitch Cube",
 }
 
 local function isRoomObject(object)
@@ -229,7 +232,7 @@ function Notifications:Init(context)
                 notifyItem(object)
             end)
         end
-    end)d)
+    end)
 
     -- Notifications are event-driven. Do not continuously scan Workspace:
     -- unrelated entity spawns must not cause an old Eyes instance to notify.
