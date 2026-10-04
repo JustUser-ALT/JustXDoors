@@ -97,9 +97,13 @@ local function isEntityObject(object)
             and (object:IsA("Model") or object:IsA("BasePart"))
     end
 
-    if name == "Figure" or name == "FigureRagdoll" then
-        return isRoomObject(object)
-            and (object:IsA("Model") or object:IsA("BasePart"))
+    if name == "FigureRig" or name == "Figure" or name == "FigureRagdoll" then
+        if not (object:IsA("Model") and object:FindFirstChildOfClass("Humanoid")) then
+            return false
+        end
+
+        return object:IsDescendantOf(workspace.CurrentRooms)
+            or object.Parent == workspace
     end
 
     if name == "Snare" then
