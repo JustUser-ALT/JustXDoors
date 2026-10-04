@@ -25,6 +25,9 @@ local AntiEyesEnabled = false
 local EyesConnection
 local EyesHookInstalled = false
 local OriginalNamecall
+local EntityConnection
+local EntityRegistry = {}
+local OriginalModuleNames = setmetatable({}, {__mode = "k"})
 
 local function getFloorName()
     local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
@@ -141,7 +144,9 @@ local EntityNames = {
     RushMoving = true,
     AmbushMoving = true,
     ["RNIUSHCG=="] = true,
+    ["RNIUSHCg=="] = true,
     AR0xMBUSH = true,
+
 }
 
 local function getCharacterRoot()
@@ -172,10 +177,10 @@ local function isEntityNearby(entityName)
         return false
     end
 
-    for _, object in ipairs(workspace:GetChildren()) do
-        if object.Name == entityName
+    for object in pairs(EntityRegistry) do
+        if object.Parent
+            and object.Name == entityName
             and EntityNames[object.Name]
-            and (object:IsA("Model") or object:IsA("BasePart"))
         then
             local position = getEntityPosition(object)
 
@@ -186,6 +191,18 @@ local function isEntityNearby(entityName)
     end
 
     return false
+end
+
+local function rebuildEntityRegistry()
+    table.clear(EntityRegistry)
+
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if EntityNames[object.Name]
+            and (object:IsA("Model") or object:IsA("BasePart"))
+        then
+            EntityRegistry[object] = true
+        end
+    end
 end
 
 local function shouldPositionSpoof()
@@ -235,43 +252,60 @@ local function applyDupeBypass(object)
     end
 end
 
-local function getDreadModule()
+local function findModuleByNames(names)
     local playerGui = Player:FindFirstChildOfClass("PlayerGui")
-    local mainUI = playerGui and playerGui:FindFirstChild("MainUI")
-    local initiator = mainUI and mainUI:FindFirstChild("Initiator")
-    local mainGame = initiator and initiator:FindFirstChild("Main_Game")
-    local remoteListener = mainGame and mainGame:FindFirstChild("RemoteListener")
-    local modules = remoteListener and remoteListener:FindFirstChild("Modules")
-
-    if not modules then
+    if not playerGui then
         return nil
     end
 
-    return modules:FindFirstChild("Dread") or modules:FindFirstChild("Dread_Disabled")
+    for _, name in ipairs(names) do
+        local direct = playerGui:FindFirstChild(name, true)
+        if direct and direct:IsA("ModuleScript") then
+            return direct
+        end
+    end
+
+    return nil
+end
+
+local function getDreadModule()
+    return findModuleByNames({"Dread", "Dread_Disabled"})
 end
 
 local function getScreechModules()
-    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
-    local mainUI = playerGui and playerGui:FindFirstChild("MainUI")
-    local initiator = mainUI and mainUI:FindFirstChild("Initiator")
-    local mainGame = initiator and initiator:FindFirstChild("Main_Game")
-    local remoteListener = mainGame and mainGame:FindFirstChild("RemoteListener")
-    local modules = remoteListener and remoteListener:FindFirstChild("Modules")
+    local screech = findModuleByNames({"Screech", "Screech_Disabled"})
+    local glitch = findModuleByNames({
+        "SCJVEREECH",
+        "GlitchScreech",
+        "GlitchScreech_Disabled",
+    })
 
-    if not modules then
-        return nil, nil
+    return screech, glitch
+end
+
+local function renameModule(module, disabled, fallbackName)
+    if not module or not module:IsA("ModuleScript") then
+        return
     end
 
-    return modules:FindFirstChild("Screech") or modules:FindFirstChild("Screech_Disabled"),
-        modules:FindFirstChild("GlitchScreech") or modules:FindFirstChild("GlitchScreech_Disabled")
+    if not OriginalModuleNames[module] then
+        OriginalModuleNames[module] = module.Name
+    end
+
+    if disabled then
+        module.Name = module.Name:match("_Disabled$") and module.Name
+            or (OriginalModuleNames[module] .. "_Disabled")
+    else
+        module.Name = OriginalModuleNames[module] or fallbackName
+    end
 end
 
 local function setAntiScreech(value)
     AntiScreechEnabled = value == true
 
     local screech = getScreechModules()
-    if screech and screech:IsA("ModuleScript") then
-        screech.Name = AntiScreechEnabled and "Screech_Disabled" or "Screech"
+    if screech then
+        renameModule(screech, AntiScreechEnabled, "Screech")
     end
 end
 
@@ -279,8 +313,17 @@ local function setAntiGlitchScreech(value)
     AntiGlitchScreechEnabled = value == true
 
     local _, glitchScreech = getScreechModules()
-    if glitchScreech and glitchScreech:IsA("ModuleScript") then
-        glitchScreech.Name = AntiGlitchScreechEnabled and "GlitchScreech_Disabled" or "GlitchScreech"
+    if glitchScreech then
+        renameModule(glitchScreech, AntiGlitchScreechEnabled, "SCJVEREECH")
+    end
+end
+
+local function setAntiDread(value)
+    AntiDreadEnabled = value == true
+
+    local dread = getDreadModule()
+    if dread then
+        renameModule(dread, AntiDreadEnabled, "Dread")
     end
 end
 
@@ -396,7 +439,44 @@ local function start()
         HeartbeatConnection:Disconnect()
     end
 
+    rebuildEntityRegistry()
+
+    if EntityConnection then
+        EntityConnection:Disconnect()
+    end
+
+    EntityConnection = workspace.DescendantAdded:Connect(function(object)
+        if EntityNames[object.Name]
+            and (object:IsA("Model") or object:IsA("BasePart"))
+        then
+            EntityRegistry[object] = true
+        end
+
+        if AntiDreadEnabled and object:IsA("ModuleScript") and (object.Name == "Dread" or object.Name == "Dread_Disabled") then
+            task.defer(setAntiDread, true)
+        end
+
+        if AntiScreechEnabled and object:IsA("ModuleScript") and (object.Name == "Screech" or object.Name == "Screech_Disabled") then
+            task.defer(setAntiScreech, true)
+        end
+
+        if AntiGlitchScreechEnabled and object:IsA("ModuleScript")
+            and (object.Name == "SCJVEREECH" or object.Name == "GlitchScreech" or object.Name == "GlitchScreech_Disabled")
+        then
+            task.defer(setAntiGlitchScreech, true)
+        end
+    end)
+
+    EntityConnection = EntityConnection
+
     HeartbeatConnection = RunService.Heartbeat:Connect(updateAnti)
+
+    if EntityConnection then
+        EntityConnection:Disconnect()
+        EntityConnection = nil
+    end
+
+    table.clear(EntityRegistry)
 
     if CharacterConnection then
         CharacterConnection:Disconnect()
