@@ -2427,6 +2427,33 @@ function Main:Destroy()
         applySlide(false)
     end
 
+    -- Clear every feature flag so no stale state can be reused by callbacks
+    -- or by a later partial initialization.
+    SpeedBoostEnabled = false
+    CurrentSpeedBoost = 0
+    FlyEnabled = false
+    InfiniteJumpEnabled = false
+    RemoveAccelEnabled = false
+    FullBrightEnabled = false
+    NoFogEnabled = false
+    RemoveFootstepSoundsEnabled = false
+    RemoveInteractingSoundsEnabled = false
+    RemoveJamminMusicEnabled = false
+    NoclipEnabled = false
+    DoorReachEnabled = false
+    AutoTpNextDoorEnabled = false
+    AnticheatBypassEnabled = false
+    AnticheatDisabled = false
+    VelocityManipulationEnabled = false
+    CrouchSpoofEnabled = false
+    PositionSpoofEnabled = false
+    PositionSpoofApplied = false
+    InfiniteItemsEnabled = false
+    InfiniteItemsSelection = {}
+    InfiniteCrucifixEnabled = false
+    Main._LastAutoTp = nil
+    CrouchThrottle = 0
+
     disconnectAll()
 
     table.clear(Elements)
