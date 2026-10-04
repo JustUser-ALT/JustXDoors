@@ -16,6 +16,24 @@ local function load(path)
 end
 
 function Connector:Load()
+    local environment = _G
+
+    if type(getgenv) == "function" then
+        local ok, globalEnvironment = pcall(getgenv)
+        if ok and type(globalEnvironment) == "table" then
+            environment = globalEnvironment
+        end
+    end
+
+    -- A new loader execution must tear down the previous session first.
+    -- This prevents old ESP connections, Heartbeats, hooks and modified
+    -- properties from surviving when the hub is executed again.
+    local previousSession = environment.__JustXDoorsSession
+    if type(previousSession) == "table" and type(previousSession.Cleanup) == "function" then
+        pcall(previousSession.Cleanup)
+    end
+    environment.__JustXDoorsSession = nil
+
     local Core = load("Core.lua")
     if not Core then return end
 
@@ -93,6 +111,34 @@ function Connector:Load()
     if CoreInstance.CreateSettings then
         CoreInstance:CreateSettings()
     end
+
+    -- Register module cleanup with Core so closing the hub and re-running
+    -- the loader use exactly the same restoration path.
+    if CoreInstance.RegisterCleanup then
+        if Main and Main.Destroy then
+            CoreInstance:RegisterCleanup("Main", function()
+                Main:Destroy()
+            end)
+        end
+
+        if Hotel and Hotel.Destroy then
+            CoreInstance:RegisterCleanup("Hotel", function()
+                Hotel:Destroy()
+            end)
+        end
+    end
+
+    local session = {
+        Core = CoreInstance,
+    }
+
+    function session:Cleanup()
+        if self.Core then
+            self.Core:Destroy()
+        end
+    end
+
+    environment.__JustXDoorsSession = session
 
     return CoreInstance
 end
