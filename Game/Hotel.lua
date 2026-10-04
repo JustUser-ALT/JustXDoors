@@ -3,6 +3,7 @@ local Hotel = {}
 local Core
 local Elements = {}
 local Connections = {}
+local CreatedUIModules = {}
 
 function Hotel:Init(core, modules)
     if self.Initialized then return self end
@@ -107,11 +108,15 @@ function Hotel:Init(core, modules)
         Hotel.UI.Anti,
     }
 
+    table.clear(CreatedUIModules)
+
     for _, module in ipairs(order) do
         if module and type(module.Create) == "function" then
             local ok, result = pcall(function() return module:Create(ctx) end)
             if not ok or result == false then
                 warn("[JustXDoors Hotel] Failed to create UI module: " .. tostring(result))
+            elseif type(module.Destroy) == "function" then
+                table.insert(CreatedUIModules, module)
             end
         end
     end
@@ -121,9 +126,18 @@ function Hotel:Init(core, modules)
 end
 
 function Hotel:Destroy()
-    if Hotel.UI then
-        -- UI is owned by Core/JustLib and is intentionally not destroyed here.
+    -- UI modules may own runtime connections/state independently of JustLib.
+    -- Destroy them before their shared ESP/notification modules disappear.
+    for index = #CreatedUIModules, 1, -1 do
+        local module = CreatedUIModules[index]
+        if module and type(module.Destroy) == "function" then
+            pcall(function()
+                module:Destroy()
+            end)
+        end
     end
+    table.clear(CreatedUIModules)
+
     if self.ESP and type(self.ESP.Destroy) == "function" then
         self.ESP:Destroy()
     end
