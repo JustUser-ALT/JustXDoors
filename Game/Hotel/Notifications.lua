@@ -5,10 +5,14 @@ local Elements
 local Connection
 local HeartbeatConnection
 local NotifiedEntities = {}
+local LastNotifiedAt = {}
+local NOTIFICATION_DEBOUNCE = 1.5
 
 local Aliases = {
     RushMoving = "Rush",
     AmbushMoving = "Ambush",
+    ["RNIUSHCG=="] = "Glitch Rush",
+    AR0xMBUSH = "Glitch Ambush",
     Eyes = "Eyes",
     SallyLingering = "Sally",
     SallyMoving = "Sally",
@@ -36,6 +40,14 @@ local function notifyEntity(entity)
     local picked = Elements.NotificationEntities and Elements.NotificationEntities:Get()
     if not selected(picked, alias) then return end
 
+    local now = os.clock()
+    if LastNotifiedAt[alias] and now - LastNotifiedAt[alias] < NOTIFICATION_DEBOUNCE then
+        NotifiedEntities[entity] = true
+        entity.Destroying:Once(function() NotifiedEntities[entity] = nil end)
+        return
+    end
+
+    LastNotifiedAt[alias] = now
     NotifiedEntities[entity] = true
 
     if Core then
@@ -88,6 +100,12 @@ function Notifications:Init(context)
 
         if object.Name == "Eyes" then
             valid = object.Parent == workspace
+        elseif object.Name == "RushMoving"
+            or object.Name == "AmbushMoving"
+            or object.Name == "RNIUSHCG=="
+            or object.Name == "AR0xMBUSH"
+        then
+            valid = object.Parent == workspace
         elseif object.Name == "Screech" then
             local camera = workspace:FindFirstChild("Camera")
             valid = camera ~= nil and object.Parent == camera
@@ -137,6 +155,7 @@ function Notifications:Destroy()
     Connection = nil
     HeartbeatConnection = nil
     table.clear(NotifiedEntities)
+    table.clear(LastNotifiedAt)
     Core = nil
     Elements = nil
 end
