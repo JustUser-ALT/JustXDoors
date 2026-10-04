@@ -8,6 +8,7 @@ local Player = Players.LocalPlayer
 local AntiRushEnabled = false
 local AntiAmbushEnabled = false
 local AntiDupeEnabled = false
+local AntiDreadEnabled = false
 local DetectionDistance = 150
 
 local HeartbeatConnection
@@ -228,6 +229,30 @@ local function applyDupeBypass(object)
     end
 end
 
+local function getDreadModule()
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+    local mainUI = playerGui and playerGui:FindFirstChild("MainUI")
+    local initiator = mainUI and mainUI:FindFirstChild("Initiator")
+    local mainGame = initiator and initiator:FindFirstChild("Main_Game")
+    local remoteListener = mainGame and mainGame:FindFirstChild("RemoteListener")
+    local modules = remoteListener and remoteListener:FindFirstChild("Modules")
+
+    if not modules then
+        return nil
+    end
+
+    return modules:FindFirstChild("Dread") or modules:FindFirstChild("Dread_Disabled")
+end
+
+local function setAntiDread(value)
+    AntiDreadEnabled = value == true
+
+    local dread = getDreadModule()
+    if dread and dread:IsA("ModuleScript") then
+        dread.Name = AntiDreadEnabled and "Dread_Disabled" or "Dread"
+    end
+end
+
 local function setDupeBypass(value)
     AntiDupeEnabled = value == true
 
@@ -335,6 +360,15 @@ function AntiUI:Create(ctx)
         end,
     })
 
+    ctx.Elements.AntiDread = page:Toggle({
+        Name = "Anti Dread",
+        Flag = "Hotel_AntiDread",
+        Default = false,
+        Callback = function(value)
+            setAntiDread(value)
+        end,
+    })
+
     ctx.Elements.AntiDupe = page:Toggle({
         Name = "Anti Dupe",
         Flag = "Hotel_AntiDupe",
@@ -345,7 +379,7 @@ function AntiUI:Create(ctx)
     })
 
     page:Label({
-        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Eyes bypasses Eyes only; Lookman is not affected.",
+        Text = "Anti Rush / Ambush uses Position Spoof within 150 studs. Anti Dupe disables fake-door damage. Anti Dread disables the Dread module. Anti Eyes bypasses Eyes only; Lookman is not affected.",
     })
 
     start()
@@ -356,8 +390,10 @@ function AntiUI:Destroy()
     AntiRushEnabled = false
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
+    AntiDreadEnabled = false
 
     setAntiEyes(false)
+    setAntiDread(false)
     setPositionSpoof(false)
     setDupeBypass(false)
 
