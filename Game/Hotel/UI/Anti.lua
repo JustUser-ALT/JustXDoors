@@ -24,6 +24,9 @@ local PositionSpoofState = false
 local AntiEyesEnabled = false
 local EyesConnection
 local EyesHookInstalled = false
+local EyesHealthConnection
+local EyesTrackedHumanoid
+local EyesLastHealth
 local OriginalNamecall
 local EntityConnection
 local EntityRegistry = {}
@@ -116,8 +119,63 @@ local function installEyesHook()
     OriginalNamecall = oldNamecall
 end
 
+local function bindEyesHealthGuard()
+    if EyesHealthConnection then
+        EyesHealthConnection:Disconnect()
+        EyesHealthConnection = nil
+    end
+
+    EyesTrackedHumanoid = nil
+    EyesLastHealth = nil
+
+    if not AntiEyesEnabled then
+        return
+    end
+
+    local character = Player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        return
+    end
+
+    EyesTrackedHumanoid = humanoid
+    EyesLastHealth = humanoid.Health
+
+    EyesHealthConnection = humanoid.HealthChanged:Connect(function(health)
+        if not AntiEyesEnabled or humanoid ~= EyesTrackedHumanoid then
+            return
+        end
+
+        -- MotorReplication is the primary Eyes bypass, but some builds can
+        -- still apply the damage locally before/alongside replication.
+        -- Restore only health lost while an Eyes entity is actually active.
+        if isEyesActive() and health < (EyesLastHealth or health) then
+            local previous = EyesLastHealth or health
+            pcall(function()
+                humanoid.Health = previous
+            end)
+            EyesLastHealth = math.max(previous, humanoid.Health)
+            return
+        end
+
+        EyesLastHealth = health
+    end)
+end
+
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
+
+    if EyesConnection then
+        EyesConnection:Disconnect()
+        EyesConnection = nil
+    end
+
+    if EyesHealthConnection then
+        EyesHealthConnection:Disconnect()
+        EyesHealthConnection = nil
+    end
+    EyesTrackedHumanoid = nil
+    EyesLastHealth = nil
 
     if EyesConnection then
         EyesConnection:Disconnect()
@@ -134,9 +192,12 @@ local function setAntiEyes(value)
             end
 
             task.defer(function()
+                bindEyesHealthGuard()
                 fireEyesBypass()
             end)
         end)
+
+        bindEyesHealthGuard()
     end
 end
 
@@ -410,17 +471,24 @@ local function start()
         local cameraContainer = workspace:FindFirstChild("Camera")
         if not cameraContainer then return end
 
-        for _, object in ipairs(cameraContainer:GetChildren()) do
+        for _, object in ipairs(cameraContainer:GetDescendants()) do
             removeCameraEntity(object)
         end
     end
 
-    local cameraContainer = workspace:FindFirstChild("Camera")
-    if cameraContainer then
-        table.insert(connections, cameraContainer.ChildAdded:Connect(function(object)
+    local function bindCameraContainer(cameraContainer)
+        if not cameraContainer then return end
+
+        table.insert(connections, cameraContainer.DescendantAdded:Connect(function(object)
             task.defer(removeCameraEntity, object)
         end))
+
         scanCameraEntities()
+    end
+
+    local cameraContainer = workspace:FindFirstChild("Camera")
+    if cameraContainer then
+        bindCameraContainer(cameraContainer)
     end
 
     table.insert(connections, workspace.ChildAdded:Connect(function(object)
@@ -428,12 +496,7 @@ local function start()
 
         task.defer(function()
             if not object:IsA("Model") and not object:IsA("Folder") then return end
-
-            table.insert(connections, object.ChildAdded:Connect(function(child)
-                task.defer(removeCameraEntity, child)
-            end))
-
-            scanCameraEntities()
+            bindCameraContainer(object)
         end)
     end))
 
@@ -487,6 +550,10 @@ local function start()
             if AntiScreechEnabled then setAntiScreech(true) end
             if AntiGlitchScreechEnabled then setAntiGlitchScreech(true) end
             if AntiDreadEnabled then setAntiDread(true) end
+            if AntiEyesEnabled then
+                bindEyesHealthGuard()
+                fireEyesBypass()
+            end
         end)
     end)
 
