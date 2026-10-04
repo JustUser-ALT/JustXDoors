@@ -108,20 +108,9 @@ function Connector:Load()
         end
     end
 
-    if CoreInstance.CreateSettings then
-        CoreInstance:CreateSettings()
-    end
-    task.defer(function()
-        if Main and Main.ReapplyEnabledFeatures then
-            pcall(function() Main:ReapplyEnabledFeatures() end)
-        end
-        if Hotel and Hotel.ReapplyEnabledFeatures then
-            pcall(function() Hotel:ReapplyEnabledFeatures() end)
-        end
-    end)
-
-    -- Register module cleanup with Core so closing the hub and re-running
-    -- the loader use exactly the same restoration path.
+    -- Register module cleanup BEFORE creating JustLib Settings.
+    -- The Settings -> Unload button can be used immediately after the UI
+    -- appears, so cleanup must already exist before Settings is built.
     if CoreInstance.RegisterCleanup then
         if Main and Main.Destroy then
             CoreInstance:RegisterCleanup("Main", function()
@@ -135,6 +124,21 @@ function Connector:Load()
             end)
         end
     end
+
+    if CoreInstance.CreateSettings then
+        CoreInstance:CreateSettings()
+    end
+
+    -- Config loading happens while JustLib builds Settings. Re-apply runtime
+    -- features only after all cleanup handlers are registered.
+    task.defer(function()
+        if Main and Main.ReapplyEnabledFeatures then
+            pcall(function() Main:ReapplyEnabledFeatures() end)
+        end
+        if Hotel and Hotel.ReapplyEnabledFeatures then
+            pcall(function() Hotel:ReapplyEnabledFeatures() end)
+        end
+    end)
 
     local session = {
         Core = CoreInstance,
