@@ -634,12 +634,13 @@ local function applyPositionSpoofState(enabled)
     end
 
     if enabled and not PositionSpoofApplied then
+        OldHipHeight = Humanoid.HipHeight
         RootPart.CFrame = RootPart.CFrame * CFrame.new(0, -2.346, 0)
         Humanoid.HipHeight = 0.05
         PositionSpoofApplied = true
     elseif not enabled and PositionSpoofApplied then
         RootPart.CFrame = RootPart.CFrame * CFrame.new(0, 2.346, 0)
-        Humanoid.HipHeight = 2.396
+        Humanoid.HipHeight = OldHipHeight
         PositionSpoofApplied = false
     end
 end
@@ -648,13 +649,39 @@ local function updatePositionSpoof()
     if not PositionSpoofEnabled or not Character or not Humanoid or not RootPart then
         if PositionSpoofApplied then
             applyPositionSpoofState(false)
+            restoreCollisionSpoof()
         end
+
+        -- Restore the normal collision representation after spoofing.
+        if RootPart then
+            if Collision and Collision.Parent then
+                Collision.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
+                local crouch = Collision:FindFirstChild("CollisionCrouch")
+                if crouch then
+                    crouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
+                end
+            end
+
+            if CollisionPart and CollisionPart:IsA("BasePart") and CollisionPart.Parent then
+                CollisionPart.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
+            end
+
+            if CollisionClone and CollisionClone.Parent then
+                CollisionClone.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
+                local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+                if cloneCrouch then
+                    cloneCrouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
+                end
+            end
+        end
+
         return
     end
 
     local floor = getFloor()
     if floor == "Fools" or floor == "OldHotel" then
         applyPositionSpoofState(false)
+        restoreCollisionSpoof()
         return
     end
 
@@ -710,14 +737,16 @@ local function updatePositionSpoof()
         end
     end
 
-    -- The original loop disables character collision every frame.
+    -- Save the original collision state before forcing it off.
     for _, part in ipairs(Character:GetChildren()) do
         if part:IsA("BasePart") then
+            if CollisionCanCollideBackup[part] == nil then
+                CollisionCanCollideBackup[part] = part.CanCollide
+            end
             part.CanCollide = false
         end
     end
 end
-
 local function applyCrouchSpoof()
     local remotes = getRemotes()
     local crouch = remotes and remotes:FindFirstChild("Crouch")
