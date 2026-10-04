@@ -278,32 +278,34 @@ function Core:Destroy()
 
     self.Destroying = true
 
-    -- Modules must restore everything they changed before the UI disappears.
-    -- Run cleanup handlers in reverse registration order so dependent systems
-    -- (Hotel/Anti) are stopped before the shared Main systems are torn down.
     local handlers = self.CleanupHandlers or {}
     local order = self.CleanupOrder or {}
+    local ran = {}
 
-    for index = #order, 1, -1 do
-        local name = order[index]
-        local callback = handlers[name]
-        if callback then
-            pcall(callback)
+    local function runCleanup(name, callback)
+        if not callback or ran[name] then
+            return
+        end
+
+        ran[name] = true
+
+        local ok, err = pcall(callback)
+        if not ok then
+            warn("[JustXDoors Cleanup] " .. tostring(name) .. ":Destroy FAILED: " .. tostring(err))
+        else
+            warn("[JustXDoors Cleanup] " .. tostring(name) .. ":Destroy OK")
         end
     end
 
-    for name, callback in pairs(handlers) do
-        local alreadyRun = false
-        for _, orderedName in ipairs(order) do
-            if orderedName == name then
-                alreadyRun = true
-                break
-            end
-        end
+    -- Reverse order: dependent modules first.
+    for index = #order, 1, -1 do
+        local name = order[index]
+        runCleanup(name, handlers[name])
+    end
 
-        if not alreadyRun and callback then
-            pcall(callback)
-        end
+    -- Catch handlers that were registered without an order entry.
+    for name, callback in pairs(handlers) do
+        runCleanup(name, callback)
     end
 
     table.clear(handlers)
@@ -311,24 +313,64 @@ function Core:Destroy()
 
     local window = self.Window
     local rawWindowDestroy = self.RawWindowDestroy
+    local guiDestroyConnection = self.GUIDestroyConnection
 
+    if guiDestroyConnection then
+        pcall(function()
+            guiDestroyConnection:Disconnect()
+        end)
+    end
+
+    self.GUIDestroyConnection = nil
+    self.GUI = nil
     self.Window = nil
 
     if window and rawWindowDestroy then
-        pcall(function()
+        local ok, err = pcall(function()
             rawWindowDestroy(window)
         end)
+
+        if not ok then
+            warn("[JustXDoors Cleanup] Window destroy FAILED: " .. tostring(err))
+        end
     elseif window and window.Destroy then
-        pcall(function()
+        local ok, err = pcall(function()
             window:Destroy()
         end)
+
+        if not ok then
+            warn("[JustXDoors Cleanup] Window destroy FAILED: " .. tostring(err))
+        end
     end
+
+    -- In case JustLib left its ScreenGui behind, remove it explicitly.
+    pcall(function()
+        local gui = game:GetService("CoreGui"):FindFirstChild("JustLib")
+        if gui then
+            gui:Destroy()
+        end
+    end)
+
+    pcall(function()
+        local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        local gui = playerGui and playerGui:FindFirstChild("JustLib")
+        if gui then
+            gui:Destroy()
+        end
+    end)
+
     self.Library = nil
     self.Tabs = {}
     self.Sections = {}
     self.SettingsCreated = false
     self.RawWindowDestroy = nil
-    self.Destroying = false
+
+    -- Keep this true for the remainder of this cleanup call. This prevents
+    -- GUI Destroying callbacks or other shutdown paths from starting cleanup
+    -- a second time.
+    self.Destroying = true
+
+    warn("[JustXDoors Cleanup] Core cleanup finished")
 end
 
 return Core
