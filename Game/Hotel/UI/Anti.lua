@@ -31,6 +31,7 @@ local EyesHookInstalled = false
 local EyesHealthConnection
 local EyesTrackedHumanoid
 local EyesLastHealth
+local EyesBypassUntil = 0
 local OriginalNamecall
 local EntityConnection
 local EntityRegistry = {}
@@ -89,6 +90,7 @@ local function fireEyesBypass()
     else
         motorReplication:FireServer(-650)
     end
+    EyesBypassUntil = os.clock() + 0.75
 end
 
 local function installEyesHook()
@@ -117,6 +119,7 @@ local function installEyesHook()
         then
             local args = { ... }
             applyEyesReplication(args)
+            EyesBypassUntil = os.clock() + 0.75
             return oldNamecall(self, table.unpack(args))
         end
 
@@ -134,6 +137,7 @@ local function bindEyesHealthGuard()
 
     EyesTrackedHumanoid = nil
     EyesLastHealth = nil
+    EyesBypassUntil = 0
 
     if not AntiEyesEnabled then
         return
@@ -155,8 +159,12 @@ local function bindEyesHealthGuard()
 
         -- MotorReplication is the primary Eyes bypass, but some builds can
         -- still apply the damage locally before/alongside replication.
-        -- Restore only health lost while an Eyes entity is actually active.
-        if isEyesActive() and health < (EyesLastHealth or health) then
+        -- Restore only damage that occurs while Eyes is active or immediately
+        -- after an Eyes MotorReplication bypass. This also covers the case
+        -- where the Eyes instance disappears just before the damage callback.
+        if (isEyesActive() or os.clock() <= EyesBypassUntil)
+            and health < (EyesLastHealth or health)
+        then
             local previous = EyesLastHealth or health
             pcall(function()
                 humanoid.Health = previous
@@ -178,6 +186,7 @@ local function setAntiEyes(value)
     end
     EyesTrackedHumanoid = nil
     EyesLastHealth = nil
+    EyesBypassUntil = 0
 
     if EyesConnection then
         EyesConnection:Disconnect()
