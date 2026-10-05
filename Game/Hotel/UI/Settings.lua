@@ -28,7 +28,7 @@ function SettingsUI:Create(ctx)
     })
 
     for _, kind in ipairs({
-        "Doors","Drawers","Closets","Key","Gold","Chest","Bandage","Smoothie",
+        "Doors","Drawers","Closets","Key","Gold","Chest","LockedChest","Bed","GlitchCube","LibraryPaper","LibraryBook","Bandage","Smoothie",
         "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
         "Lockpick","SkeletonKey","Shears","Battery","RiftCandle","RiftSmoothie",
         "RiftJar","Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole",
