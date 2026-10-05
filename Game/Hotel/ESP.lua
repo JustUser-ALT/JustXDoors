@@ -25,11 +25,11 @@ local ScanClock = 0
 local LabelClock = 0
 
 local MAX_DISTANCE = 300
-local ITEM_VISUAL_DISTANCE = 90
-local ENTITY_VISUAL_DISTANCE = 300
+local ITEM_VISUAL_DISTANCE = 500
+local ENTITY_VISUAL_DISTANCE = 5000
 
 local KINDS = {
-    "Doors","Drawers","Closets","Key","Gold","Chest","GlitchCube","Bandage","Smoothie",
+    "Doors","Drawers","Closets","Key","Gold","Chest","Bed","GlitchCube","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
     "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
@@ -46,7 +46,7 @@ local ITEM_KINDS = {
     TipJar=true, Vitamins=true, Lighter=true, Candle=true, AlarmClock=true,
     Lockpick=true, SkeletonKey=true, Shears=true, RiftCandle=true,
     RiftSmoothie=true, RiftJar=true, Donut=true, Crucifix=true,
-    SallyToy=true, ElectricalKey=true, BreakerPole=true, Battery=true,
+    SallyToy=true, ElectricalKey=true, BreakerPole=true, Battery=true, GlitchCube=true, LibraryPaper=true, LibraryBook=true,
 }
 
 local ENTITY_KINDS = {
@@ -55,8 +55,8 @@ local ENTITY_KINDS = {
 }
 
 local INTERACTABLE_KINDS = {
-    Doors=true, Drawers=true, Closets=true, Chest=true,
-    VentGate=true, Lever=true, Toolshed=true, GlitchCube=true, LockedChest=true,
+    Doors=true, Drawers=true, Closets=true, Chest=true, Bed=true,
+    VentGate=true, Lever=true, Toolshed=true, LockedChest=true,
 }
 
 local DEFAULT_COLORS = {
@@ -66,6 +66,7 @@ local DEFAULT_COLORS = {
     Toolshed=Color3.fromRGB(180,110,55),
     GlitchCube=Color3.fromRGB(190,90,255),
     Chest=Color3.fromRGB(255,165,0),
+    Bed=Color3.fromRGB(255,180,120),
     VentGate=Color3.fromRGB(125,190,255),
     Lever=Color3.fromRGB(255,150,40),
 
@@ -83,6 +84,9 @@ local DEFAULT_COLORS = {
     SkeletonKey=Color3.fromRGB(210,175,255),
     Shears=Color3.fromRGB(195,210,220),
     Battery=Color3.fromRGB(110,255,150),
+    GlitchCube=Color3.fromRGB(190,90,255),
+    LibraryPaper=Color3.fromRGB(255,255,255),
+    LibraryBook=Color3.fromRGB(100,180,255),
     RiftCandle=Color3.fromRGB(255,85,210),
     RiftSmoothie=Color3.fromRGB(255,70,135),
     RiftJar=Color3.fromRGB(190,80,255),
@@ -110,12 +114,13 @@ local DEFAULT_COLORS = {
 
 local LABEL_NAMES = {
     Doors="Door", Drawers="Drawer", Closets="Closet", Key="Key", Gold="Gold",
-    Chest="Chest", GlitchCube="Glitch Cube", Bandage="Bandage", Smoothie="Smoothie", Flashlight="Flashlight",
+    Chest="Chest", Bed="Bed", GlitchCube="Glitch Cube", Bandage="Bandage", Smoothie="Smoothie", Flashlight="Flashlight",
     TipJar="Tip Jar", Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
     AlarmClock="Alarm Clock", Lockpick="Lockpick", SkeletonKey="Skeleton Key",
     Shears="Shears", RiftCandle="Rift Candle", RiftSmoothie="Rift Smoothie",
     RiftJar="Rift Jar", Donut="Donut", Crucifix="Crucifix", SallyToy="Sally Toy",
     ElectricalKey="Electrical Key", BreakerPole="Breaker Pole", Battery="Battery",
+    LibraryPaper="Library Paper", LibraryBook="Library Book",
     Dupe="Dupe", Eyes="Eyes", SallyLingering="Sally", SallyMoving="Sally",
     Seek="Seek", Figure="Figure", Snare="Snare", Screech="Screech",
     VentGate="Vent Gate", Toolshed="Toolshed", Lever="Lever",
@@ -1722,7 +1727,7 @@ local function createVisual(kind, object, entry)
     -- items/entities use the lighter Highlight path and are distance-culled.
     -- Item ESP must stay visible even when the player is standing directly
     -- beside the item. Only entities use distance-based 3D culling.
-    local visualDistance = ENTITY_VISUAL_DISTANCE
+    local visualDistance = ENTITY_KINDS[kind] and ENTITY_VISUAL_DISTANCE or ITEM_KINDS[kind] and ITEM_VISUAL_DISTANCE or MAX_DISTANCE
     local near = true
 
     if ENTITY_KINDS[kind] and root and part then
@@ -1985,6 +1990,10 @@ local function createVisual(kind, object, entry)
         Lever = true,
         Toolshed = true,
         Chest = true,
+        LockedChest = true,
+        Bed = true,
+        Gold = true,
+        Closets = true,
         GlitchCube = true,
     }
 
@@ -2111,7 +2120,7 @@ local function scanRoom(room, seen)
     for _, object in ipairs(room:GetDescendants()) do
         local name = object.Name
 
-        if Enabled.Drawers and (name == "Dresser" or name == "Table" or name == "Rolltop_Desk") then
+        if Enabled.Drawers and (name == "Dresser" or name == "Dresser_Single" or name == "Table" or name == "Rolltop_Desk") then
             if name == "Rolltop_Desk" or object:FindFirstChild("DrawerContainer", true) then
                 seen.Drawers[object] = true
                 addObject("Drawers", object, room)
@@ -2128,9 +2137,17 @@ local function scanRoom(room, seen)
             addObject("Toolshed", object, room)
         end
 
-        if Enabled.Chest and (name == "ChestBox" or name == "ChestBoxLocked") then
+        if name == "ChestBox" and Enabled.Chest then
             seen.Chest[object] = true
             addObject("Chest", object, room)
+        elseif (name == "ChestBoxLocked" or name == "LockedChestBox") and Enabled.LockedChest then
+            seen.LockedChest[object] = true
+            addObject("LockedChest", object, room)
+        end
+
+        if Enabled.Bed and name == "Bed" then
+            seen.Bed[object] = true
+            addObject("Bed", object, room)
         end
 
         if Enabled.Key and name == "KeyObtain" then
@@ -2213,6 +2230,16 @@ local function scanRoom(room, seen)
         if Enabled.GlitchCube and name == "GlitchCube" then
             seen.GlitchCube[object] = true
             addObject("GlitchCube", object, room)
+        end
+
+        if Enabled.LibraryPaper and name == "LibraryHintPaper" and room.Name == "50" then
+            seen.LibraryPaper[object] = true
+            addObject("LibraryPaper", object, room)
+        end
+
+        if Enabled.LibraryBook and name == "LiveHintBook" and room.Name == "50" then
+            seen.LibraryBook[object] = true
+            addObject("LibraryBook", object, room)
         end
 
         if Enabled.VentGate and name == "VentGrate" then
@@ -2476,7 +2503,7 @@ local function applyInteractables(selected)
 
     local map = {
         Doors="Doors", Drawers="Drawers", Closets="Closets",
-        Chest="Chest", LockedChest="LockedChest", ["Glitch Cube"]="GlitchCube",
+        Chest="Chest", LockedChest="LockedChest", Bed="Bed",
         ["Vent Gate"]="VentGate", Lever="Lever", Toolshed="Toolshed",
     }
 
@@ -2506,6 +2533,7 @@ local function applyItems(selected)
         ["Rift Smoothie"]="RiftSmoothie", ["Rift Jar"]="RiftJar",
         Donut="Donut", Crucifix="Crucifix", ["Sally Toy"]="SallyToy",
         ["Electrical Key"]="ElectricalKey", ["Breaker Pole"]="BreakerPole",
+        ["Glitch Cube"]="GlitchCube", ["Library Paper"]="LibraryPaper", ["Library Book"]="LibraryBook",
     }
 
     for label, kind in pairs(map) do
