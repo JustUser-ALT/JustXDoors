@@ -4,21 +4,79 @@ local RunService = game:GetService("RunService")
 
 local Context
 local Connections = {}
-local Targets = {}
+local InteractTargets = {}
+local LootTargets = {}
 
-local Enabled = {
-    Dresser = false,
-    Table = false,
+local InteractEnabled = {
+    Drawers = false,
     Chest = false,
     ["Locked Chest"] = false,
 }
 
-local TARGET_OPTIONS = {
-    "Dresser",
-    "Table",
+local InteractOptions = {
+    "Drawers",
     "Chest",
     "Locked Chest",
 }
+
+local LootOptions = {
+    "Key",
+    "Gold",
+    "Bandage",
+    "Smoothie",
+    "Flashlight",
+    "Tip Jar",
+    "Vitamins",
+    "Lighter",
+    "Candle",
+    "AlarmClock",
+    "Lockpick",
+    "Skeleton Key",
+    "Shears",
+    "Battery",
+    "Rift Candle",
+    "Rift Smoothie",
+    "Rift Jar",
+    "Donut",
+    "Crucifix",
+    "Sally Toy",
+    "Electrical Key",
+    "Breaker Pole",
+    "Glitch Cube",
+    "Library Paper",
+    "Library Book",
+}
+
+local LootNames = {
+    KeyObtain = "Key",
+    GoldPile = "Gold",
+    Bandage = "Bandage",
+    Smoothie = "Smoothie",
+    Flashlight = "Flashlight",
+    TipJar = "Tip Jar",
+    Vitamins = "Vitamins",
+    Lighter = "Lighter",
+    Candle = "Candle",
+    AlarmClock = "AlarmClock",
+    Lockpick = "Lockpick",
+    SkeletonKey = "Skeleton Key",
+    Shears = "Shears",
+    Battery = "Battery",
+    RiftCandle = "Rift Candle",
+    RiftSmoothie = "Rift Smoothie",
+    RiftJar = "Rift Jar",
+    Donut = "Donut",
+    Crucifix = "Crucifix",
+    SallyToyObtain = "Sally Toy",
+    ElectricalKeyObtain = "Electrical Key",
+    LiveBreakerPolePickup = "Breaker Pole",
+    GlitchCube = "Glitch Cube",
+    LibraryHintPaper = "Library Paper",
+    LiveHintBook = "Library Book",
+}
+
+local Context
+local LootSelection = {}
 
 local function disconnectAll()
     for _, connection in ipairs(Connections) do
@@ -30,54 +88,88 @@ local function disconnectAll()
 end
 
 local function clearTargets()
-    table.clear(Targets)
+    table.clear(InteractTargets)
+    table.clear(LootTargets)
 end
 
 local function getRooms()
     return workspace:FindFirstChild("CurrentRooms")
 end
 
-local function getPrompt(container)
+local function findRoom(object, rooms)
+    local current = object
+
+    while current and current ~= rooms do
+        if current.Parent == rooms then
+            return current
+        end
+        current = current.Parent
+    end
+
+    return nil
+end
+
+local function isJeffShop(object, room)
+    local current = object
+
+    while current and current ~= room do
+        if current.Name == "RiftRoom_JeffShop" then
+            return true
+        end
+        current = current.Parent
+    end
+
+    return false
+end
+
+local function getPrompt(container, names)
     if not container then
         return nil
     end
 
-    local knobs = container:FindFirstChild("Knobs")
-    if knobs then
-        local prompt = knobs:FindFirstChild("ActivateEventPrompt")
-        if prompt and prompt:IsA("ProximityPrompt") then
-            return prompt
+    names = names or {"ActivateEventPrompt"}
+
+    for _, name in ipairs(names) do
+        local direct = container:FindFirstChild(name)
+        if direct and direct:IsA("ProximityPrompt") then
+            return direct
         end
     end
 
-    local prompt = container:FindFirstChild("ActivateEventPrompt", true)
-    if prompt and prompt:IsA("ProximityPrompt") then
-        return prompt
+    for _, descendant in ipairs(container:GetDescendants()) do
+        if descendant:IsA("ProximityPrompt") then
+            for _, name in ipairs(names) do
+                if descendant.Name == name then
+                    return descendant
+                end
+            end
+        end
     end
 
     return nil
 end
 
 local function hasLootHolder(container)
-    if not container then
-        return false
-    end
-
-    return container:FindFirstChild("LootHolder", true) ~= nil
+    return container and container:FindFirstChild("LootHolder", true) ~= nil
 end
 
 local function firePrompt(prompt)
-    if not prompt or not prompt.Parent then
-        return false
-    end
-
-    if not prompt:IsA("ProximityPrompt") then
+    if not prompt or not prompt.Parent or not prompt:IsA("ProximityPrompt") then
         return false
     end
 
     local fire = fireproximityprompt
     if type(fire) ~= "function" then
         return false
+    end
+
+    -- DOORS can temporarily disable a prompt after it is triggered while
+    -- the drawer/chest is still processing. Auto Interact owns these prompts,
+    -- so keep them enabled until LootHolder confirms completion.
+    if not prompt.Enabled then
+        pcall(function()
+            prompt.Enabled = true
+        end)
     end
 
     local ok = pcall(function()
@@ -87,18 +179,18 @@ local function firePrompt(prompt)
     return ok
 end
 
-local function registerDrawerContainer(kind, drawerContainer, room)
-    if not drawerContainer
-        or not drawerContainer.Parent
-        or not drawerContainer:IsA("Instance")
-    then
+local function registerDrawerContainer(drawerContainer, room)
+    if not drawerContainer or not drawerContainer.Parent then
         return
     end
 
-    local prompt = getPrompt(drawerContainer)
+    local prompt = getPrompt(drawerContainer, {"ActivateEventPrompt"})
+    if not prompt then
+        return
+    end
 
-    Targets[drawerContainer] = {
-        Kind = kind,
+    InteractTargets[drawerContainer] = {
+        Kind = "Drawers",
         Container = drawerContainer,
         Room = room,
         Prompt = prompt,
@@ -112,21 +204,22 @@ local function registerFurniture(object, room)
     end
 
     local name = object.Name
-    if name ~= "Dresser" and name ~= "Table" then
+
+    -- Dresser, Table, Dresser_Single and Rolltop_Desk are one Auto Interact
+    -- category. Register every DrawerContainer/RolltopContainer separately.
+    if name ~= "Dresser"
+        and name ~= "Dresser_Single"
+        and name ~= "Table"
+        and name ~= "Rolltop_Desk"
+    then
         return
     end
 
-    local kind = name
-    if not Enabled[kind] then
-        return
-    end
-
-    -- Dresser/Table can contain 1, 2 or 3 DrawerContainers.
-    -- Register every container separately so one opened drawer does not
-    -- stop the remaining drawers from being processed.
     for _, descendant in ipairs(object:GetDescendants()) do
-        if descendant.Name == "DrawerContainer" then
-            registerDrawerContainer(kind, descendant, room)
+        if descendant.Name == "DrawerContainer"
+            or descendant.Name == "RolltopContainer"
+        then
+            registerDrawerContainer(descendant, room)
         end
     end
 end
@@ -146,13 +239,13 @@ local function registerChest(object, room)
         return
     end
 
-    if not Enabled[kind] then
+    if not InteractEnabled[kind] then
         return
     end
 
-    local prompt = getPrompt(object)
+    local prompt = getPrompt(object, {"ActivateEventPrompt"})
     if prompt then
-        Targets[object] = {
+        InteractTargets[object] = {
             Kind = kind,
             Container = object,
             Room = room,
@@ -162,22 +255,27 @@ local function registerChest(object, room)
     end
 end
 
-local function registerObject(object, room)
+local function registerInteractObject(object, room)
     if not object then
         return
     end
 
-    if object.Name == "Dresser" or object.Name == "Table" then
-        registerFurniture(object, room)
+    if object.Name == "Dresser"
+        or object.Name == "Dresser_Single"
+        or object.Name == "Table"
+        or object.Name == "Rolltop_Desk"
+    then
+        if InteractEnabled.Drawers then
+            registerFurniture(object, room)
+        end
         return
     end
 
-    if object.Name == "DrawerContainer" then
-        local furniture = object:FindFirstAncestor("Dresser")
-            or object:FindFirstAncestor("Table")
-
-        if furniture then
-            registerDrawerContainer(furniture.Name, object, room)
+    if object.Name == "DrawerContainer"
+        or object.Name == "RolltopContainer"
+    then
+        if InteractEnabled.Drawers then
+            registerDrawerContainer(object, room)
         end
         return
     end
@@ -190,20 +288,7 @@ local function registerObject(object, room)
     end
 end
 
-local function findRoom(object, rooms)
-    local current = object
-
-    while current and current ~= rooms do
-        if current.Parent == rooms then
-            return current
-        end
-        current = current.Parent
-    end
-
-    return nil
-end
-
-local function scanRooms()
+local function scanInteractRooms()
     local rooms = getRooms()
     if not rooms then
         return
@@ -212,61 +297,58 @@ local function scanRooms()
     for _, room in ipairs(rooms:GetChildren()) do
         if tonumber(room.Name) then
             for _, object in ipairs(room:GetDescendants()) do
-                registerObject(object, room)
+                registerInteractObject(object, room)
             end
         end
     end
 end
 
-local function cleanupTargets()
-    for object, data in pairs(Targets) do
+local function cleanupInteractTargets()
+    for object, data in pairs(InteractTargets) do
         local container = data.Container
 
         if not container
             or not container.Parent
             or not data.Room
             or not data.Room.Parent
+            or not container:IsDescendantOf(data.Room)
         then
-            Targets[object] = nil
-        elseif not container:IsDescendantOf(data.Room) then
-            Targets[object] = nil
+            InteractTargets[object] = nil
         end
     end
 end
 
-local function processTargets()
+local function processInteractTargets()
     local now = os.clock()
 
-    for object, data in pairs(Targets) do
+    for object, data in pairs(InteractTargets) do
         local container = data.Container
 
         if not container or not container.Parent then
-            Targets[object] = nil
+            InteractTargets[object] = nil
             continue
         end
 
-        if not Enabled[data.Kind] then
-            Targets[object] = nil
+        if not InteractEnabled[data.Kind] then
+            InteractTargets[object] = nil
             continue
         end
 
-        -- LootHolder is the completion marker. Once it exists, this
-        -- particular drawer/chest is permanently considered looted and
-        -- its prompt will never be fired again.
+        -- This is the important stop condition. Do not fire a drawer/chest
+        -- again after its LootHolder has appeared.
         if hasLootHolder(container) then
-            Targets[object] = nil
+            InteractTargets[object] = nil
             continue
         end
 
         local prompt = data.Prompt
         if not prompt or not prompt.Parent then
-            prompt = getPrompt(container)
+            prompt = getPrompt(container, {"ActivateEventPrompt"})
             data.Prompt = prompt
         end
 
         if prompt
-            and prompt.Enabled
-            and now - data.LastFire >= 0.15
+            and now - data.LastFire >= 0.20
         then
             if firePrompt(prompt) then
                 data.LastFire = now
@@ -275,31 +357,186 @@ local function processTargets()
     end
 end
 
-local function setSelection(selected)
-    for _, option in ipairs(TARGET_OPTIONS) do
-        Enabled[option] = false
+local function findLootPrompt(object)
+    if not object or not object.Parent then
+        return nil
     end
 
-    if type(selected) == "string" then
-        if Enabled[selected] ~= nil then
-            Enabled[selected] = true
+    if object.Name == "LiveHintBook" then
+        return getPrompt(object, {"ActivateEventPrompt"})
+    end
+
+    if object.Name == "LibraryHintPaper" then
+        return getPrompt(object, {"ModulePrompt"})
+    end
+
+    return getPrompt(object, {"ModulePrompt"})
+end
+
+local function registerLootObject(object, room)
+    if not object or not object.Parent then
+        return
+    end
+
+    local label = LootNames[object.Name]
+    if not label or not LootSelection[label] then
+        return
+    end
+
+    if room and isJeffShop(object, room) then
+        return
+    end
+
+    if object.Name == "LiveHintBook" and (not room or room.Name ~= "50") then
+        return
+    end
+
+    if object.Name == "LibraryHintPaper" and (not room or room.Name ~= "50") then
+        return
+    end
+
+    local prompt = findLootPrompt(object)
+    if not prompt then
+        return
+    end
+
+    LootTargets[prompt] = {
+        Item = object,
+        Kind = label,
+        Room = room,
+        LastFire = 0,
+    }
+end
+
+local function registerDropRoot(object)
+    if not object then
+        return
+    end
+
+    local drops = workspace:FindFirstChild("Drops")
+    if not drops then
+        return
+    end
+
+    local root = object
+    while root.Parent and root.Parent ~= drops do
+        root = root.Parent
+    end
+
+    if root.Parent == drops then
+        registerLootObject(root, nil)
+    end
+end
+
+local function scanLootRooms()
+    local rooms = getRooms()
+    if not rooms then
+        return
+    end
+
+    for _, room in ipairs(rooms:GetChildren()) do
+        if tonumber(room.Name) then
+            for _, object in ipairs(room:GetDescendants()) do
+                registerLootObject(object, room)
+            end
         end
-    elseif type(selected) == "table" then
+    end
+
+    local drops = workspace:FindFirstChild("Drops")
+    if drops then
+        for _, object in ipairs(drops:GetChildren()) do
+            registerLootObject(object, nil)
+        end
+    end
+end
+
+local function cleanupLootTargets()
+    for prompt, data in pairs(LootTargets) do
+        local item = data.Item
+
+        if not prompt
+            or not prompt.Parent
+            or not item
+            or not item.Parent
+        then
+            LootTargets[prompt] = nil
+        elseif data.Room
+            and (not data.Room.Parent or not item:IsDescendantOf(data.Room))
+        then
+            LootTargets[prompt] = nil
+        elseif data.Room and isJeffShop(item, data.Room) then
+            LootTargets[prompt] = nil
+        end
+    end
+end
+
+local function processLootTargets()
+    local now = os.clock()
+
+    for prompt, data in pairs(LootTargets) do
+        local item = data.Item
+
+        if not item or not item.Parent or not prompt or not prompt.Parent then
+            LootTargets[prompt] = nil
+            continue
+        end
+
+        if not LootSelection[data.Kind] then
+            LootTargets[prompt] = nil
+            continue
+        end
+
+        if data.Room and isJeffShop(item, data.Room) then
+            LootTargets[prompt] = nil
+            continue
+        end
+
+        if now - data.LastFire >= 0.15 then
+            if firePrompt(prompt) then
+                data.LastFire = now
+            end
+        end
+    end
+end
+
+local function applySelection(selected)
+    local state = {}
+
+    if type(selected) == "table" then
         if #selected > 0 then
             for _, value in ipairs(selected) do
-                if Enabled[value] ~= nil then
-                    Enabled[value] = true
-                end
+                state[value] = true
             end
         else
-            for _, option in ipairs(TARGET_OPTIONS) do
-                Enabled[option] = selected[option] == true
+            for value, enabled in pairs(selected) do
+                if enabled == true then
+                    state[value] = true
+                end
             end
         end
+    elseif type(selected) == "string" then
+        state[selected] = true
     end
 
-    clearTargets()
-    scanRooms()
+    return state
+end
+
+local function setInteractSelection(selected)
+    local state = applySelection(selected)
+
+    for _, option in ipairs(InteractOptions) do
+        InteractEnabled[option] = state[option] == true
+    end
+
+    table.clear(InteractTargets)
+    scanInteractRooms()
+end
+
+local function setLootSelection(selected)
+    LootSelection = applySelection(selected)
+
+    table.clear(LootTargets)
+    scanLootRooms()
 end
 
 function GameUI:Create(ctx)
@@ -314,52 +551,72 @@ function GameUI:Create(ctx)
     end
     if not ctx.Tab then return false end
 
-    local section = ctx.Tab:Section({
-        Title = "Game",
-        Column = 1,
-        Icon = "joystick",
-    })
-    if not section then return false end
+    local pages = ctx.GamePages
+    if not pages then
+        pages = ctx.Tab:MultiSection({
+            Pages = {"Main", "Settings"},
+            Column = 1,
+            Icon = "joystick",
+        })
+        ctx.GamePages = pages
+    end
+    if not pages then return false end
 
-    ctx.Elements.AutoInteract = section:Dropdown({
+    local main = pages:Page("Main")
+    local settings = pages:Page("Settings")
+    if not main or not settings then return false end
+
+    ctx.Elements.AutoInteract = main:ValueDropdown({
         Name = "Auto Interact",
         Flag = "Hotel_AutoInteract",
-        Options = TARGET_OPTIONS,
+        Options = InteractOptions,
         MultiSelect = true,
-        MaxSelect = #TARGET_OPTIONS,
+        MaxSelect = #InteractOptions,
         Default = {},
         Search = true,
         Callback = function(selected)
-            setSelection(selected)
+            setInteractSelection(selected)
         end,
     })
 
-    ctx.Elements.AutoLoot = section:Dropdown({
+    ctx.Elements.AutoLoot = main:ValueDropdown({
         Name = "Auto Loot",
         Flag = "Hotel_AutoLoot",
-        Options = {},
+        Options = LootOptions,
         MultiSelect = true,
-        MaxSelect = 8,
+        MaxSelect = #LootOptions,
         Default = {},
         Search = true,
-        Callback = function() end,
+        Callback = function(selected)
+            setLootSelection(selected)
+        end,
+    })
+
+    settings:Label({
+        Text = "Auto Interact opens Drawers, Chests and Locked Chests.\nAuto Loot collects selected items from Drops and room containers, including newly spawned loot.\nJeff's Shop is excluded from Auto Loot.",
     })
 
     disconnectAll()
     clearTargets()
 
     local rooms = getRooms()
+
     if rooms then
         table.insert(Connections, rooms.DescendantAdded:Connect(function(object)
             local room = findRoom(object, rooms)
             if room then
-                registerObject(object, room)
+                registerInteractObject(object, room)
+                registerLootObject(object, room)
             end
         end))
 
         table.insert(Connections, rooms.DescendantRemoving:Connect(function(object)
-            if Targets[object] then
-                Targets[object] = nil
+            InteractTargets[object] = nil
+
+            for prompt, data in pairs(LootTargets) do
+                if data.Item == object then
+                    LootTargets[prompt] = nil
+                end
             end
         end))
 
@@ -368,7 +625,8 @@ function GameUI:Create(ctx)
                 task.defer(function()
                     if room.Parent == rooms then
                         for _, object in ipairs(room:GetDescendants()) do
-                            registerObject(object, room)
+                            registerInteractObject(object, room)
+                            registerLootObject(object, room)
                         end
                     end
                 end)
@@ -381,19 +639,41 @@ function GameUI:Create(ctx)
             task.defer(function()
                 if object.Parent == workspace then
                     clearTargets()
-                    scanRooms()
+                    scanInteractRooms()
+                    scanLootRooms()
+                end
+            end)
+        elseif object.Name == "Drops" then
+            task.defer(function()
+                if object.Parent == workspace then
+                    for _, drop in ipairs(object:GetChildren()) do
+                        registerDropRoot(drop)
+                    end
                 end
             end)
         end
     end))
+
+    local drops = workspace:FindFirstChild("Drops")
+    if drops then
+        table.insert(Connections, drops.ChildAdded:Connect(function(object)
+            task.defer(function()
+                if object.Parent == drops then
+                    registerDropRoot(object)
+                end
+            end)
+        end))
+    end
 
     table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
         GameUI._Elapsed = (GameUI._Elapsed or 0) + dt
 
         if GameUI._Elapsed >= 0.15 then
             GameUI._Elapsed = 0
-            cleanupTargets()
-            processTargets()
+            cleanupInteractTargets()
+            processInteractTargets()
+            cleanupLootTargets()
+            processLootTargets()
         end
     end))
 
@@ -401,17 +681,26 @@ function GameUI:Create(ctx)
 end
 
 function GameUI:ReapplyEnabledFeatures()
-    local element = Context and Context.Elements and Context.Elements.AutoInteract
-    if not element or type(element.Get) ~= "function" then
-        return
+    local interact = Context and Context.Elements and Context.Elements.AutoInteract
+    if interact and type(interact.Get) == "function" then
+        local ok, selected = pcall(function()
+            return interact:Get()
+        end)
+
+        if ok then
+            setInteractSelection(selected)
+        end
     end
 
-    local ok, selected = pcall(function()
-        return element:Get()
-    end)
+    local loot = Context and Context.Elements and Context.Elements.AutoLoot
+    if loot and type(loot.Get) == "function" then
+        local ok, selected = pcall(function()
+            return loot:Get()
+        end)
 
-    if ok then
-        setSelection(selected)
+        if ok then
+            setLootSelection(selected)
+        end
     end
 end
 
@@ -419,12 +708,12 @@ function GameUI:Destroy()
     disconnectAll()
     clearTargets()
     GameUI._Elapsed = 0
-
-    for _, option in ipairs(TARGET_OPTIONS) do
-        Enabled[option] = false
-    end
-
     Context = nil
+    table.clear(LootSelection)
+
+    for _, option in ipairs(InteractOptions) do
+        InteractEnabled[option] = false
+    end
 end
 
 return GameUI
