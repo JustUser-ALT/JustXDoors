@@ -29,7 +29,7 @@ local ITEM_VISUAL_DISTANCE = 500
 local ENTITY_VISUAL_DISTANCE = 5000
 
 local KINDS = {
-    "Doors","Drawers","Closets","Key","Gold","Chest","Bed","GlitchCube","Bandage","Smoothie",
+    "Doors","Drawers","Closets","Key","Gold","Chest","LockedChest","Bed","GlitchCube","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
     "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
@@ -66,6 +66,7 @@ local DEFAULT_COLORS = {
     Toolshed=Color3.fromRGB(180,110,55),
     GlitchCube=Color3.fromRGB(190,90,255),
     Chest=Color3.fromRGB(255,165,0),
+    LockedChest=Color3.fromRGB(255,110,80),
     Bed=Color3.fromRGB(255,180,120),
     VentGate=Color3.fromRGB(125,190,255),
     Lever=Color3.fromRGB(255,150,40),
@@ -114,7 +115,7 @@ local DEFAULT_COLORS = {
 
 local LABEL_NAMES = {
     Doors="Door", Drawers="Drawer", Closets="Closet", Key="Key", Gold="Gold",
-    Chest="Chest", Bed="Bed", GlitchCube="Glitch Cube", Bandage="Bandage", Smoothie="Smoothie", Flashlight="Flashlight",
+    Chest="Chest", LockedChest="Locked Chest", Bed="Bed", GlitchCube="Glitch Cube", Bandage="Bandage", Smoothie="Smoothie", Flashlight="Flashlight",
     TipJar="Tip Jar", Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
     AlarmClock="Alarm Clock", Lockpick="Lockpick", SkeletonKey="Skeleton Key",
     Shears="Shears", RiftCandle="Rift Candle", RiftSmoothie="Rift Smoothie",
