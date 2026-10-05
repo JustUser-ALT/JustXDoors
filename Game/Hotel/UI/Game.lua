@@ -177,6 +177,19 @@ local function registerObject(object, room)
     end
 end
 
+local function findRoom(object, rooms)
+    local current = object
+
+    while current and current ~= rooms do
+        if current.Parent == rooms then
+            return current
+        end
+        current = current.Parent
+    end
+
+    return nil
+end
+
 local function scanRooms()
     local rooms = getRooms()
     if not rooms then
@@ -325,8 +338,8 @@ function GameUI:Create(ctx)
     local rooms = getRooms()
     if rooms then
         table.insert(Connections, rooms.DescendantAdded:Connect(function(object)
-            local room = object:FindFirstAncestorWhichIsA("Model")
-            if room and room.Parent == rooms then
+            local room = findRoom(object, rooms)
+            if room then
                 registerObject(object, room)
             end
         end))
