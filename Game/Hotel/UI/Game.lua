@@ -14,6 +14,7 @@ local InteractEnabled = {
     ["Locked Chest"] = false,
     Lever = false,
     Toolshed = false,
+    Doors = false,
 }
 
 local AutoLootJeffShop = false
@@ -24,6 +25,7 @@ local InteractOptions = {
     "Locked Chest",
     "Lever",
     "Toolshed",
+    "Doors",
 }
 
 local LootOptions = {
@@ -350,6 +352,24 @@ local function registerInteractObject(object, room)
         return
     end
 
+    if object.Name == "Door" and InteractEnabled.Doors then
+        local lock = object:FindFirstChild("Lock")
+        local prompt = lock and lock:FindFirstChild("UnlockPrompt")
+        if prompt and prompt:IsA("ProximityPrompt") and not InteractCompleted[object] then
+            InteractTargets[object] = {
+                Kind = "Doors",
+                Container = object,
+                Room = room,
+                Prompt = prompt,
+                LastFire = 0,
+                Waiting = false,
+                InitialInteractions = prompt:GetAttribute("Interactions"),
+                HadLootHolder = false,
+            }
+        end
+        return
+    end
+
     if (object.Name == "Toolshed_Small" or object.Name == "Small_Toolshed")
         and InteractEnabled.Toolshed
     then
@@ -480,12 +500,18 @@ local function processInteractTargets()
     if firePrompt(prompt) then
         bestData.LastFire = now
         bestData.Waiting = true
+        InteractCompleted[bestData.Container] = true
+        InteractTargets[bestObject] = nil
     end
 end
 
 local function findLootPrompt(object)
     if not object or not object.Parent then
         return nil
+    end
+
+    if object.Name == "GoldPile" then
+        return getPrompt(object, {"ModulePrompt", "ActivateEventPrompt"})
     end
 
     if object.Name == "LiveHintBook" then
@@ -766,9 +792,19 @@ function GameUI:Create(ctx)
     if rooms then
         table.insert(Connections, rooms.DescendantAdded:Connect(function(object)
             local room = findRoom(object, rooms)
-            if room then
-                registerInteractObject(object, room)
-                registerLootObject(object, room)
+            if not room then return end
+
+            registerInteractObject(object, room)
+            registerLootObject(object, room)
+
+            if object:IsA("ProximityPrompt") then
+                local current = object.Parent
+                for _ = 1, 8 do
+                    if not current or current == room then break end
+                    registerInteractObject(current, room)
+                    registerLootObject(current, room)
+                    current = current.Parent
+                end
             end
         end))
 
