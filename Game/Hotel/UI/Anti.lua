@@ -222,7 +222,10 @@ local function setAntiEyes(value)
         -- or when another MotorReplication call happened, which could leave
         -- a gap where Eyes damage got through.
         EyesRenderConnection = RunService.RenderStepped:Connect(function()
-            if AntiEyesEnabled and workspace:FindFirstChild("Eyes") then
+            -- Use the same detector as the hook/health guard. Eyes is not
+            -- guaranteed to remain a direct Workspace child in every runtime
+            -- state; otherwise the continuous bypass can silently stop.
+            if AntiEyesEnabled and isEyesActive() then
                 fireEyesBypass()
             end
         end)
