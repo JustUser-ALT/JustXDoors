@@ -30,9 +30,9 @@ function VisualUI:Create(ctx)
     ctx.Elements.Interactables = page:ValueDropdown({
         Name = "Interactables",
         Flag = "Hotel_Interactables",
-        Options = {"Doors","Drawers","Closets","Chest","LockedChest","Vent Gate","Lever","Toolshed","Glitch Cube","All"},
+        Options = {"Doors","Drawers","Closets","Chest","LockedChest","Bed","Vent Gate","Lever","Toolshed","All"},
         MultiSelect = true,
-        MaxSelect = 9,
+        MaxSelect = 10,
         Default = {},
         Search = true,
         Callback = function(selected)
@@ -43,7 +43,7 @@ function VisualUI:Create(ctx)
     ctx.Elements.Items = page:ValueDropdown({
         Name = "Items",
         Flag = "Hotel_Items",
-        Options = {"Key","Gold","Bandage","Smoothie","Flashlight","Tip Jar","Vitamins","Lighter","Candle","AlarmClock","Lockpick","Skeleton Key","Shears","Battery","Rift Candle","Rift Smoothie","Rift Jar","Donut","Crucifix","Sally Toy","Electrical Key","Breaker Pole"},
+        Options = {"Key","Gold","Bandage","Smoothie","Flashlight","Tip Jar","Vitamins","Lighter","Candle","AlarmClock","Lockpick","Skeleton Key","Shears","Battery","Rift Candle","Rift Smoothie","Rift Jar","Donut","Crucifix","Sally Toy","Electrical Key","Breaker Pole","Glitch Cube","Library Paper","Library Book"},
         Values = {
             Gold = {
                 {Name = "Min Level", Min = 1, Max = 6, Default = 1},
@@ -51,7 +51,7 @@ function VisualUI:Create(ctx)
             },
         },
         MultiSelect = true,
-        MaxSelect = 24,
+        MaxSelect = 27,
         Default = {},
         Search = true,
         Callback = function(selected)
