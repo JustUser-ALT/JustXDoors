@@ -162,13 +162,12 @@ local function firePrompt(prompt)
         return false
     end
 
-    -- DOORS can temporarily disable a prompt after it is triggered while
-    -- the drawer/chest is still processing. Auto Interact owns these prompts,
-    -- so keep them enabled until LootHolder confirms completion.
+    -- Do not force a disabled prompt back on. DOORS uses Enabled=false
+    -- while an interaction is being processed; forcing it back on makes
+    -- Auto Interact repeatedly fire the same prompt and can block manual
+    -- interaction on mobile.
     if not prompt.Enabled then
-        pcall(function()
-            prompt.Enabled = true
-        end)
+        return false
     end
 
     local ok = pcall(function()
@@ -333,9 +332,16 @@ local function processInteractTargets()
             continue
         end
 
-        -- This is the important stop condition. Do not fire a drawer/chest
-        -- again after its LootHolder has appeared.
+        -- LootHolder means this container has finished opening/processing.
         if hasLootHolder(container) then
+            InteractTargets[object] = nil
+            continue
+        end
+
+        -- Each drawer/chest prompt only needs one successful trigger.
+        -- Re-firing the same prompt is what caused the mobile interaction
+        -- finger to spam and prevented manual item pickup.
+        if data.Triggered then
             InteractTargets[object] = nil
             continue
         end
@@ -346,11 +352,11 @@ local function processInteractTargets()
             data.Prompt = prompt
         end
 
-        if prompt
-            and now - data.LastFire >= 0.20
-        then
+        if prompt and prompt.Enabled and now - data.LastFire >= 0.20 then
             if firePrompt(prompt) then
                 data.LastFire = now
+                data.Triggered = true
+                InteractTargets[object] = nil
             end
         end
     end
