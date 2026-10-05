@@ -169,7 +169,20 @@ local function registerObject(object, room)
 
     if object.Name == "Dresser" or object.Name == "Table" then
         registerFurniture(object, room)
-    elseif object.Name == "ChestBox"
+        return
+    end
+
+    if object.Name == "DrawerContainer" then
+        local furniture = object:FindFirstAncestor("Dresser")
+            or object:FindFirstAncestor("Table")
+
+        if furniture then
+            registerDrawerContainer(furniture.Name, object, room)
+        end
+        return
+    end
+
+    if object.Name == "ChestBox"
         or object.Name == "LockedChestBox"
         or object.Name == "ChestBoxLocked"
     then
