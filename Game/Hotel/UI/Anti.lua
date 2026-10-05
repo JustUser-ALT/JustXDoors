@@ -27,7 +27,6 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesConnection
-local EyesBypassConnection
 local EyesHookInstalled = false
 local EyesHealthConnection
 local EyesTrackedHumanoid
@@ -181,11 +180,6 @@ end
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
 
-    if EyesBypassConnection then
-        EyesBypassConnection:Disconnect()
-        EyesBypassConnection = nil
-    end
-
     if EyesHealthConnection then
         EyesHealthConnection:Disconnect()
         EyesHealthConnection = nil
@@ -202,14 +196,6 @@ local function setAntiEyes(value)
     if AntiEyesEnabled then
         installEyesHook()
         fireEyesBypass()
-
-        -- Keep the Eyes spoof continuously active, matching Abyssal's
-        -- runtime bypass instead of relying on a short one-shot window.
-        EyesBypassConnection = RunService.RenderStepped:Connect(function()
-            if AntiEyesEnabled and isEyesActive() then
-                fireEyesBypass()
-            end
-        end)
 
         EyesConnection = workspace.ChildAdded:Connect(function(object)
             if object.Name ~= "Eyes" then
