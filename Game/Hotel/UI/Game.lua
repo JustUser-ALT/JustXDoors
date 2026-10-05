@@ -353,8 +353,7 @@ local function registerInteractObject(object, room)
     end
 
     if object.Name == "Door" and InteractEnabled.Doors then
-        local lock = object:FindFirstChild("Lock")
-        local prompt = lock and lock:FindFirstChild("UnlockPrompt")
+        local prompt = getPrompt(object, {"UnlockPrompt"})
         if prompt and prompt:IsA("ProximityPrompt") and not InteractCompleted[object] then
             InteractTargets[object] = {
                 Kind = "Doors",
@@ -440,37 +439,70 @@ local function processInteractTargets()
         end
 
         local interactions = data.Prompt and data.Prompt:GetAttribute("Interactions")
+        local prompt = data.Prompt
+        if not prompt or not prompt.Parent then
+            prompt = getPrompt(container, data.Kind == "Doors" and {"UnlockPrompt"} or {"ActivateEventPrompt"})
+            data.Prompt = prompt
+        end
+
+        if not prompt then
+            if data.Kind == "Doors" or data.Kind == "Drawers" then
+                InteractCompleted[container] = true
+            end
+            InteractTargets[object] = nil
+            continue
+        end
+
+        -- Drawers are stateful: after opening, the same prompt normally
+        -- becomes "Close" and must never be fired again. A LootHolder can
+        -- also appear only after the drawer has opened.
+        if data.Kind == "Drawers" then
+            if data.Waiting then
+                if prompt.ActionText == "Close"
+                    or (not data.HadLootHolder and hasLootHolder(container))
+                then
+                    InteractCompleted[container] = true
+                    InteractTargets[object] = nil
+                end
+                continue
+            end
+
+            if prompt.ActionText == "Close"
+                or (not data.HadLootHolder and hasLootHolder(container))
+            then
+                InteractCompleted[container] = true
+                InteractTargets[object] = nil
+                continue
+            end
+        end
+
+        -- Doors are one-shot unlock interactions. Do not force a disabled
+        -- UnlockPrompt back on; the game may disable it after a successful
+        -- unlock and another door must still be allowed to run.
+        if data.Kind == "Doors" and data.Waiting and not prompt.Enabled then
+            InteractCompleted[container] = true
+            InteractTargets[object] = nil
+            continue
+        end
+
         if data.InitialInteractions ~= nil
             and interactions ~= nil
             and interactions ~= data.InitialInteractions
+            and data.Kind ~= "Drawers"
         then
             InteractCompleted[container] = true
             InteractTargets[object] = nil
             continue
         end
 
-        if not data.HadLootHolder and hasLootHolder(container) then
-            InteractCompleted[container] = true
-            InteractTargets[object] = nil
-            continue
-        end
-
-        local prompt = data.Prompt
-        if not prompt or not prompt.Parent then
-            prompt = getPrompt(container, {"ActivateEventPrompt"})
-            data.Prompt = prompt
-        end
-
-        if prompt then
-            local position = getPromptPosition(prompt)
-            local root = game:GetService("Players").LocalPlayer.Character
-                and game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if position and root then
-                local distance = (root.Position - position).Magnitude
-                local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
-                if distance <= maxDistance and distance < bestDistance then
-                    bestObject, bestData, bestDistance = object, data, distance
-                end
+        local position = getPromptPosition(prompt)
+        local root = game:GetService("Players").LocalPlayer.Character
+            and game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if position and root and prompt.Enabled and not data.Waiting then
+            local distance = (root.Position - position).Magnitude
+            local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
+            if distance <= maxDistance and distance < bestDistance then
+                bestObject, bestData, bestDistance = object, data, distance
             end
         end
     end
@@ -484,24 +516,21 @@ local function processInteractTargets()
         return
     end
 
-    -- Some Doors prompts become disabled while their interaction is being
-    -- processed. Re-enable only the single selected target, never all prompts.
-    if not prompt.Enabled then
-        if now - bestData.LastFire >= 0.35 then
-            pcall(function() prompt.Enabled = true end)
-        end
-        return
-    end
-
-    if now - bestData.LastFire < 0.35 then
+    if not prompt.Enabled or now - bestData.LastFire < 0.35 then
         return
     end
 
     if firePrompt(prompt) then
         bestData.LastFire = now
         bestData.Waiting = true
-        InteractCompleted[bestData.Container] = true
-        InteractTargets[bestObject] = nil
+
+        -- Only stateless interactions are completed immediately. Drawers
+        -- and Doors have their own post-trigger state and are completed by
+        -- the state checks above.
+        if bestData.Kind ~= "Drawers" and bestData.Kind ~= "Doors" then
+            InteractCompleted[bestData.Container] = true
+            InteractTargets[bestObject] = nil
+        end
     end
 end
 
@@ -511,7 +540,21 @@ local function findLootPrompt(object)
     end
 
     if object.Name == "GoldPile" then
-        return getPrompt(object, {"ModulePrompt", "ActivateEventPrompt"})
+        local prompt = getPrompt(object, {"ModulePrompt", "ActivateEventPrompt"})
+        if prompt then
+            return prompt
+        end
+
+        -- Some GoldPile variants use a differently named ProximityPrompt.
+        -- Prefer the known prompt names, then accept any real prompt under
+        -- the GoldPile rather than silently losing the loot target.
+        for _, descendant in ipairs(object:GetDescendants()) do
+            if descendant:IsA("ProximityPrompt") then
+                return descendant
+            end
+        end
+
+        return nil
     end
 
     if object.Name == "LiveHintBook" then
