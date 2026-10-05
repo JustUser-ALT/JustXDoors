@@ -27,6 +27,7 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesConnection
+local EyesRenderConnection
 local EyesHookInstalled = false
 local EyesHealthConnection
 local EyesTrackedHumanoid
@@ -197,6 +198,11 @@ local function setAntiEyes(value)
         EyesConnection = nil
     end
 
+    if EyesRenderConnection then
+        EyesRenderConnection:Disconnect()
+        EyesRenderConnection = nil
+    end
+
     if AntiEyesEnabled then
         installEyesHook()
 
@@ -209,6 +215,16 @@ local function setAntiEyes(value)
                 bindEyesHealthGuard()
                 fireEyesBypass()
             end)
+        end)
+
+        -- Abyssal continuously sends the Eyes MotorReplication bypass while
+        -- Eyes is active. The previous implementation only sent it on spawn
+        -- or when another MotorReplication call happened, which could leave
+        -- a gap where Eyes damage got through.
+        EyesRenderConnection = RunService.RenderStepped:Connect(function()
+            if AntiEyesEnabled and workspace:FindFirstChild("Eyes") then
+                fireEyesBypass()
+            end
         end)
 
         bindEyesHealthGuard()
@@ -807,6 +823,10 @@ end
 
 function AntiUI:Destroy()
     clearScreechConnections()
+    if EyesRenderConnection then
+        EyesRenderConnection:Disconnect()
+        EyesRenderConnection = nil
+    end
     AntiRushEnabled = false
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
