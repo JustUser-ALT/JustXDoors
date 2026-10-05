@@ -32,7 +32,7 @@ local KINDS = {
     "Doors","Drawers","Closets","Key","Gold","Chest","LockedChest","Bed","GlitchCube","Bandage","Smoothie",
     "Flashlight","TipJar","Vitamins","Lighter","Candle","AlarmClock",
     "Lockpick","SkeletonKey","Shears","RiftCandle","RiftSmoothie","RiftJar",
-    "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery",
+    "Donut","Crucifix","SallyToy","ElectricalKey","BreakerPole","Battery","LibraryPaper","LibraryBook",
     "Dupe","Eyes","SallyLingering","SallyMoving","Seek","Figure","Snare",
     "GlitchRush","GlitchAmbush","GlitchScreech","Screech","VentGate","Toolshed","Lever","Rush","Ambush","Dread"
 }
