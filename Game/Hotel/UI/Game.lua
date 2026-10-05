@@ -75,7 +75,6 @@ local LootNames = {
     LiveHintBook = "Library Book",
 }
 
-local Context
 local LootSelection = {}
 
 local function disconnectAll()
