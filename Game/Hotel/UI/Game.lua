@@ -12,12 +12,18 @@ local InteractEnabled = {
     Drawers = false,
     Chest = false,
     ["Locked Chest"] = false,
+    Lever = false,
+    Toolshed = false,
 }
+
+local AutoLootJeffShop = false
 
 local InteractOptions = {
     "Drawers",
     "Chest",
     "Locked Chest",
+    "Lever",
+    "Toolshed",
 }
 
 local LootOptions = {
@@ -228,6 +234,7 @@ local function registerDrawerContainer(drawerContainer, room)
         Room = room,
         Prompt = prompt,
         LastFire = 0,
+        Waiting = false,
     }
 end
 
@@ -284,6 +291,7 @@ local function registerChest(object, room)
             Room = room,
             Prompt = prompt,
             LastFire = 0,
+            Waiting = false,
         }
     end
 end
@@ -318,6 +326,38 @@ local function registerInteractObject(object, room)
         or object.Name == "ChestBoxLocked"
     then
         registerChest(object, room)
+        return
+    end
+
+    if object.Name == "LeverForGate" and InteractEnabled.Lever then
+        local prompt = getPrompt(object, {"ActivateEventPrompt"})
+        if prompt and not InteractCompleted[object] then
+            InteractTargets[object] = {
+                Kind = "Lever",
+                Container = object,
+                Room = room,
+                Prompt = prompt,
+                LastFire = 0,
+                Waiting = false,
+            }
+        end
+        return
+    end
+
+    if (object.Name == "Toolshed_Small" or object.Name == "Small_Toolshed")
+        and InteractEnabled.Toolshed
+    then
+        local prompt = getPrompt(object, {"ActivateEventPrompt"})
+        if prompt and not InteractCompleted[object] then
+            InteractTargets[object] = {
+                Kind = "Toolshed",
+                Container = object,
+                Room = room,
+                Prompt = prompt,
+                LastFire = 0,
+                Waiting = false,
+            }
+        end
     end
 end
 
@@ -353,31 +393,26 @@ end
 
 local function processInteractTargets()
     local now = os.clock()
+    local bestObject, bestData, bestDistance = nil, nil, math.huge
 
+    -- Process exactly one interaction at a time. This prevents two nearby
+    -- DrawerContainers/Dressers from competing and leaving one unopened.
     for object, data in pairs(InteractTargets) do
         local container = data.Container
-
-        if not container or not container.Parent then
+        if not container or not container.Parent or not data.Room or not data.Room.Parent
+            or not container:IsDescendantOf(data.Room)
+        then
             InteractTargets[object] = nil
             continue
         end
 
-        if not InteractEnabled[data.Kind] then
+        if not InteractEnabled[data.Kind] or InteractCompleted[container] then
             InteractTargets[object] = nil
             continue
         end
 
-        -- LootHolder means this container has finished opening/processing.
         if hasLootHolder(container) then
             InteractCompleted[container] = true
-            InteractTargets[object] = nil
-            continue
-        end
-
-        -- Never bypass the prompt's real interaction range. fireproximityprompt
-        -- can otherwise activate a prompt from across the room and the game can
-        -- leave it disabled while the interaction is being processed.
-        if InteractCompleted[container] then
             InteractTargets[object] = nil
             continue
         end
@@ -388,16 +423,45 @@ local function processInteractTargets()
             data.Prompt = prompt
         end
 
-        if prompt and prompt.Enabled
-            and isPromptInRange(prompt)
-            and now - data.LastFire >= 0.35
-        then
-            if firePrompt(prompt) then
-                data.LastFire = now
-                InteractCompleted[container] = true
-                InteractTargets[object] = nil
+        if prompt then
+            local position = getPromptPosition(prompt)
+            local root = game:GetService("Players").LocalPlayer.Character
+                and game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if position and root then
+                local distance = (root.Position - position).Magnitude
+                local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
+                if distance <= maxDistance and distance < bestDistance then
+                    bestObject, bestData, bestDistance = object, data, distance
+                end
             end
         end
+    end
+
+    if not bestObject or not bestData then
+        return
+    end
+
+    local prompt = bestData.Prompt
+    if not prompt or not prompt.Parent then
+        return
+    end
+
+    -- Some Doors prompts become disabled while their interaction is being
+    -- processed. Re-enable only the single selected target, never all prompts.
+    if not prompt.Enabled then
+        if now - bestData.LastFire >= 0.75 then
+            pcall(function() prompt.Enabled = true end)
+        end
+        return
+    end
+
+    if now - bestData.LastFire < 0.75 then
+        return
+    end
+
+    if firePrompt(prompt) then
+        bestData.LastFire = now
+        bestData.Waiting = true
     end
 end
 
@@ -427,7 +491,12 @@ local function registerLootObject(object, room)
         return
     end
 
-    if room and isJeffShop(object, room) then
+    if room and isJeffShop(object, room) and not AutoLootJeffShop then
+        return
+    end
+
+    -- Tip Jar is never an Auto Loot target inside Jeff's Shop.
+    if room and isJeffShop(object, room) and object.Name == "TipJar" then
         return
     end
 
@@ -508,7 +577,9 @@ local function cleanupLootTargets()
             and (not data.Room.Parent or not item:IsDescendantOf(data.Room))
         then
             LootTargets[prompt] = nil
-        elseif data.Room and isJeffShop(item, data.Room) then
+        elseif data.Room and isJeffShop(item, data.Room) and not AutoLootJeffShop then
+            LootTargets[prompt] = nil
+        elseif data.Room and isJeffShop(item, data.Room) and item.Name == "TipJar" then
             LootTargets[prompt] = nil
         end
     end
@@ -516,7 +587,10 @@ end
 
 local function processLootTargets()
     local now = os.clock()
+    local bestPrompt, bestData, bestDistance = nil, nil, math.huge
 
+    -- Auto Loot also uses the real prompt range and one target at a time.
+    -- This removes the old room-wide prompt spam.
     for prompt, data in pairs(LootTargets) do
         local item = data.Item
 
@@ -531,15 +605,30 @@ local function processLootTargets()
         end
 
         if data.Room and isJeffShop(item, data.Room) then
-            LootTargets[prompt] = nil
-            continue
-        end
-
-        if now - data.LastFire >= 0.15 then
-            if firePrompt(prompt) then
-                data.LastFire = now
+            if not AutoLootJeffShop or item.Name == "TipJar" then
+                LootTargets[prompt] = nil
+                continue
             end
         end
+
+        local position = getPromptPosition(prompt)
+        local character = game:GetService("Players").LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if position and root and prompt.Enabled then
+            local distance = (root.Position - position).Magnitude
+            local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
+            if distance <= maxDistance and distance < bestDistance then
+                bestPrompt, bestData, bestDistance = prompt, data, distance
+            end
+        end
+    end
+
+    if not bestPrompt or not bestData or now - bestData.LastFire < 0.5 then
+        return
+    end
+
+    if firePrompt(bestPrompt) then
+        bestData.LastFire = now
     end
 end
 
@@ -636,8 +725,19 @@ function GameUI:Create(ctx)
         end,
     })
 
+    settings:Toggle({
+        Name = "Auto Loot JeffShop",
+        Flag = "Hotel_AutoLootJeffShop",
+        Default = false,
+        Callback = function(value)
+            AutoLootJeffShop = value == true
+            table.clear(LootTargets)
+            scanLootRooms()
+        end,
+    })
+
     settings:Label({
-        Text = "Auto Interact opens Drawers, Chests and Locked Chests.\nAuto Loot collects selected items from Drops and room containers, including newly spawned loot.\nJeff's Shop is excluded from Auto Loot.",
+        Text = "Auto Interact uses the real prompt range and processes one target at a time.\nAuto Loot only fires prompts inside their real range.\nTip Jar is always excluded from Jeff's Shop.",
     })
 
     disconnectAll()
@@ -746,6 +846,18 @@ function GameUI:ReapplyEnabledFeatures()
             setLootSelection(selected)
         end
     end
+
+    local jeff = Context and Context.Elements and Context.Elements.AutoLootJeffShop
+    if jeff and type(jeff.Get) == "function" then
+        local ok, value = pcall(function()
+            return jeff:Get()
+        end)
+        if ok then
+            AutoLootJeffShop = value == true
+            table.clear(LootTargets)
+            scanLootRooms()
+        end
+    end
 end
 
 function GameUI:Destroy()
@@ -759,6 +871,7 @@ function GameUI:Destroy()
     for _, option in ipairs(InteractOptions) do
         InteractEnabled[option] = false
     end
+    AutoLootJeffShop = false
 end
 
 return GameUI
