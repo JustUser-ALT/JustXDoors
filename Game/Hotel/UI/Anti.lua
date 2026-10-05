@@ -195,7 +195,6 @@ local function setAntiEyes(value)
 
     if AntiEyesEnabled then
         installEyesHook()
-        fireEyesBypass()
 
         EyesConnection = workspace.ChildAdded:Connect(function(object)
             if object.Name ~= "Eyes" then
