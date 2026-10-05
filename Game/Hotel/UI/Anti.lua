@@ -47,8 +47,12 @@ local function getFloorName()
 end
 
 local function isEyesActive()
-    for _, object in ipairs(workspace:GetChildren()) do
-        if object.Name == "Eyes" then
+    -- Eyes is normally a direct Workspace child, matching Abyssal's
+    -- EntityHandler, but some builds can parent the runtime entity deeper.
+    -- Track the actual Eyes Model anywhere under Workspace so the bypass
+    -- does not silently stop when its parent changes.
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object.Name == "Eyes" and object:IsA("Model") then
             return true
         end
     end
@@ -196,8 +200,8 @@ local function setAntiEyes(value)
     if AntiEyesEnabled then
         installEyesHook()
 
-        EyesConnection = workspace.ChildAdded:Connect(function(object)
-            if object.Name ~= "Eyes" then
+        EyesConnection = workspace.DescendantAdded:Connect(function(object)
+            if object.Name ~= "Eyes" or not object:IsA("Model") then
                 return
             end
 
