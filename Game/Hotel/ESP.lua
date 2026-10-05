@@ -1902,28 +1902,15 @@ local function createVisual(kind, object, entry)
 
     if entry.Highlight and entry.Highlight.Parent then
         if kind == "Gold" then
-            local goldHighlight = entry.Highlight
-            if not goldHighlight or not goldHighlight.Parent or goldHighlight.Adornee ~= object then
-                if goldHighlight then pcall(function() goldHighlight:Destroy() end) end
-                goldHighlight = Instance.new("Highlight")
-                goldHighlight.Name = "JustXDoorsGoldESP"
-                goldHighlight.Adornee = object
-                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.FillTransparency = 1
-                goldHighlight.OutlineTransparency = 0
-                goldHighlight.Enabled = true
-                goldHighlight.Parent = VisualContainer
-                entry.Highlight = goldHighlight
-            else
-                goldHighlight.FillColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.OutlineColor = Colors.Gold or Color3.fromRGB(255,215,0)
-                goldHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                goldHighlight.Enabled = true
+            -- Gold used to use a direct Highlight on GoldPile. On mobile,
+            -- the interaction finger/prompt renderer can temporarily cover
+            -- that Highlight. Use the isolated helper geometry instead,
+            -- just like the stable Item renderer.
+            destroyItemHelper(entry)
+            if makeItemHighlight(kind, object, entry) then
+                updateLabel(kind, object, entry)
+                return true
             end
-            updateLabel(kind, object, entry)
-            return true
         end
 
         if ITEM_KINDS[kind] then
