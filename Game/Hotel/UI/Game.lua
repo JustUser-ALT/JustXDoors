@@ -235,6 +235,9 @@ local function registerDrawerContainer(drawerContainer, room)
         Prompt = prompt,
         LastFire = 0,
         Waiting = false,
+        InitialInteractions = prompt:GetAttribute("Interactions"),
+        HadLootHolder = hasLootHolder(drawerContainer),
+    }
     }
 end
 
@@ -292,6 +295,8 @@ local function registerChest(object, room)
             Prompt = prompt,
             LastFire = 0,
             Waiting = false,
+            InitialInteractions = prompt:GetAttribute("Interactions"),
+            HadLootHolder = hasLootHolder(object),
         }
     end
 end
@@ -339,6 +344,8 @@ local function registerInteractObject(object, room)
                 Prompt = prompt,
                 LastFire = 0,
                 Waiting = false,
+                InitialInteractions = prompt:GetAttribute("Interactions"),
+                HadLootHolder = hasLootHolder(object),
             }
         end
         return
@@ -356,6 +363,8 @@ local function registerInteractObject(object, room)
                 Prompt = prompt,
                 LastFire = 0,
                 Waiting = false,
+                InitialInteractions = prompt:GetAttribute("Interactions"),
+                HadLootHolder = hasLootHolder(object),
             }
         end
     end
@@ -411,7 +420,17 @@ local function processInteractTargets()
             continue
         end
 
-        if hasLootHolder(container) then
+        local interactions = data.Prompt and data.Prompt:GetAttribute("Interactions")
+        if data.InitialInteractions ~= nil
+            and interactions ~= nil
+            and interactions ~= data.InitialInteractions
+        then
+            InteractCompleted[container] = true
+            InteractTargets[object] = nil
+            continue
+        end
+
+        if not data.HadLootHolder and hasLootHolder(container) then
             InteractCompleted[container] = true
             InteractTargets[object] = nil
             continue
@@ -725,7 +744,7 @@ function GameUI:Create(ctx)
         end,
     })
 
-    settings:Toggle({
+    ctx.Elements.AutoLootJeffShop = settings:Toggle({
         Name = "Auto Loot JeffShop",
         Flag = "Hotel_AutoLootJeffShop",
         Default = false,
