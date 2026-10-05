@@ -6,6 +6,7 @@ local Context
 local Connections = {}
 local InteractTargets = {}
 local LootTargets = {}
+local InteractCompleted = setmetatable({}, {__mode = "k"})
 
 local InteractEnabled = {
     Drawers = false,
@@ -148,6 +149,36 @@ local function getPrompt(container, names)
     return nil
 end
 
+local function getPromptPosition(prompt)
+    if not prompt or not prompt.Parent then
+        return nil
+    end
+
+    local parent = prompt.Parent
+    if parent:IsA("Attachment") then
+        return parent.WorldPosition
+    end
+    if parent:IsA("BasePart") then
+        return parent.Position
+    end
+
+    local part = parent:FindFirstChildWhichIsA("BasePart", true)
+    return part and part.Position or nil
+end
+
+local function isPromptInRange(prompt)
+    local character = game:GetService("Players").LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local position = getPromptPosition(prompt)
+
+    if not root or not position then
+        return false
+    end
+
+    local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
+    return (root.Position - position).Magnitude <= maxDistance
+end
+
 local function hasLootHolder(container)
     return container and container:FindFirstChild("LootHolder", true) ~= nil
 end
@@ -184,6 +215,10 @@ local function registerDrawerContainer(drawerContainer, room)
 
     local prompt = getPrompt(drawerContainer, {"ActivateEventPrompt"})
     if not prompt then
+        return
+    end
+
+    if InteractCompleted[drawerContainer] then
         return
     end
 
@@ -242,7 +277,7 @@ local function registerChest(object, room)
     end
 
     local prompt = getPrompt(object, {"ActivateEventPrompt"})
-    if prompt then
+    if prompt and not InteractCompleted[object] then
         InteractTargets[object] = {
             Kind = kind,
             Container = object,
@@ -334,14 +369,15 @@ local function processInteractTargets()
 
         -- LootHolder means this container has finished opening/processing.
         if hasLootHolder(container) then
+            InteractCompleted[container] = true
             InteractTargets[object] = nil
             continue
         end
 
-        -- Each drawer/chest prompt only needs one successful trigger.
-        -- Re-firing the same prompt is what caused the mobile interaction
-        -- finger to spam and prevented manual item pickup.
-        if data.Triggered then
+        -- Never bypass the prompt's real interaction range. fireproximityprompt
+        -- can otherwise activate a prompt from across the room and the game can
+        -- leave it disabled while the interaction is being processed.
+        if InteractCompleted[container] then
             InteractTargets[object] = nil
             continue
         end
@@ -352,10 +388,13 @@ local function processInteractTargets()
             data.Prompt = prompt
         end
 
-        if prompt and prompt.Enabled and now - data.LastFire >= 0.20 then
+        if prompt and prompt.Enabled
+            and isPromptInRange(prompt)
+            and now - data.LastFire >= 0.35
+        then
             if firePrompt(prompt) then
                 data.LastFire = now
-                data.Triggered = true
+                InteractCompleted[container] = true
                 InteractTargets[object] = nil
             end
         end
@@ -715,6 +754,7 @@ function GameUI:Destroy()
     GameUI._Elapsed = 0
     Context = nil
     table.clear(LootSelection)
+    table.clear(InteractCompleted)
 
     for _, option in ipairs(InteractOptions) do
         InteractEnabled[option] = false
