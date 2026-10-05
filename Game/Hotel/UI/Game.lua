@@ -238,7 +238,6 @@ local function registerDrawerContainer(drawerContainer, room)
         InitialInteractions = prompt:GetAttribute("Interactions"),
         HadLootHolder = hasLootHolder(drawerContainer),
     }
-    }
 end
 
 local function registerFurniture(object, room)
