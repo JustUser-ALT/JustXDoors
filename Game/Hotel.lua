@@ -127,6 +127,14 @@ function Hotel:Init(core, modules)
 end
 
 function Hotel:ReapplyEnabledFeatures()
+    if Hotel.UI and Hotel.UI.Game
+        and type(Hotel.UI.Game.ReapplyEnabledFeatures) == "function"
+    then
+        pcall(function()
+            Hotel.UI.Game:ReapplyEnabledFeatures()
+        end)
+    end
+
     if self.AntiUI and type(self.AntiUI.ReapplyEnabledFeatures) == "function" then
         pcall(function()
             self.AntiUI:ReapplyEnabledFeatures()
