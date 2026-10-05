@@ -458,7 +458,8 @@ local function processInteractTargets()
         -- also appear only after the drawer has opened.
         if data.Kind == "Drawers" then
             if data.Waiting then
-                if prompt.ActionText == "Close"
+                if prompt:GetAttribute("Interactions") ~= nil
+                    or prompt.ActionText == "Close"
                     or (not data.HadLootHolder and hasLootHolder(container))
                 then
                     InteractCompleted[container] = true
@@ -467,7 +468,8 @@ local function processInteractTargets()
                 continue
             end
 
-            if prompt.ActionText == "Close"
+            if prompt:GetAttribute("Interactions") ~= nil
+                or prompt.ActionText == "Close"
                 or (not data.HadLootHolder and hasLootHolder(container))
             then
                 InteractCompleted[container] = true
@@ -540,7 +542,7 @@ local function findLootPrompt(object)
     end
 
     if object.Name == "GoldPile" then
-        local prompt = getPrompt(object, {"ModulePrompt", "ActivateEventPrompt"})
+        local prompt = getPrompt(object, {"LootPrompt", "ModulePrompt", "ActivateEventPrompt"})
         if prompt then
             return prompt
         end
