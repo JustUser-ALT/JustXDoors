@@ -62,7 +62,7 @@ local function applyEyesReplication(args)
     local floor = getFloorName()
     if floor == "Fools" or floor == "OldHotel" then
         args[1] = 0
-        args[2] = 65
+        args[2] = -65
         args[3] = 0
         args[4] = false
     else
@@ -85,7 +85,7 @@ local function fireEyesBypass()
 
     local floor = getFloorName()
     if floor == "Fools" or floor == "OldHotel" then
-        motorReplication:FireServer(0, 65, 0, false)
+        motorReplication:FireServer(0, -65, 0, false)
     else
         motorReplication:FireServer(-650)
     end
