@@ -487,13 +487,13 @@ local function processInteractTargets()
     -- Some Doors prompts become disabled while their interaction is being
     -- processed. Re-enable only the single selected target, never all prompts.
     if not prompt.Enabled then
-        if now - bestData.LastFire >= 0.75 then
+        if now - bestData.LastFire >= 0.35 then
             pcall(function() prompt.Enabled = true end)
         end
         return
     end
 
-    if now - bestData.LastFire < 0.75 then
+    if now - bestData.LastFire < 0.35 then
         return
     end
 
@@ -866,7 +866,7 @@ function GameUI:Create(ctx)
     table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
         GameUI._Elapsed = (GameUI._Elapsed or 0) + dt
 
-        if GameUI._Elapsed >= 0.15 then
+        if GameUI._Elapsed >= 0.10 then
             GameUI._Elapsed = 0
             cleanupInteractTargets()
             processInteractTargets()
