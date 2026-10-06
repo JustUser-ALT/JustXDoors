@@ -86,6 +86,39 @@ local InfinitePromptContainer
 local InfiniteCrucifixRaycastParams = RaycastParams.new()
 InfiniteCrucifixRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
+-- Anti Eyes state is shared with Anti.lua. Keep the actual per-frame
+-- MotorReplication bypass in Main's RenderStepped, after collision updates,
+-- matching Abyssal's update order.
+local EyesHookState = nil
+if type(shared) == "table" then
+    EyesHookState = shared.__JustXDoorsEyesHookState
+end
+
+local function updateEyesBypass()
+    if type(EyesHookState) ~= "table" or not EyesHookState.Enabled then
+        return
+    end
+
+    if not workspace:FindFirstChild("Eyes") then
+        return
+    end
+
+    if getFloor and getFloor() ~= "Hotel" then
+        return
+    end
+
+    local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+    local motorReplication = remotes and remotes:FindFirstChild("MotorReplication")
+
+    if not motorReplication
+        or not (motorReplication:IsA("RemoteEvent") or motorReplication:IsA("UnreliableRemoteEvent"))
+    then
+        return
+    end
+
+    motorReplication:FireServer(-650)
+end
+
 local CrouchThrottle = 0
 
 local function connect(signal, callback)
@@ -2217,6 +2250,7 @@ local function setupConnections()
     connect(RunService.RenderStepped, function()
         updatePositionSpoof()
         updateCollisionSpoof()
+        updateEyesBypass()
 
         if VelocityManipulationEnabled and RootPart and Character then
             if not ManipulateBody then
