@@ -27,14 +27,12 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesRenderConnection
+local EyesDiagnosticSignatures = {}
 
--- Eyes needs one normal MotorReplication cycle after each new spawn before
--- the bypass is enabled. This reproduces the state transition that occurs
--- when Anti Eyes is manually turned off, Eyes is allowed to initialize, and
--- Anti Eyes is turned back on.
-local EyesCurrentInstance
-local EyesInitialized = false
-local EyesBypassFire = false
+-- Temporary diagnostic only: records the real MotorReplication arguments
+-- before Anti Eyes changes them. This is used to identify the exact normal
+-- Eyes state transition and will be removed after the test.
+local EyesDiagnosticVersion = 1
 
 -- The __namecall hook cannot be physically removed safely after installation.
 -- Keep one shared state so old hook closures become inert when the hub restarts.
@@ -54,6 +52,14 @@ else
         Installed = false,
     }
 end
+
+-- If an older hub instance installed the previous diagnostic hook, allow
+-- this version to replace it once. Subsequent reloads reuse this hook.
+if EyesHookState.DiagnosticVersion ~= EyesDiagnosticVersion then
+    EyesHookState.Installed = false
+    EyesHookState.DiagnosticVersion = EyesDiagnosticVersion
+end
+
 local EntityConnection
 local EntityRegistry = {}
 local OriginalModuleNames = setmetatable({}, {__mode = "k"})
@@ -66,29 +72,12 @@ local function getFloorName()
     return floor and floor.Value or nil
 end
 
-local function getEyesInstance()
-    return workspace:FindFirstChild("Eyes")
-end
-
 local function eyesExists()
-    return getEyesInstance() ~= nil
-end
-
-local function updateEyesInstance()
-    local eyes = getEyesInstance()
-
-    if eyes ~= EyesCurrentInstance then
-        EyesCurrentInstance = eyes
-        EyesInitialized = eyes == nil
-    end
-
-    return eyes
+    return workspace:FindFirstChild("Eyes") ~= nil
 end
 
 local function applyEyesReplication(args)
-    local eyes = updateEyesInstance()
-
-    if not AntiEyesEnabled or not eyes or not EyesInitialized then
+    if not AntiEyesEnabled or not eyesExists() then
         return args
     end
 
@@ -110,9 +99,7 @@ local function applyEyesReplication(args)
 end
 
 local function fireEyesBypass()
-    local eyes = updateEyesInstance()
-
-    if not AntiEyesEnabled or not eyes or not EyesInitialized then
+    if not AntiEyesEnabled or not eyesExists() then
         return
     end
 
@@ -124,13 +111,11 @@ local function fireEyesBypass()
 
     local floor = getFloorName()
 
-    EyesBypassFire = true
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
         motorReplication:FireServer(-650)
     end
-    EyesBypassFire = false
 end
 
 local function installEyesHook()
@@ -151,23 +136,57 @@ local function installEyesHook()
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         local method = getnamecallmethod()
 
-        if EyesHookState.Enabled
-            and method == "FireServer"
+        if method == "FireServer"
             and self
             and self.Name == "MotorReplication"
             and eyesExists()
         then
-            local eyes = updateEyesInstance()
             local args = { ... }
 
-            -- Let the first normal game-originated replication through so
-            -- the current Eyes instance can initialize exactly once.
-            if not EyesInitialized and not EyesBypassFire then
-                EyesInitialized = true
-                return oldNamecall(self, ...)
+            -- Diagnostic: capture the ORIGINAL game arguments before the
+            -- Anti Eyes hook modifies anything.
+            local signature = table.concat({
+                tostring(args[1]),
+                tostring(args[2]),
+                tostring(args[3]),
+                tostring(args[4]),
+            }, "|")
+
+            if not EyesDiagnosticSignatures[signature] then
+                EyesDiagnosticSignatures[signature] = true
+
+                local camera = workspace.CurrentCamera
+                local eyes = workspace:FindFirstChild("Eyes")
+                local dot = "n/a"
+                local distance = "n/a"
+
+                if camera and eyes then
+                    local eyesPart = eyes:IsA("BasePart") and eyes or eyes:FindFirstChildWhichIsA("BasePart", true)
+                    if eyesPart then
+                        local offset = eyesPart.Position - camera.CFrame.Position
+                        distance = string.format("%.2f", offset.Magnitude)
+                        if offset.Magnitude > 0 then
+                            dot = string.format("%.4f", camera.CFrame.LookVector:Dot(offset.Unit))
+                        end
+                    end
+                end
+
+                print(string.format(
+                    "[JustXDoors][EyesDiag] args=(%s,%s,%s,%s) distance=%s lookDot=%s AntiEyes=%s",
+                    tostring(args[1]),
+                    tostring(args[2]),
+                    tostring(args[3]),
+                    tostring(args[4]),
+                    distance,
+                    dot,
+                    tostring(AntiEyesEnabled)
+                ))
             end
 
-            applyEyesReplication(args)
+            if EyesHookState.Enabled then
+                applyEyesReplication(args)
+            end
+
             return oldNamecall(self, table.unpack(args))
         end
 
@@ -185,26 +204,18 @@ local function setAntiEyes(value)
     end
 
     if not AntiEyesEnabled then
-        EyesCurrentInstance = nil
-        EyesInitialized = false
-        EyesBypassFire = false
         return
     end
 
+    -- Match Abyssal's Hotel behavior directly:
+    -- while Eyes exists, send the MotorReplication bypass every render frame.
+    -- No health spoofing is used.
     installEyesHook()
 
-    -- A new Eyes instance starts uninitialized. The first normal
-    -- MotorReplication call is allowed through; after that, the regular
-    -- Abyssal-style -650 bypass is sent every render frame.
-    updateEyesInstance()
-
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
-        if not AntiEyesEnabled then
-            return
+        if AntiEyesEnabled and eyesExists() then
+            fireEyesBypass()
         end
-
-        updateEyesInstance()
-        fireEyesBypass()
     end)
 end
 
@@ -673,6 +684,10 @@ local function start()
     if AntiGlitchScreechEnabled then setAntiGlitchScreech(true) end
     if AntiDreadEnabled then setAntiDread(true) end
     if AntiHaltEnabled then setAntiHalt(true) end
+
+    -- Install the temporary diagnostic hook even while Anti Eyes is OFF,
+    -- so we can observe the game's real MotorReplication state at Eyes spawn.
+    installEyesHook()
 end
 
 function AntiUI:Create(ctx)
