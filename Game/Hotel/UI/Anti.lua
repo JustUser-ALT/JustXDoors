@@ -27,6 +27,8 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesConnection
+local EyesRenderConnection
+local EyesHookInstalled = false
 local EyesRuntimeActive = false
 local EntityConnection
 local EntityRegistry = {}
@@ -50,6 +52,28 @@ local function isEyesActive()
     return EyesRuntimeActive
 end
 
+local function applyEyesReplication(args)
+    if not AntiEyesEnabled or not isEyesActive() then
+        return args
+    end
+
+    local floor = getFloorName()
+
+    if floor == "Fools" or floor == "OldHotel" then
+        args[1] = 0
+        args[2] = -65
+        args[3] = 0
+        args[4] = false
+    else
+        args[1] = -650
+        args[2] = nil
+        args[3] = nil
+        args[4] = nil
+    end
+
+    return args
+end
+
 local function fireEyesBypass()
     if not AntiEyesEnabled or not isEyesActive() then
         return
@@ -63,14 +87,44 @@ local function fireEyesBypass()
 
     local floor = getFloorName()
 
-    -- Match Abyssal's actual Eyes bypass.
-    -- Normal Hotel: one -650 argument.
-    -- Fools/OldHotel: the four-argument pitch spoof.
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
         motorReplication:FireServer(-650)
     end
+end
+
+local function installEyesHook()
+    if EyesHookInstalled then
+        return
+    end
+
+    if type(hookmetamethod) ~= "function"
+        or type(getnamecallmethod) ~= "function"
+        or type(newcclosure) ~= "function"
+    then
+        return
+    end
+
+    EyesHookInstalled = true
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+
+        if AntiEyesEnabled
+            and method == "FireServer"
+            and self
+            and self.Name == "MotorReplication"
+            and isEyesActive()
+        then
+            local args = { ... }
+            applyEyesReplication(args)
+            return oldNamecall(self, table.unpack(args))
+        end
+
+        return oldNamecall(self, ...)
+    end))
 end
 
 local function setAntiEyes(value)
@@ -81,14 +135,21 @@ local function setAntiEyes(value)
         EyesConnection = nil
     end
 
+    if EyesRenderConnection then
+        EyesRenderConnection:Disconnect()
+        EyesRenderConnection = nil
+    end
+
     EyesRuntimeActive = AntiEyesEnabled and scanEyesRuntime() or false
 
     if not AntiEyesEnabled then
         return
     end
 
-    -- Match Abyssal's important behavior: the bypass is a discrete
-    -- MotorReplication call, not a continuous RenderStepped spoof.
+    -- Abyssal uses both the MotorReplication hook and a continuous
+    -- MotorReplication bypass while Eyes is active. No health spoof is used.
+    installEyesHook()
+
     if EyesRuntimeActive then
         fireEyesBypass()
     end
@@ -99,6 +160,7 @@ local function setAntiEyes(value)
         end
 
         EyesRuntimeActive = true
+
         task.defer(function()
             if AntiEyesEnabled and EyesRuntimeActive then
                 fireEyesBypass()
@@ -123,6 +185,12 @@ local function setAntiEyes(value)
             pcall(function() removingConnection:Disconnect() end)
         end
     }
+
+    EyesRenderConnection = RunService.RenderStepped:Connect(function()
+        if AntiEyesEnabled and isEyesActive() then
+            fireEyesBypass()
+        end
+    end)
 end
 
 local EntityNames = {
