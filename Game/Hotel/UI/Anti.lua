@@ -37,6 +37,7 @@ if type(shared) == "table" then
         EyesHookState = {
             Enabled = false,
             Installed = false,
+            RenderConnection = nil,
         }
         shared.__JustXDoorsEyesHookState = EyesHookState
     end
@@ -44,6 +45,7 @@ else
     EyesHookState = {
         Enabled = false,
         Installed = false,
+        RenderConnection = nil,
     }
 end
 
@@ -64,7 +66,7 @@ local function eyesExists()
 end
 
 local function applyEyesReplication(args)
-    if not AntiEyesEnabled or not eyesExists() then
+    if not EyesHookState.Enabled or not eyesExists() then
         return args
     end
 
@@ -86,7 +88,7 @@ local function applyEyesReplication(args)
 end
 
 local function fireEyesBypass()
-    if not AntiEyesEnabled or not eyesExists() then
+    if not EyesHookState.Enabled or not eyesExists() then
         return
     end
 
@@ -147,8 +149,20 @@ local function setAntiEyes(value)
     AntiEyesEnabled = value == true
     EyesHookState.Enabled = AntiEyesEnabled
 
+    -- The hook itself cannot be removed safely, but the render spam must be
+    -- owned by the shared state. This prevents an old hub instance from
+    -- continuing to fire -650 after the toggle is turned off.
+    if EyesHookState.RenderConnection then
+        pcall(function()
+            EyesHookState.RenderConnection:Disconnect()
+        end)
+        EyesHookState.RenderConnection = nil
+    end
+
     if EyesRenderConnection then
-        EyesRenderConnection:Disconnect()
+        pcall(function()
+            EyesRenderConnection:Disconnect()
+        end)
         EyesRenderConnection = nil
     end
 
@@ -161,11 +175,14 @@ local function setAntiEyes(value)
     -- No health spoofing is used.
     installEyesHook()
 
-    EyesRenderConnection = RunService.RenderStepped:Connect(function()
-        if AntiEyesEnabled and eyesExists() then
+    local connection = RunService.RenderStepped:Connect(function()
+        if EyesHookState.Enabled and eyesExists() then
             fireEyesBypass()
         end
     end)
+
+    EyesHookState.RenderConnection = connection
+    EyesRenderConnection = connection
 end
 
 local EntityNames = {
