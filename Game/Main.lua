@@ -907,17 +907,6 @@ local function restoreCollisionSpoof()
 end
 
 local function updateCollisionSpoof()
-    if not VelocityManipulationEnabled then
-        if CollisionClone then
-            CollisionClone.CanCollide = false
-            local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
-            if cloneCrouch then
-                cloneCrouch.CanCollide = false
-            end
-        end
-        return
-    end
-
     if not Character or not RootPart then
         return
     end
@@ -928,7 +917,19 @@ local function updateCollisionSpoof()
         return
     end
 
-    if getFloor() == "Fools" or getFloor() == "OldHotel" then
+    -- Abyssal keeps the character's real body parts non-collidable and
+    -- drives the Collision/CollisionClone representation every frame.
+    -- This is required for entity collision behavior even when Velocity
+    -- Manipulation is disabled.
+    local floor = getFloor()
+    if floor ~= "Hotel" and not VelocityManipulationEnabled then
+        return
+    end
+
+    if floor == "Fools" or floor == "OldHotel" then
+        if not VelocityManipulationEnabled then
+            return
+        end
         restoreCollisionSpoof()
         return
     end
