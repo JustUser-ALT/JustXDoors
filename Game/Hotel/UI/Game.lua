@@ -668,15 +668,6 @@ local function registerLootObject(object, room)
         return
     end
 
-    -- Loot inside a DrawerContainer/RolltopContainer is not eligible until
-    -- Auto Interact has actually opened that container. This prevents a
-    -- hidden Key/Lighter/etc. from stealing the Auto Loot target before the
-    -- drawer itself is opened.
-    local drawerContainer = getContainingDrawerContainer(object, room)
-    if drawerContainer and not isDrawerContainerOpen(drawerContainer) then
-        return
-    end
-
     if object.Name == "LiveHintBook" and (not room or room.Name ~= "50") then
         return
     end
