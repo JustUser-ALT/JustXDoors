@@ -49,12 +49,9 @@ local function getFloorName()
 end
 
 local function scanEyesRuntime()
-    for _, object in ipairs(workspace:GetDescendants()) do
-        if object.Name == "Eyes" then
-            return true
-        end
-    end
-    return false
+    -- Match Abyssal Continued: Hotel Eyes is a direct Workspace entity.
+    -- Do not treat an old/nested Eyes instance as an active encounter.
+    return workspace:FindFirstChild("Eyes") ~= nil
 end
 
 local function isEyesActive()
