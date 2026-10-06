@@ -27,14 +27,7 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesConnection
-local EyesRenderConnection
-local EyesHookInstalled = false
-local EyesHealthConnection
-local EyesTrackedHumanoid
-local EyesLastHealth
-local EyesBypassUntil = 0
 local EyesRuntimeActive = false
-local OriginalNamecall
 local EntityConnection
 local EntityRegistry = {}
 local OriginalModuleNames = setmetatable({}, {__mode = "k"})
@@ -50,35 +43,11 @@ end
 
 local function scanEyesRuntime()
     -- Match Abyssal Continued: Hotel Eyes is a direct Workspace entity.
-    -- Do not treat an old/nested Eyes instance as an active encounter.
     return workspace:FindFirstChild("Eyes") ~= nil
 end
 
 local function isEyesActive()
     return EyesRuntimeActive
-end
-
-local function applyEyesReplication(args)
-    if not AntiEyesEnabled or not isEyesActive() then
-        return args
-    end
-
-    local floor = getFloorName()
-    -- Match Abyssal exactly: normal Hotel uses the single -650 argument.
-    -- Fools/OldHotel use the four-argument pitch spoof.
-    if floor == "Fools" or floor == "OldHotel" then
-        args[1] = 0
-        args[2] = -65
-        args[3] = 0
-        args[4] = false
-    else
-        args[1] = -650
-        args[2] = nil
-        args[3] = nil
-        args[4] = nil
-    end
-
-    return args
 end
 
 local function fireEyesBypass()
@@ -93,181 +62,67 @@ local function fireEyesBypass()
     end
 
     local floor = getFloorName()
-    -- Match Abyssal exactly.
+
+    -- Match Abyssal's actual Eyes bypass.
+    -- Normal Hotel: one -650 argument.
+    -- Fools/OldHotel: the four-argument pitch spoof.
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
         motorReplication:FireServer(-650)
     end
-    EyesBypassUntil = os.clock() + 0.75
-end
-
-local function installEyesHook()
-    if EyesHookInstalled then
-        return
-    end
-
-    if type(hookmetamethod) ~= "function"
-        or type(getnamecallmethod) ~= "function"
-        or type(newcclosure) ~= "function"
-    then
-        return
-    end
-
-    EyesHookInstalled = true
-
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-
-        if AntiEyesEnabled
-            and method == "FireServer"
-            and self
-            and self.Name == "MotorReplication"
-            and isEyesActive()
-        then
-            local args = { ... }
-            applyEyesReplication(args)
-            EyesBypassUntil = os.clock() + 0.75
-            return oldNamecall(self, table.unpack(args))
-        end
-
-        return oldNamecall(self, ...)
-    end))
-
-    OriginalNamecall = oldNamecall
-end
-
-local function bindEyesHealthGuard()
-    if EyesHealthConnection then
-        EyesHealthConnection:Disconnect()
-        EyesHealthConnection = nil
-    end
-
-    EyesTrackedHumanoid = nil
-    EyesLastHealth = nil
-    EyesBypassUntil = 0
-
-    if not AntiEyesEnabled then
-        EyesRuntimeActive = false
-        return
-    end
-
-    local character = Player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        return
-    end
-
-    EyesTrackedHumanoid = humanoid
-    EyesLastHealth = humanoid.Health
-
-    EyesHealthConnection = humanoid.HealthChanged:Connect(function(health)
-        if not AntiEyesEnabled or humanoid ~= EyesTrackedHumanoid then
-            return
-        end
-
-        -- MotorReplication is the primary Eyes bypass, but some builds can
-        -- still apply the damage locally before/alongside replication.
-        -- Restore only damage that occurs while Eyes is active or immediately
-        -- after an Eyes MotorReplication bypass. This also covers the case
-        -- where the Eyes instance disappears just before the damage callback.
-        if (isEyesActive() or os.clock() <= EyesBypassUntil)
-            and health < (EyesLastHealth or health)
-        then
-            local previous = EyesLastHealth or health
-            pcall(function()
-                humanoid.Health = previous
-            end)
-            EyesLastHealth = math.max(previous, humanoid.Health)
-            return
-        end
-
-        EyesLastHealth = health
-    end)
 end
 
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
-
-    if not AntiEyesEnabled then
-        EyesRuntimeActive = false
-    end
-
-    if EyesHealthConnection then
-        EyesHealthConnection:Disconnect()
-        EyesHealthConnection = nil
-    end
-    EyesTrackedHumanoid = nil
-    EyesLastHealth = nil
-    EyesBypassUntil = 0
 
     if EyesConnection then
         EyesConnection:Disconnect()
         EyesConnection = nil
     end
 
-    if EyesRenderConnection then
-        EyesRenderConnection:Disconnect()
-        EyesRenderConnection = nil
+    EyesRuntimeActive = AntiEyesEnabled and scanEyesRuntime() or false
+
+    if not AntiEyesEnabled then
+        return
     end
 
-    if AntiEyesEnabled then
-        installEyesHook()
+    -- Match Abyssal's important behavior: the bypass is a discrete
+    -- MotorReplication call, not a continuous RenderStepped spoof.
+    if EyesRuntimeActive then
+        fireEyesBypass()
+    end
 
-        EyesRuntimeActive = scanEyesRuntime()
+    EyesConnection = workspace.DescendantAdded:Connect(function(object)
+        if not AntiEyesEnabled or object.Name ~= "Eyes" then
+            return
+        end
 
-        EyesConnection = workspace.DescendantAdded:Connect(function(object)
-            if object.Name ~= "Eyes" then
-                return
-            end
-
-            EyesRuntimeActive = true
-
-            task.defer(function()
-                bindEyesHealthGuard()
-                fireEyesBypass()
-            end)
-        end)
-
-        local previousRemoving = EyesConnection
-        local removingConnection = workspace.DescendantRemoving:Connect(function(object)
-            if object.Name ~= "Eyes" then
-                return
-            end
-
-            task.defer(function()
-                if AntiEyesEnabled then
-                    EyesRuntimeActive = scanEyesRuntime()
-                else
-                    EyesRuntimeActive = false
-                end
-            end)
-        end)
-
-        -- Keep both lifecycle connections under one cleanup handle.
-        EyesConnection = {
-            Disconnect = function()
-                pcall(function() previousRemoving:Disconnect() end)
-                pcall(function() removingConnection:Disconnect() end)
-            end
-        }
-
-        -- Abyssal continuously sends the Eyes MotorReplication bypass while
-        -- Eyes is active. The previous implementation only sent it on spawn
-        -- or when another MotorReplication call happened, which could leave
-        -- a gap where Eyes damage got through.
-        EyesRenderConnection = RunService.RenderStepped:Connect(function()
-            -- Use the same detector as the hook/health guard. Eyes is not
-            -- guaranteed to remain a direct Workspace child in every runtime
-            -- state; otherwise the continuous bypass can silently stop.
-            if AntiEyesEnabled and isEyesActive() then
+        EyesRuntimeActive = true
+        task.defer(function()
+            if AntiEyesEnabled and EyesRuntimeActive then
                 fireEyesBypass()
             end
         end)
+    end)
 
-        bindEyesHealthGuard()
-    end
+    local previousAdded = EyesConnection
+    local removingConnection = workspace.DescendantRemoving:Connect(function(object)
+        if object.Name ~= "Eyes" then
+            return
+        end
+
+        task.defer(function()
+            EyesRuntimeActive = AntiEyesEnabled and scanEyesRuntime() or false
+        end)
+    end)
+
+    EyesConnection = {
+        Disconnect = function()
+            pcall(function() previousAdded:Disconnect() end)
+            pcall(function() removingConnection:Disconnect() end)
+        end
+    }
 end
 
 local EntityNames = {
