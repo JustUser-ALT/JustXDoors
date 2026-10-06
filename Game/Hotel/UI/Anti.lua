@@ -28,7 +28,6 @@ local PositionSpoofState = false
 local AntiEyesEnabled = false
 local EyesRenderConnection
 local EyesHookInstalled = false
-local EyesCollisionBackup = setmetatable({}, {__mode = "k"})
 local EntityConnection
 local EntityRegistry = {}
 local OriginalModuleNames = setmetatable({}, {__mode = "k"})
@@ -65,42 +64,6 @@ local function applyEyesReplication(args)
     end
 
     return args
-end
-
-local function syncEyesCollisionState()
-    local character = Player.Character
-    if not character then
-        return
-    end
-
-    local collision = character:FindFirstChild("Collision")
-    if collision and collision:IsA("BasePart") then
-        if EyesCollisionBackup[collision] == nil then
-            EyesCollisionBackup[collision] = collision.CanCollide
-        end
-        -- Abyssal keeps the main Collision part non-collidable on Hotel.
-        collision.CanCollide = false
-    end
-
-    for _, object in ipairs(character:GetChildren()) do
-        if object:IsA("BasePart") and object.Name ~= "HumanoidRootPart" then
-            if EyesCollisionBackup[object] == nil then
-                EyesCollisionBackup[object] = object.CanCollide
-            end
-            object.CanCollide = false
-        end
-    end
-end
-
-local function restoreEyesCollisionState()
-    for object, value in pairs(EyesCollisionBackup) do
-        if object and object.Parent then
-            pcall(function()
-                object.CanCollide = value
-            end)
-        end
-        EyesCollisionBackup[object] = nil
-    end
 end
 
 local function fireEyesBypass()
@@ -165,7 +128,6 @@ local function setAntiEyes(value)
     end
 
     if not AntiEyesEnabled then
-        restoreEyesCollisionState()
         return
     end
 
@@ -175,15 +137,8 @@ local function setAntiEyes(value)
     installEyesHook()
 
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
-        if not AntiEyesEnabled then
-            return
-        end
-
-        if eyesExists() then
-            syncEyesCollisionState()
+        if AntiEyesEnabled and eyesExists() then
             fireEyesBypass()
-        else
-            restoreEyesCollisionState()
         end
     end)
 end
