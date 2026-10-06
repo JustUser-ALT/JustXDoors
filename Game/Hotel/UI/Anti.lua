@@ -580,8 +580,7 @@ local function start()
             if AntiGlitchScreechEnabled then setAntiGlitchScreech(true) end
             if AntiDreadEnabled then setAntiDread(true) end
             if AntiHaltEnabled then setAntiHalt(true) end
-            if AntiEyesEnabled then
-                bindEyesHealthGuard()
+            if AntiEyesEnabled and isEyesActive() then
                 fireEyesBypass()
             end
         end)
@@ -717,10 +716,6 @@ end
 
 function AntiUI:Destroy()
     clearScreechConnections()
-    if EyesRenderConnection then
-        EyesRenderConnection:Disconnect()
-        EyesRenderConnection = nil
-    end
     AntiRushEnabled = false
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
