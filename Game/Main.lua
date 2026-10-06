@@ -81,6 +81,8 @@ local CollisionPartClone
 local OriginalC1
 local CollisionCanCollideBackup = {}
 local CollisionOriginalCanCollide = nil
+local EyesCollisionEnabled = false
+local EyesCollisionBackup = {}
 local InfiniteCrucifixEnabled = false
 local InfinitePromptContainer
 local InfiniteCrucifixRaycastParams = RaycastParams.new()
@@ -859,6 +861,94 @@ local function setupCollisionSpoof()
     local rootMotor = lowerTorso and lowerTorso:FindFirstChild("Root")
     if rootMotor and OriginalC1 == nil then
         OriginalC1 = rootMotor.C1
+    end
+end
+
+local function restoreEyesCollision()
+    if not next(EyesCollisionBackup) then
+        EyesCollisionEnabled = false
+        return
+    end
+
+    for part, original in pairs(EyesCollisionBackup) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = original
+            end)
+        end
+    end
+
+    table.clear(EyesCollisionBackup)
+    EyesCollisionEnabled = false
+end
+
+local function updateEyesCollision()
+    if not EyesCollisionEnabled then
+        return
+    end
+
+    if not Character or not RootPart then
+        return
+    end
+
+    -- Position Spoof / Velocity Manipulation already owns this collision
+    -- representation. Do not fight those systems.
+    if PositionSpoofEnabled or VelocityManipulationEnabled then
+        return
+    end
+
+    setupCollisionSpoof()
+
+    if not Collision or not CollisionClone then
+        return
+    end
+
+    if not next(EyesCollisionBackup) then
+        for _, part in ipairs(Character:GetChildren()) do
+            if part:IsA("BasePart") then
+                EyesCollisionBackup[part] = part.CanCollide
+            end
+        end
+        EyesCollisionBackup[Collision] = Collision.CanCollide
+        EyesCollisionBackup[CollisionClone] = CollisionClone.CanCollide
+
+        local crouch = Collision:FindFirstChild("CollisionCrouch")
+        local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+        if crouch then
+            EyesCollisionBackup[crouch] = crouch.CanCollide
+        end
+        if cloneCrouch then
+            EyesCollisionBackup[cloneCrouch] = cloneCrouch.CanCollide
+        end
+    end
+
+    -- This is the important part of Abyssal's Eyes setup:
+    -- the character's physical parts stop colliding while the dedicated
+    -- CollisionClone remains the actual collision body.
+    for _, part in ipairs(Character:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+
+    Collision.CanCollide = false
+    Collision.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
+
+    local crouch = Collision:FindFirstChild("CollisionCrouch")
+    if crouch then
+        crouch.CanCollide = false
+        crouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
+    end
+
+    CollisionClone.CollisionGroup = Collision.CollisionGroup
+    CollisionClone.Position = RootPart.Position + Vector3.new(0, 0.18, 0)
+    CollisionClone.CanCollide = not (NoclipEnabled or FlyEnabled or isCrouching())
+
+    local cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+    if cloneCrouch then
+        cloneCrouch.CollisionGroup = Collision.CollisionGroup
+        cloneCrouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
+        cloneCrouch.CanCollide = not (NoclipEnabled or FlyEnabled or not isCrouching())
     end
 end
 
@@ -2214,6 +2304,7 @@ local function setupConnections()
     connect(RunService.RenderStepped, function()
         updatePositionSpoof()
         updateCollisionSpoof()
+        updateEyesCollision()
 
         if VelocityManipulationEnabled and RootPart and Character then
             if not ManipulateBody then
@@ -2262,6 +2353,17 @@ local function setupConnections()
     task.defer(function()
         bindInfiniteJumpButton()
     end)
+end
+
+function Main:SetEyesCollisionState(value)
+    EyesCollisionEnabled = value == true
+
+    if not EyesCollisionEnabled then
+        restoreEyesCollision()
+        return
+    end
+
+    updateEyesCollision()
 end
 
 function Main:SetPositionSpoof(value)
@@ -2365,6 +2467,7 @@ function Main:Destroy()
     PositionSpoofEnabled = false
     applyPositionSpoofState(false)
     PositionSpoofApplied = false
+    restoreEyesCollision()
 
     InfiniteItemsEnabled = false
     InfiniteItemsSelection = {}
@@ -2474,6 +2577,8 @@ function Main:Destroy()
     CrouchSpoofEnabled = false
     PositionSpoofEnabled = false
     PositionSpoofApplied = false
+    EyesCollisionEnabled = false
+    table.clear(EyesCollisionBackup)
     InfiniteItemsEnabled = false
     InfiniteItemsSelection = {}
     InfiniteCrucifixEnabled = false
