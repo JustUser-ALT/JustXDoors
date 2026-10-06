@@ -27,19 +27,7 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesRenderConnection
-
--- Keep one Eyes hook across hub reloads. The hook itself must not capture
--- functions or state from an old Anti.lua instance.
-local EyesHookState
-if type(shared) == "table" then
-    EyesHookState = shared.__JustXDoorsEyesHookState
-    if type(EyesHookState) ~= "table" then
-        EyesHookState = { Enabled = false, Installed = false }
-        shared.__JustXDoorsEyesHookState = EyesHookState
-    end
-else
-    EyesHookState = { Enabled = false, Installed = false }
-end
+local SetEyesCollisionState
 
 local function eyesExists()
     return workspace:FindFirstChild("Eyes") ~= nil
@@ -68,14 +56,12 @@ local function fireEyesBypass()
         return
     end
 
-    local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
-    local floorValue = gameData and gameData:FindFirstChild("Floor")
-    local floor = floorValue and floorValue.Value or nil
+    local a1, a2, a3, a4 = getEyesBypassArgs()
 
-    if floor == "Fools" or floor == "OldHotel" then
-        motorReplication:FireServer(0, -65, 0, false)
+    if a2 ~= nil then
+        motorReplication:FireServer(a1, a2, a3, a4)
     else
-        motorReplication:FireServer(-650)
+        motorReplication:FireServer(a1)
     end
 end
 
@@ -87,22 +73,34 @@ local function setAntiEyes(value)
         EyesRenderConnection = nil
     end
 
+    if SetEyesCollisionState then
+        pcall(function()
+            SetEyesCollisionState(AntiEyesEnabled)
+        end)
+    end
+
     if not AntiEyesEnabled then
         return
     end
 
-    -- Match Abyssal's actual Eyes bypass: a direct MotorReplication
-    -- call while Eyes exists. Do not hook every MotorReplication call,
-    -- because that can rewrite unrelated game replication and alter the
-    -- direction/state used by Eyes damage.
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
-        if AntiEyesEnabled and eyesExists() then
+        if not AntiEyesEnabled then
+            return
+        end
+
+        if SetEyesCollisionState then
+            pcall(function()
+                SetEyesCollisionState(true)
+            end)
+        end
+
+        if eyesExists() then
             fireEyesBypass()
         end
     end)
 
-    -- Apply once immediately as well, so enabling the toggle does not
-    -- wait for the next render frame.
+    -- Match Abyssal's toggle callback: send the bypass immediately when
+    -- the feature is enabled, then continue from the main render loop.
     fireEyesBypass()
 end
 
@@ -581,6 +579,7 @@ function AntiUI:Create(ctx)
     if not page then return false end
 
     SetPositionSpoof = ctx.SetPositionSpoof
+    SetEyesCollisionState = ctx.SetEyesCollisionState
     ctxElements = ctx.Elements
 
     ctx.Elements.AntiRush = page:Toggle({
