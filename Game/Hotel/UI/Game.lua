@@ -15,6 +15,7 @@ local InteractEnabled = {
     Lever = false,
     Toolshed = false,
     Doors = false,
+    ["Vent Gate"] = false,
 }
 
 local AutoLootJeffShop = false
@@ -27,6 +28,7 @@ local InteractOptions = {
     "Lever",
     "Toolshed",
     "Doors",
+    "Vent Gate",
 }
 
 local LootOptions = {
@@ -399,6 +401,24 @@ local function registerInteractObject(object, room)
         return
     end
 
+    if object.Name == "VentGrate" and InteractEnabled["Vent Gate"] then
+        local prompt = getPrompt(object, {"AwesomePrompt"})
+        if prompt and not InteractCompleted[object] then
+            InteractTargets[object] = {
+                Kind = "Vent Gate",
+                Container = object,
+                Room = room,
+                Prompt = prompt,
+                LastFire = 0,
+                Waiting = false,
+                WaitingSince = 0,
+                InitialInteractions = prompt:GetAttribute("Interactions"),
+                HadLootHolder = false,
+            }
+        end
+        return
+    end
+
     if object.Name == "Door" and InteractEnabled.Doors then
         local prompt = getPrompt(object, {"UnlockPrompt"})
         if prompt and prompt:IsA("ProximityPrompt") and not InteractCompleted[object] then
@@ -467,10 +487,14 @@ end
 
 local function processInteractTargets()
     local now = os.clock()
-    local bestObject, bestData, bestDistance = nil, nil, math.huge
+    local character = game:GetService("Players").LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
 
-    -- Process exactly one interaction at a time. This prevents two nearby
-    -- DrawerContainers/Dressers from competing and leaving one unopened.
+    -- Abyssal keeps a centralized prompt list and checks every eligible
+    -- prompt on Heartbeat instead of waiting for a prompt UI to appear.
+    -- Do the same here: every eligible interaction gets its own state,
+    -- so one slow Drawer/disabled prompt can never block the others.
     for object, data in pairs(InteractTargets) do
         local container = data.Container
         if not container or not container.Parent or not data.Room or not data.Room.Parent
@@ -485,62 +509,19 @@ local function processInteractTargets()
             continue
         end
 
-        local interactions = data.Prompt and data.Prompt:GetAttribute("Interactions")
         local prompt = data.Prompt
         if not prompt or not prompt.Parent then
-            prompt = getPrompt(container, data.Kind == "Doors" and {"UnlockPrompt"} or {"ActivateEventPrompt"})
+            prompt = getPrompt(container, data.Kind == "Doors" and {"UnlockPrompt"}
+                or data.Kind == "Vent Gate" and {"AwesomePrompt"}
+                or {"ActivateEventPrompt"})
             data.Prompt = prompt
         end
 
         if not prompt then
-            if data.Kind == "Doors" or data.Kind == "Drawers" then
-                InteractCompleted[container] = true
-            end
-            InteractTargets[object] = nil
             continue
         end
 
-        -- Drawers are stateful: after opening, the same prompt normally
-        -- becomes "Close" and must never be fired again. A LootHolder can
-        -- also appear only after the drawer has opened.
-        if data.Kind == "Drawers" then
-            -- Never reject an unopened Drawer just because it already
-            -- contains a loot object. The loot inside is exactly why the
-            -- Drawer must be opened.
-            if data.Waiting then
-                local currentInteractions = prompt:GetAttribute("Interactions")
-                if (data.InitialInteractions ~= nil
-                        and currentInteractions ~= nil
-                        and currentInteractions ~= data.InitialInteractions)
-                    or (data.InitialInteractions == nil and currentInteractions ~= nil)
-                    or prompt.ActionText == "Close"
-                    then
-                    InteractCompleted[container] = true
-                    InteractTargets[object] = nil
-                elseif not prompt.Enabled
-                    and data.WaitingSince > 0
-                    and now - data.WaitingSince >= 1.5
-                then
-                    -- The game may temporarily disable the prompt during a
-                    -- lag spike. Do not force Enabled=true; simply release
-                    -- our local waiting state and retry when the game enables
-                    -- the prompt again.
-                    data.Waiting = false
-                    data.WaitingSince = 0
-                elseif data.WaitingSince > 0
-                    and now - data.WaitingSince >= 1.5
-                    and prompt.Enabled
-                then
-                    data.Waiting = false
-                    data.WaitingSince = 0
-                end
-                continue
-            end
-
-            -- The presence of an Interactions attribute alone does NOT mean
-            -- the Drawer is already open. Some item-containing drawers have
-            -- this attribute before the first interaction. Only a transition
-            -- from the initial value means that the open interaction happened.
+        if data.Kind == "Drawers" and data.Waiting then
             local currentInteractions = prompt:GetAttribute("Interactions")
             if (data.InitialInteractions ~= nil
                     and currentInteractions ~= nil
@@ -550,22 +531,21 @@ local function processInteractTargets()
             then
                 InteractCompleted[container] = true
                 InteractTargets[object] = nil
-                continue
             end
+            continue
         end
 
-        -- Doors are one-shot unlock interactions. Do not force a disabled
-        -- UnlockPrompt back on; the game may disable it after a successful
-        -- unlock and another door must still be allowed to run.
-        if data.Kind == "Doors" and data.Waiting and not prompt.Enabled then
+        if data.Kind == "Doors" and data.Waiting then
+            -- A successfully fired UnlockPrompt is one-shot. It may become
+            -- disabled permanently after the door unlocks; never restore it.
             InteractCompleted[container] = true
             InteractTargets[object] = nil
             continue
         end
 
         if data.InitialInteractions ~= nil
-            and interactions ~= nil
-            and interactions ~= data.InitialInteractions
+            and prompt:GetAttribute("Interactions") ~= nil
+            and prompt:GetAttribute("Interactions") ~= data.InitialInteractions
             and data.Kind ~= "Drawers"
         then
             InteractCompleted[container] = true
@@ -573,46 +553,36 @@ local function processInteractTargets()
             continue
         end
 
-        local position = getPromptPosition(prompt)
-        local root = game:GetService("Players").LocalPlayer.Character
-            and game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if position and root and prompt.Enabled and not data.Waiting then
-            local distance = (root.Position - position).Magnitude
-            local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
-            if distance <= maxDistance and distance < bestDistance then
-                bestObject, bestData, bestDistance = object, data, distance
-            end
+        if not prompt.Enabled then
+            -- Enabled=false is controlled by the game. Do not force it back
+            -- to true. The target remains registered and can be retried if
+            -- the game changes its state later.
+            continue
         end
-    end
 
-    if not bestObject or not bestData then
-        return
-    end
+        local position = getPromptPosition(prompt)
+        if not position then continue end
 
-    local prompt = bestData.Prompt
-    if not prompt or not prompt.Parent then
-        return
-    end
+        local distance = (root.Position - position).Magnitude
+        local maxDistance = tonumber(prompt.MaxActivationDistance) or 10
+        if distance > maxDistance then
+            continue
+        end
 
-    if not prompt.Enabled or now - bestData.LastFire < 0.35 then
-        return
-    end
+        if now - (data.LastFire or 0) < 0.35 then
+            continue
+        end
 
-    if firePrompt(prompt) then
-        bestData.LastFire = now
-        bestData.Waiting = true
-        bestData.WaitingSince = now
+        if firePrompt(prompt) then
+            data.LastFire = now
 
-        -- Doors are one-shot unlock interactions. Once the prompt was
-        -- successfully fired, release it immediately so another door can be
-        -- selected even if the game keeps UnlockPrompt.Enabled in a transient
-        -- state. We never force Enabled back to true.
-        if bestData.Kind == "Doors" then
-            InteractCompleted[bestData.Container] = true
-            InteractTargets[bestObject] = nil
-        elseif bestData.Kind ~= "Drawers" then
-            InteractCompleted[bestData.Container] = true
-            InteractTargets[bestObject] = nil
+            if data.Kind == "Drawers" then
+                data.Waiting = true
+                data.WaitingSince = now
+            else
+                InteractCompleted[container] = true
+                InteractTargets[object] = nil
+            end
         end
     end
 end
@@ -924,6 +894,21 @@ function GameUI:Create(ctx)
     local rooms = getRooms()
 
     if rooms then
+        local ProximityPromptService = game:GetService("ProximityPromptService")
+        table.insert(Connections, ProximityPromptService.PromptShown:Connect(function(prompt)
+            if not prompt or not prompt.Parent then return end
+            local room = findRoom(prompt, rooms)
+            if not room then return end
+
+            local current = prompt.Parent
+            for _ = 1, 10 do
+                if not current or current == room then break end
+                registerInteractObject(current, room)
+                registerLootObject(current, room)
+                current = current.Parent
+            end
+        end))
+
         table.insert(Connections, rooms.DescendantAdded:Connect(function(object)
             local room = findRoom(object, rooms)
             if not room then return end
