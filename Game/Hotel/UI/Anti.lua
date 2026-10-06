@@ -57,19 +57,6 @@ local function getEyesBypassArgs()
     return -650
 end
 
-local function applyEyesReplication(args)
-    if not EyesHookState.Enabled or not eyesExists() then
-        return args
-    end
-
-    local a1, a2, a3, a4 = getEyesBypassArgs()
-    args[1] = a1
-    args[2] = a2
-    args[3] = a3
-    args[4] = a4
-    return args
-end
-
 local function fireEyesBypass()
     if not AntiEyesEnabled or not eyesExists() then
         return
@@ -81,52 +68,19 @@ local function fireEyesBypass()
         return
     end
 
-    local args = {}
-    local a1, a2, a3, a4 = getEyesBypassArgs()
-    args[1] = a1
-    args[2] = a2
-    args[3] = a3
-    args[4] = a4
+    local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
+    local floorValue = gameData and gameData:FindFirstChild("Floor")
+    local floor = floorValue and floorValue.Value or nil
 
-    motorReplication:FireServer(table.unpack(args))
-end
-
-local function installEyesHook()
-    if EyesHookState.Installed then
-        return
+    if floor == "Fools" or floor == "OldHotel" then
+        motorReplication:FireServer(0, -65, 0, false)
+    else
+        motorReplication:FireServer(-650)
     end
-
-    if type(hookmetamethod) ~= "function"
-        or type(getnamecallmethod) ~= "function"
-        or type(newcclosure) ~= "function"
-    then
-        return
-    end
-
-    EyesHookState.Installed = true
-
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-
-        if EyesHookState.Enabled
-            and method == "FireServer"
-            and self
-            and self.Name == "MotorReplication"
-            and eyesExists()
-        then
-            local args = { ... }
-            applyEyesReplication(args)
-            return oldNamecall(self, table.unpack(args))
-        end
-
-        return oldNamecall(self, ...)
-    end))
 end
 
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
-    EyesHookState.Enabled = AntiEyesEnabled
 
     if EyesRenderConnection then
         EyesRenderConnection:Disconnect()
@@ -137,13 +91,19 @@ local function setAntiEyes(value)
         return
     end
 
-    installEyesHook()
-
+    -- Match Abyssal's actual Eyes bypass: a direct MotorReplication
+    -- call while Eyes exists. Do not hook every MotorReplication call,
+    -- because that can rewrite unrelated game replication and alter the
+    -- direction/state used by Eyes damage.
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
         if AntiEyesEnabled and eyesExists() then
             fireEyesBypass()
         end
     end)
+
+    -- Apply once immediately as well, so enabling the toggle does not
+    -- wait for the next render frame.
+    fireEyesBypass()
 end
 
 local EntityNames = {
