@@ -491,13 +491,13 @@ local function processInteractTargets()
     local root = character and character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- Abyssal keeps a centralized prompt list and checks every eligible
-    -- prompt on Heartbeat instead of waiting for a prompt UI to appear.
-    -- Do the same here: every eligible interaction gets its own state,
-    -- so one slow Drawer/disabled prompt can never block the others.
+    -- Match Abyssal Continued: keep all prompts in one central list and
+    -- evaluate them independently every Heartbeat.
     for object, data in pairs(InteractTargets) do
         local container = data.Container
-        if not container or not container.Parent or not data.Room or not data.Room.Parent
+
+        if not container or not container.Parent
+            or not data.Room or not data.Room.Parent
             or not container:IsDescendantOf(data.Room)
         then
             InteractTargets[object] = nil
@@ -509,18 +509,36 @@ local function processInteractTargets()
             continue
         end
 
-        local prompt = data.Prompt
-        if not prompt or not prompt.Parent then
-            prompt = getPrompt(container, data.Kind == "Doors" and {"UnlockPrompt"}
-                or data.Kind == "Vent Gate" and {"AwesomePrompt"}
-                or {"ActivateEventPrompt"})
-            data.Prompt = prompt
+        local promptNames
+        if data.Kind == "Doors" then
+            promptNames = {"UnlockPrompt"}
+        elseif data.Kind == "Vent Gate" then
+            promptNames = {"AwesomePrompt"}
+        else
+            promptNames = {"ActivateEventPrompt"}
         end
 
-        if not prompt then
+        -- DOORS can replace the prompt while a drawer is opening.
+        local currentPrompt = getPrompt(container, promptNames)
+        if currentPrompt and currentPrompt ~= data.Prompt then
+            data.Prompt = currentPrompt
+        end
+
+        local prompt = data.Prompt
+        if not prompt or not prompt.Parent then
             continue
         end
 
+        -- Same protection used by Abyssal Continued: once the drawer prompt
+        -- says Close, firing it again would close the drawer.
+        if data.Kind == "Drawers" and prompt.ActionText == "Close" then
+            InteractCompleted[container] = true
+            InteractTargets[object] = nil
+            continue
+        end
+
+        -- One fire is one drawer-open attempt. Never fire again while the
+        -- previous attempt is still being processed.
         if data.Kind == "Drawers" and data.Waiting then
             local currentInteractions = prompt:GetAttribute("Interactions")
             if (data.InitialInteractions ~= nil
@@ -536,8 +554,6 @@ local function processInteractTargets()
         end
 
         if data.Kind == "Doors" and data.Waiting then
-            -- A successfully fired UnlockPrompt is one-shot. It may become
-            -- disabled permanently after the door unlocks; never restore it.
             InteractCompleted[container] = true
             InteractTargets[object] = nil
             continue
@@ -553,10 +569,8 @@ local function processInteractTargets()
             continue
         end
 
+        -- Enabled=false belongs to DOORS. Never force it back to true.
         if not prompt.Enabled then
-            -- Enabled=false is controlled by the game. Do not force it back
-            -- to true. The target remains registered and can be retried if
-            -- the game changes its state later.
             continue
         end
 
