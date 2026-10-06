@@ -26,16 +26,13 @@ local SetPositionSpoof
 local PositionSpoofState = false
 
 local AntiEyesEnabled = false
-local EyesConnection
 local EyesRenderConnection
 local EyesHookInstalled = false
-local EyesRuntimeActive = false
 local EntityConnection
 local EntityRegistry = {}
 local OriginalModuleNames = setmetatable({}, {__mode = "k"})
 local SnareCanTouchBackup = setmetatable({}, {__mode = "k"})
 local DupeCanTouchBackup = setmetatable({}, {__mode = "k"})
-local DupePromptEnabledBackup = setmetatable({}, {__mode = "k"})
 
 local function getFloorName()
     local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
@@ -43,17 +40,12 @@ local function getFloorName()
     return floor and floor.Value or nil
 end
 
-local function scanEyesRuntime()
-    -- Match Abyssal Continued: Hotel Eyes is a direct Workspace entity.
+local function eyesExists()
     return workspace:FindFirstChild("Eyes") ~= nil
 end
 
-local function isEyesActive()
-    return EyesRuntimeActive
-end
-
 local function applyEyesReplication(args)
-    if not AntiEyesEnabled or not isEyesActive() then
+    if not AntiEyesEnabled or not eyesExists() then
         return args
     end
 
@@ -75,7 +67,7 @@ local function applyEyesReplication(args)
 end
 
 local function fireEyesBypass()
-    if not AntiEyesEnabled or not isEyesActive() then
+    if not AntiEyesEnabled or not eyesExists() then
         return
     end
 
@@ -116,7 +108,7 @@ local function installEyesHook()
             and method == "FireServer"
             and self
             and self.Name == "MotorReplication"
-            and isEyesActive()
+            and eyesExists()
         then
             local args = { ... }
             applyEyesReplication(args)
@@ -130,64 +122,22 @@ end
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
 
-    if EyesConnection then
-        EyesConnection:Disconnect()
-        EyesConnection = nil
-    end
-
     if EyesRenderConnection then
         EyesRenderConnection:Disconnect()
         EyesRenderConnection = nil
     end
 
-    EyesRuntimeActive = AntiEyesEnabled and scanEyesRuntime() or false
-
     if not AntiEyesEnabled then
         return
     end
 
-    -- Abyssal uses both the MotorReplication hook and a continuous
-    -- MotorReplication bypass while Eyes is active. No health spoof is used.
+    -- Match Abyssal's Hotel behavior directly:
+    -- while Eyes exists, send the MotorReplication bypass every render frame.
+    -- No health spoofing is used.
     installEyesHook()
 
-    if EyesRuntimeActive then
-        fireEyesBypass()
-    end
-
-    EyesConnection = workspace.DescendantAdded:Connect(function(object)
-        if not AntiEyesEnabled or object.Name ~= "Eyes" then
-            return
-        end
-
-        EyesRuntimeActive = true
-
-        task.defer(function()
-            if AntiEyesEnabled and EyesRuntimeActive then
-                fireEyesBypass()
-            end
-        end)
-    end)
-
-    local previousAdded = EyesConnection
-    local removingConnection = workspace.DescendantRemoving:Connect(function(object)
-        if object.Name ~= "Eyes" then
-            return
-        end
-
-        task.defer(function()
-            EyesRuntimeActive = AntiEyesEnabled and scanEyesRuntime() or false
-        end)
-    end)
-
-    EyesConnection = {
-        Disconnect = function()
-            pcall(function() previousAdded:Disconnect() end)
-            pcall(function() removingConnection:Disconnect() end)
-        end
-    }
-
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
-        if AntiEyesEnabled and isEyesActive() then
+        if AntiEyesEnabled and eyesExists() then
             fireEyesBypass()
         end
     end)
@@ -648,7 +598,7 @@ local function start()
             if AntiGlitchScreechEnabled then setAntiGlitchScreech(true) end
             if AntiDreadEnabled then setAntiDread(true) end
             if AntiHaltEnabled then setAntiHalt(true) end
-            if AntiEyesEnabled and isEyesActive() then
+            if AntiEyesEnabled and eyesExists() then
                 fireEyesBypass()
             end
         end)
@@ -794,7 +744,6 @@ function AntiUI:Destroy()
     AntiSnareEnabled = false
 
     setAntiEyes(false)
-    EyesRuntimeActive = false
     setAntiDread(false)
     setAntiHalt(false)
     setAntiScreech(false)
