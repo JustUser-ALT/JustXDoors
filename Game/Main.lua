@@ -94,13 +94,37 @@ if type(shared) == "table" then
     EyesHookState = shared.__JustXDoorsEyesHookState
 end
 
+-- Anti Eyes needs one normal MotorReplication update after each new Eyes
+-- instance appears. This reproduces the useful part of the Abyssal sequence:
+-- Eyes appears -> normal replication gets processed -> bypass starts.
+local EyesBypassTarget = nil
+local EyesBypassPrimed = false
+
 local function updateEyesBypass()
     if type(EyesHookState) ~= "table" or not EyesHookState.Enabled then
+        EyesBypassTarget = nil
+        EyesBypassPrimed = false
         return
     end
 
-    if not workspace:FindFirstChild("Eyes") then
+    local eyes = workspace:FindFirstChild("Eyes")
+    if not eyes then
+        EyesBypassTarget = nil
+        EyesBypassPrimed = false
         return
+    end
+
+    if EyesBypassTarget ~= eyes then
+        EyesBypassTarget = eyes
+        EyesBypassPrimed = false
+
+        -- Do not send -650 on the same RenderStepped in which Eyes first
+        -- appears. Let the game's own MotorReplication call run first.
+        return
+    end
+
+    if not EyesBypassPrimed then
+        EyesBypassPrimed = true
     end
 
     if getFloor and getFloor() ~= "Hotel" then
