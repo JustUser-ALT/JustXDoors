@@ -18,6 +18,7 @@ local InteractEnabled = {
 }
 
 local AutoLootJeffShop = false
+local getPrompt
 
 local InteractOptions = {
     "Drawers",
@@ -168,7 +169,7 @@ local function isDrawerContainerOpen(container)
     return false
 end
 
-local function getPrompt(container, names)
+getPrompt = function(container, names)
     if not container then
         return nil
     end
