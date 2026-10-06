@@ -33,6 +33,7 @@ local EyesHealthConnection
 local EyesTrackedHumanoid
 local EyesLastHealth
 local EyesBypassUntil = 0
+local EyesRuntimeActive = false
 local OriginalNamecall
 local EntityConnection
 local EntityRegistry = {}
@@ -47,21 +48,17 @@ local function getFloorName()
     return floor and floor.Value or nil
 end
 
-local function isEyesActive()
-    -- Abyssal checks for the runtime name, not the class. Do the same here:
-    -- requiring Model can silently disable the bypass when the game briefly
-    -- represents Eyes with another Instance class during its spawn/update.
-    if workspace:FindFirstChild("Eyes") then
-        return true
-    end
-
+local function scanEyesRuntime()
     for _, object in ipairs(workspace:GetDescendants()) do
         if object.Name == "Eyes" then
             return true
         end
     end
-
     return false
+end
+
+local function isEyesActive()
+    return EyesRuntimeActive
 end
 
 local function applyEyesReplication(args)
@@ -149,6 +146,7 @@ local function bindEyesHealthGuard()
     EyesBypassUntil = 0
 
     if not AntiEyesEnabled then
+        EyesRuntimeActive = false
         return
     end
 
@@ -189,6 +187,10 @@ end
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
 
+    if not AntiEyesEnabled then
+        EyesRuntimeActive = false
+    end
+
     if EyesHealthConnection then
         EyesHealthConnection:Disconnect()
         EyesHealthConnection = nil
@@ -210,16 +212,43 @@ local function setAntiEyes(value)
     if AntiEyesEnabled then
         installEyesHook()
 
+        EyesRuntimeActive = scanEyesRuntime()
+
         EyesConnection = workspace.DescendantAdded:Connect(function(object)
-            if object.Name ~= "Eyes" or not object:IsA("Model") then
+            if object.Name ~= "Eyes" then
                 return
             end
+
+            EyesRuntimeActive = true
 
             task.defer(function()
                 bindEyesHealthGuard()
                 fireEyesBypass()
             end)
         end)
+
+        local previousRemoving = EyesConnection
+        local removingConnection = workspace.DescendantRemoving:Connect(function(object)
+            if object.Name ~= "Eyes" then
+                return
+            end
+
+            task.defer(function()
+                if AntiEyesEnabled then
+                    EyesRuntimeActive = scanEyesRuntime()
+                else
+                    EyesRuntimeActive = false
+                end
+            end)
+        end)
+
+        -- Keep both lifecycle connections under one cleanup handle.
+        EyesConnection = {
+            Disconnect = function()
+                pcall(function() previousRemoving:Disconnect() end)
+                pcall(function() removingConnection:Disconnect() end)
+            end
+        }
 
         -- Abyssal continuously sends the Eyes MotorReplication bypass while
         -- Eyes is active. The previous implementation only sent it on spawn
@@ -844,6 +873,7 @@ function AntiUI:Destroy()
     AntiSnareEnabled = false
 
     setAntiEyes(false)
+    EyesRuntimeActive = false
     setAntiDread(false)
     setAntiHalt(false)
     setAntiScreech(false)
