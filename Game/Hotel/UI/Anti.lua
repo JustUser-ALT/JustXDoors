@@ -28,59 +28,45 @@ local PositionSpoofState = false
 local AntiEyesEnabled = false
 local EyesRenderConnection
 
--- The __namecall hook cannot be physically removed safely after installation.
--- Keep one shared state so old hook closures become inert when the hub restarts.
+-- Keep one Eyes hook across hub reloads. The hook itself must not capture
+-- functions or state from an old Anti.lua instance.
 local EyesHookState
 if type(shared) == "table" then
     EyesHookState = shared.__JustXDoorsEyesHookState
     if type(EyesHookState) ~= "table" then
-        EyesHookState = {
-            Enabled = false,
-            Installed = false,
-        }
+        EyesHookState = { Enabled = false, Installed = false }
         shared.__JustXDoorsEyesHookState = EyesHookState
     end
 else
-    EyesHookState = {
-        Enabled = false,
-        Installed = false,
-    }
-end
-local EntityConnection
-local EntityRegistry = {}
-local OriginalModuleNames = setmetatable({}, {__mode = "k"})
-local SnareCanTouchBackup = setmetatable({}, {__mode = "k"})
-local DupeCanTouchBackup = setmetatable({}, {__mode = "k"})
-
-local function getFloorName()
-    local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
-    local floor = gameData and gameData:FindFirstChild("Floor")
-    return floor and floor.Value or nil
+    EyesHookState = { Enabled = false, Installed = false }
 end
 
 local function eyesExists()
     return workspace:FindFirstChild("Eyes") ~= nil
 end
 
+local function getEyesBypassArgs()
+    local gameData = game:GetService("ReplicatedStorage"):FindFirstChild("GameData")
+    local floorValue = gameData and gameData:FindFirstChild("Floor")
+    local floor = floorValue and floorValue.Value or nil
+
+    if floor == "Fools" or floor == "OldHotel" then
+        return 0, -65, 0, false
+    end
+
+    return -650
+end
+
 local function applyEyesReplication(args)
-    if not AntiEyesEnabled or not eyesExists() then
+    if not EyesHookState.Enabled or not eyesExists() then
         return args
     end
 
-    local floor = getFloorName()
-
-    if floor == "Fools" or floor == "OldHotel" then
-        args[1] = 0
-        args[2] = -65
-        args[3] = 0
-        args[4] = false
-    else
-        args[1] = -650
-        args[2] = nil
-        args[3] = nil
-        args[4] = nil
-    end
-
+    local a1, a2, a3, a4 = getEyesBypassArgs()
+    args[1] = a1
+    args[2] = a2
+    args[3] = a3
+    args[4] = a4
     return args
 end
 
@@ -95,13 +81,14 @@ local function fireEyesBypass()
         return
     end
 
-    local floor = getFloorName()
+    local args = {}
+    local a1, a2, a3, a4 = getEyesBypassArgs()
+    args[1] = a1
+    args[2] = a2
+    args[3] = a3
+    args[4] = a4
 
-    if floor == "Fools" or floor == "OldHotel" then
-        motorReplication:FireServer(0, -65, 0, false)
-    else
-        motorReplication:FireServer(-650)
-    end
+    motorReplication:FireServer(table.unpack(args))
 end
 
 local function installEyesHook()
@@ -150,9 +137,6 @@ local function setAntiEyes(value)
         return
     end
 
-    -- Match Abyssal's Hotel behavior directly:
-    -- while Eyes exists, send the MotorReplication bypass every render frame.
-    -- No health spoofing is used.
     installEyesHook()
 
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
