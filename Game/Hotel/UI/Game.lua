@@ -458,7 +458,11 @@ local function processInteractTargets()
         -- also appear only after the drawer has opened.
         if data.Kind == "Drawers" then
             if data.Waiting then
-                if prompt:GetAttribute("Interactions") ~= nil
+                local currentInteractions = prompt:GetAttribute("Interactions")
+                if (data.InitialInteractions ~= nil
+                        and currentInteractions ~= nil
+                        and currentInteractions ~= data.InitialInteractions)
+                    or (data.InitialInteractions == nil and currentInteractions ~= nil)
                     or prompt.ActionText == "Close"
                     or (not data.HadLootHolder and hasLootHolder(container))
                 then
@@ -468,9 +472,16 @@ local function processInteractTargets()
                 continue
             end
 
-            if prompt:GetAttribute("Interactions") ~= nil
+            -- The presence of an Interactions attribute alone does NOT mean
+            -- the Drawer is already open. Some item-containing drawers have
+            -- this attribute before the first interaction. Only a transition
+            -- from the initial value means that the open interaction happened.
+            local currentInteractions = prompt:GetAttribute("Interactions")
+            if (data.InitialInteractions ~= nil
+                    and currentInteractions ~= nil
+                    and currentInteractions ~= data.InitialInteractions)
+                or (data.InitialInteractions == nil and currentInteractions ~= nil)
                 or prompt.ActionText == "Close"
-                or (not data.HadLootHolder and hasLootHolder(container))
             then
                 InteractCompleted[container] = true
                 InteractTargets[object] = nil
