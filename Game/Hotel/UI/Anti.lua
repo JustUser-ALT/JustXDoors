@@ -64,13 +64,19 @@ local function applyEyesReplication(args)
     end
 
     local floor = getFloorName()
-    -- Eyes bypass is done by spoofing the vertical look angle.
-    -- Keep the original MotorReplication shape intact instead of replacing
-    -- the first argument with a position-like value.
-    args[1] = 0
-    args[2] = (floor == "Fools" or floor == "OldHotel") and -65 or -120
-    args[3] = 0
-    args[4] = false
+    -- Match Abyssal exactly: normal Hotel uses the single -650 argument.
+    -- Fools/OldHotel use the four-argument pitch spoof.
+    if floor == "Fools" or floor == "OldHotel" then
+        args[1] = 0
+        args[2] = -65
+        args[3] = 0
+        args[4] = false
+    else
+        args[1] = -650
+        args[2] = nil
+        args[3] = nil
+        args[4] = nil
+    end
 
     return args
 end
@@ -87,10 +93,12 @@ local function fireEyesBypass()
     end
 
     local floor = getFloorName()
-    -- Spoof looking downward while preserving the normal MotorReplication
-    -- argument layout. Hotel uses the stronger -120 pitch; Fools/OldHotel
-    -- retain the -65 value used by the existing floor-specific bypass.
-    motorReplication:FireServer(0, (floor == "Fools" or floor == "OldHotel") and -65 or -120, 0, false)
+    -- Match Abyssal exactly.
+    if floor == "Fools" or floor == "OldHotel" then
+        motorReplication:FireServer(0, -65, 0, false)
+    else
+        motorReplication:FireServer(-650)
+    end
     EyesBypassUntil = os.clock() + 0.75
 end
 
