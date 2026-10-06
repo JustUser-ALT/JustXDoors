@@ -230,6 +230,13 @@ local function registerDrawerContainer(drawerContainer, room)
         return
     end
 
+    local existing = InteractTargets[drawerContainer]
+    if existing then
+        existing.Prompt = prompt
+        existing.Room = room
+        return
+    end
+
     InteractTargets[drawerContainer] = {
         Kind = "Drawers",
         Container = drawerContainer,
@@ -457,6 +464,9 @@ local function processInteractTargets()
         -- becomes "Close" and must never be fired again. A LootHolder can
         -- also appear only after the drawer has opened.
         if data.Kind == "Drawers" then
+            -- Never reject an unopened Drawer just because it already
+            -- contains a loot object. The loot inside is exactly why the
+            -- Drawer must be opened.
             if data.Waiting then
                 local currentInteractions = prompt:GetAttribute("Interactions")
                 if (data.InitialInteractions ~= nil
@@ -464,8 +474,7 @@ local function processInteractTargets()
                         and currentInteractions ~= data.InitialInteractions)
                     or (data.InitialInteractions == nil and currentInteractions ~= nil)
                     or prompt.ActionText == "Close"
-                    or (not data.HadLootHolder and hasLootHolder(container))
-                then
+                    then
                     InteractCompleted[container] = true
                     InteractTargets[object] = nil
                 end
