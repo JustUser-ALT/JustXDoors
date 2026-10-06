@@ -943,10 +943,9 @@ local function updateCollisionSpoof()
         end
     end
 
-    -- Match Abyssal: the real character parts are non-collidable,
-    -- but HumanoidRootPart keeps its normal collision state unless a
-    -- feature such as Noclip/Velocity Manipulation explicitly disables it.
-    RootPart.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled)
+    -- Match Abyssal exactly: the real character body is non-collidable
+    -- while the separate CollisionClone handles the Hotel collision state.
+    RootPart.CanCollide = false
     Collision.CanCollide = false
 
     local lowerTorso = Character:FindFirstChild("LowerTorso")
@@ -982,7 +981,7 @@ local function updateCollisionSpoof()
 
     if cloneCrouch then
         cloneCrouch.CollisionGroup = Collision.CollisionGroup
-        cloneCrouch.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or FlyEnabled or not crouching)
+        cloneCrouch.CanCollide = not (NoclipEnabled or VelocityManipulationEnabled or not crouching)
     end
 end
 
