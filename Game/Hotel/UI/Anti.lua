@@ -27,7 +27,25 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesRenderConnection
-local EyesHookInstalled = false
+
+-- The __namecall hook cannot be physically removed safely after installation.
+-- Keep one shared state so old hook closures become inert when the hub restarts.
+local EyesHookState
+if type(shared) == "table" then
+    EyesHookState = shared.__JustXDoorsEyesHookState
+    if type(EyesHookState) ~= "table" then
+        EyesHookState = {
+            Enabled = false,
+            Installed = false,
+        }
+        shared.__JustXDoorsEyesHookState = EyesHookState
+    end
+else
+    EyesHookState = {
+        Enabled = false,
+        Installed = false,
+    }
+end
 local EntityConnection
 local EntityRegistry = {}
 local OriginalModuleNames = setmetatable({}, {__mode = "k"})
@@ -87,7 +105,7 @@ local function fireEyesBypass()
 end
 
 local function installEyesHook()
-    if EyesHookInstalled then
+    if EyesHookState.Installed then
         return
     end
 
@@ -98,13 +116,13 @@ local function installEyesHook()
         return
     end
 
-    EyesHookInstalled = true
+    EyesHookState.Installed = true
 
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         local method = getnamecallmethod()
 
-        if AntiEyesEnabled
+        if EyesHookState.Enabled
             and method == "FireServer"
             and self
             and self.Name == "MotorReplication"
@@ -121,6 +139,7 @@ end
 
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
+    EyesHookState.Enabled = AntiEyesEnabled
 
     if EyesRenderConnection then
         EyesRenderConnection:Disconnect()
@@ -737,6 +756,7 @@ function AntiUI:Destroy()
     AntiRushEnabled = false
     AntiAmbushEnabled = false
     AntiEyesEnabled = false
+    EyesHookState.Enabled = false
     AntiDreadEnabled = false
     AntiHaltEnabled = false
     AntiScreechEnabled = false
