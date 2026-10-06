@@ -118,13 +118,51 @@ local function findRoom(object, rooms)
 end
 
 local function isJeffShop(object, room)
+    -- Only the regular JeffShop is gated by the dedicated toggle.
+    -- RiftRoom / RiftRoom_JeffShop are normal loot areas and must always
+    -- remain eligible for Auto Loot, including TipJar.
     local current = object
 
     while current and current ~= room do
-        if current.Name == "RiftRoom_JeffShop" then
+        if current.Name == "JeffShop" then
             return true
         end
         current = current.Parent
+    end
+
+    return false
+end
+
+local function getContainingDrawerContainer(object, room)
+    local current = object and object.Parent
+
+    while current and current ~= room do
+        if current.Name == "DrawerContainer"
+            or current.Name == "RolltopContainer"
+        then
+            return current
+        end
+        current = current.Parent
+    end
+
+    return nil
+end
+
+local function isDrawerContainerOpen(container)
+    if not container or not container.Parent then
+        return false
+    end
+
+    local prompt = getPrompt(container, {"ActivateEventPrompt"})
+    if not prompt then
+        return false
+    end
+
+    -- DOORS changes the drawer prompt into the close state after the drawer
+    -- has actually opened. Until then, loot inside the container is hidden
+    -- and Auto Loot must not compete with Auto Interact for that item.
+    if prompt.ActionText == "Close" then
+        return true
     end
 
     return false
@@ -244,6 +282,7 @@ local function registerDrawerContainer(drawerContainer, room)
         Prompt = prompt,
         LastFire = 0,
         Waiting = false,
+        WaitingSince = 0,
         InitialInteractions = prompt:GetAttribute("Interactions"),
         HadLootHolder = hasLootHolder(drawerContainer),
     }
@@ -477,6 +516,22 @@ local function processInteractTargets()
                     then
                     InteractCompleted[container] = true
                     InteractTargets[object] = nil
+                elseif not prompt.Enabled
+                    and data.WaitingSince > 0
+                    and now - data.WaitingSince >= 1.5
+                then
+                    -- The game may temporarily disable the prompt during a
+                    -- lag spike. Do not force Enabled=true; simply release
+                    -- our local waiting state and retry when the game enables
+                    -- the prompt again.
+                    data.Waiting = false
+                    data.WaitingSince = 0
+                elseif data.WaitingSince > 0
+                    and now - data.WaitingSince >= 1.5
+                    and prompt.Enabled
+                then
+                    data.Waiting = false
+                    data.WaitingSince = 0
                 end
                 continue
             end
@@ -545,11 +600,16 @@ local function processInteractTargets()
     if firePrompt(prompt) then
         bestData.LastFire = now
         bestData.Waiting = true
+        bestData.WaitingSince = now
 
-        -- Only stateless interactions are completed immediately. Drawers
-        -- and Doors have their own post-trigger state and are completed by
-        -- the state checks above.
-        if bestData.Kind ~= "Drawers" and bestData.Kind ~= "Doors" then
+        -- Doors are one-shot unlock interactions. Once the prompt was
+        -- successfully fired, release it immediately so another door can be
+        -- selected even if the game keeps UnlockPrompt.Enabled in a transient
+        -- state. We never force Enabled back to true.
+        if bestData.Kind == "Doors" then
+            InteractCompleted[bestData.Container] = true
+            InteractTargets[bestObject] = nil
+        elseif bestData.Kind ~= "Drawers" then
             InteractCompleted[bestData.Container] = true
             InteractTargets[bestObject] = nil
         end
@@ -579,6 +639,10 @@ local function findLootPrompt(object)
         return nil
     end
 
+    if object.Name == "TipJar" then
+        return getPrompt(object, {"ModulePrompt"})
+    end
+
     if object.Name == "LiveHintBook" then
         return getPrompt(object, {"ActivateEventPrompt"})
     end
@@ -604,8 +668,12 @@ local function registerLootObject(object, room)
         return
     end
 
-    -- Tip Jar is never an Auto Loot target inside Jeff's Shop.
-    if room and isJeffShop(object, room) and object.Name == "TipJar" then
+    -- Loot inside a DrawerContainer/RolltopContainer is not eligible until
+    -- Auto Interact has actually opened that container. This prevents a
+    -- hidden Key/Lighter/etc. from stealing the Auto Loot target before the
+    -- drawer itself is opened.
+    local drawerContainer = getContainingDrawerContainer(object, room)
+    if drawerContainer and not isDrawerContainerOpen(drawerContainer) then
         return
     end
 
@@ -688,8 +756,14 @@ local function cleanupLootTargets()
             LootTargets[prompt] = nil
         elseif data.Room and isJeffShop(item, data.Room) and not AutoLootJeffShop then
             LootTargets[prompt] = nil
-        elseif data.Room and isJeffShop(item, data.Room) and item.Name == "TipJar" then
-            LootTargets[prompt] = nil
+        else
+            local drawerContainer = getContainingDrawerContainer(item, data.Room)
+            if drawerContainer and not isDrawerContainerOpen(drawerContainer) then
+                -- Keep the target registered. Once Auto Interact opens the
+                -- container, the same loot prompt becomes eligible without
+                -- requiring a rescan/toggle.
+                continue
+            end
         end
     end
 end
@@ -713,11 +787,14 @@ local function processLootTargets()
             continue
         end
 
-        if data.Room and isJeffShop(item, data.Room) then
-            if not AutoLootJeffShop or item.Name == "TipJar" then
-                LootTargets[prompt] = nil
-                continue
-            end
+        if data.Room and isJeffShop(item, data.Room) and not AutoLootJeffShop then
+            LootTargets[prompt] = nil
+            continue
+        end
+
+        local drawerContainer = getContainingDrawerContainer(item, data.Room)
+        if drawerContainer and not isDrawerContainerOpen(drawerContainer) then
+            continue
         end
 
         local position = getPromptPosition(prompt)
