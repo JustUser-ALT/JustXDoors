@@ -28,6 +28,14 @@ local PositionSpoofState = false
 local AntiEyesEnabled = false
 local EyesRenderConnection
 
+-- Eyes needs one normal MotorReplication cycle after each new spawn before
+-- the bypass is enabled. This reproduces the state transition that occurs
+-- when Anti Eyes is manually turned off, Eyes is allowed to initialize, and
+-- Anti Eyes is turned back on.
+local EyesCurrentInstance
+local EyesInitialized = false
+local EyesBypassFire = false
+
 -- The __namecall hook cannot be physically removed safely after installation.
 -- Keep one shared state so old hook closures become inert when the hub restarts.
 local EyesHookState
@@ -58,12 +66,29 @@ local function getFloorName()
     return floor and floor.Value or nil
 end
 
+local function getEyesInstance()
+    return workspace:FindFirstChild("Eyes")
+end
+
 local function eyesExists()
-    return workspace:FindFirstChild("Eyes") ~= nil
+    return getEyesInstance() ~= nil
+end
+
+local function updateEyesInstance()
+    local eyes = getEyesInstance()
+
+    if eyes ~= EyesCurrentInstance then
+        EyesCurrentInstance = eyes
+        EyesInitialized = eyes == nil
+    end
+
+    return eyes
 end
 
 local function applyEyesReplication(args)
-    if not AntiEyesEnabled or not eyesExists() then
+    local eyes = updateEyesInstance()
+
+    if not AntiEyesEnabled or not eyes or not EyesInitialized then
         return args
     end
 
@@ -85,7 +110,9 @@ local function applyEyesReplication(args)
 end
 
 local function fireEyesBypass()
-    if not AntiEyesEnabled or not eyesExists() then
+    local eyes = updateEyesInstance()
+
+    if not AntiEyesEnabled or not eyes or not EyesInitialized then
         return
     end
 
@@ -97,11 +124,13 @@ local function fireEyesBypass()
 
     local floor = getFloorName()
 
+    EyesBypassFire = true
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
         motorReplication:FireServer(-650)
     end
+    EyesBypassFire = false
 end
 
 local function installEyesHook()
@@ -128,7 +157,16 @@ local function installEyesHook()
             and self.Name == "MotorReplication"
             and eyesExists()
         then
+            local eyes = updateEyesInstance()
             local args = { ... }
+
+            -- Let the first normal game-originated replication through so
+            -- the current Eyes instance can initialize exactly once.
+            if not EyesInitialized and not EyesBypassFire then
+                EyesInitialized = true
+                return oldNamecall(self, ...)
+            end
+
             applyEyesReplication(args)
             return oldNamecall(self, table.unpack(args))
         end
@@ -147,18 +185,26 @@ local function setAntiEyes(value)
     end
 
     if not AntiEyesEnabled then
+        EyesCurrentInstance = nil
+        EyesInitialized = false
+        EyesBypassFire = false
         return
     end
 
-    -- Match Abyssal's Hotel behavior directly:
-    -- while Eyes exists, send the MotorReplication bypass every render frame.
-    -- No health spoofing is used.
     installEyesHook()
 
+    -- A new Eyes instance starts uninitialized. The first normal
+    -- MotorReplication call is allowed through; after that, the regular
+    -- Abyssal-style -650 bypass is sent every render frame.
+    updateEyesInstance()
+
     EyesRenderConnection = RunService.RenderStepped:Connect(function()
-        if AntiEyesEnabled and eyesExists() then
-            fireEyesBypass()
+        if not AntiEyesEnabled then
+            return
         end
+
+        updateEyesInstance()
+        fireEyesBypass()
     end)
 end
 
