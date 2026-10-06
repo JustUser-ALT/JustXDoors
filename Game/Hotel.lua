@@ -83,6 +83,11 @@ function Hotel:Init(core, modules)
                 Main:SetPositionSpoof(value)
             end
         end,
+        SetEyesCollisionState = function(value)
+            if Main and type(Main.SetEyesCollisionState) == "function" then
+                Main:SetEyesCollisionState(value)
+            end
+        end,
     }
 
     if type(Notifications) == "table" and type(Notifications.Init) == "function" then
