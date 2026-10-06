@@ -26,7 +26,6 @@ local SetPositionSpoof
 local PositionSpoofState = false
 
 local AntiEyesEnabled = false
-local EyesRenderConnection
 
 -- The __namecall hook cannot be physically removed safely after installation.
 -- Keep one shared state so old hook closures become inert when the hub restarts.
@@ -159,30 +158,13 @@ local function setAntiEyes(value)
         EyesHookState.RenderConnection = nil
     end
 
-    if EyesRenderConnection then
-        pcall(function()
-            EyesRenderConnection:Disconnect()
-        end)
-        EyesRenderConnection = nil
-    end
-
     if not AntiEyesEnabled then
         return
     end
 
-    -- Match Abyssal's Hotel behavior directly:
-    -- while Eyes exists, send the MotorReplication bypass every render frame.
-    -- No health spoofing is used.
+    -- Main owns the per-frame bypass so it executes after collision updates,
+    -- in the same RenderStepped order as Abyssal.
     installEyesHook()
-
-    local connection = RunService.RenderStepped:Connect(function()
-        if EyesHookState.Enabled and eyesExists() then
-            fireEyesBypass()
-        end
-    end)
-
-    EyesHookState.RenderConnection = connection
-    EyesRenderConnection = connection
 end
 
 local EntityNames = {
