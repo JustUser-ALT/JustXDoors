@@ -27,12 +27,6 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 local EyesRenderConnection
-local EyesDiagnosticSignatures = {}
-
--- Temporary diagnostic only: records the real MotorReplication arguments
--- before Anti Eyes changes them. This is used to identify the exact normal
--- Eyes state transition and will be removed after the test.
-local EyesDiagnosticVersion = 1
 
 -- The __namecall hook cannot be physically removed safely after installation.
 -- Keep one shared state so old hook closures become inert when the hub restarts.
@@ -51,13 +45,6 @@ else
         Enabled = false,
         Installed = false,
     }
-end
-
--- If an older hub instance installed the previous diagnostic hook, allow
--- this version to replace it once. Subsequent reloads reuse this hook.
-if EyesHookState.DiagnosticVersion ~= EyesDiagnosticVersion then
-    EyesHookState.Installed = false
-    EyesHookState.DiagnosticVersion = EyesDiagnosticVersion
 end
 
 local EntityConnection
@@ -105,7 +92,9 @@ local function fireEyesBypass()
 
     local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("RemotesFolder")
     local motorReplication = remotes and remotes:FindFirstChild("MotorReplication")
-    if not motorReplication or not motorReplication:IsA("RemoteEvent") then
+    if not motorReplication
+        or not (motorReplication:IsA("RemoteEvent") or motorReplication:IsA("UnreliableRemoteEvent"))
+    then
         return
     end
 
@@ -142,46 +131,6 @@ local function installEyesHook()
             and eyesExists()
         then
             local args = { ... }
-
-            -- Diagnostic: capture the ORIGINAL game arguments before the
-            -- Anti Eyes hook modifies anything.
-            local signature = table.concat({
-                tostring(args[1]),
-                tostring(args[2]),
-                tostring(args[3]),
-                tostring(args[4]),
-            }, "|")
-
-            if not EyesDiagnosticSignatures[signature] then
-                EyesDiagnosticSignatures[signature] = true
-
-                local camera = workspace.CurrentCamera
-                local eyes = workspace:FindFirstChild("Eyes")
-                local dot = "n/a"
-                local distance = "n/a"
-
-                if camera and eyes then
-                    local eyesPart = eyes:IsA("BasePart") and eyes or eyes:FindFirstChildWhichIsA("BasePart", true)
-                    if eyesPart then
-                        local offset = eyesPart.Position - camera.CFrame.Position
-                        distance = string.format("%.2f", offset.Magnitude)
-                        if offset.Magnitude > 0 then
-                            dot = string.format("%.4f", camera.CFrame.LookVector:Dot(offset.Unit))
-                        end
-                    end
-                end
-
-                print(string.format(
-                    "[JustXDoors][EyesDiag] args=(%s,%s,%s,%s) distance=%s lookDot=%s AntiEyes=%s",
-                    tostring(args[1]),
-                    tostring(args[2]),
-                    tostring(args[3]),
-                    tostring(args[4]),
-                    distance,
-                    dot,
-                    tostring(AntiEyesEnabled)
-                ))
-            end
 
             if EyesHookState.Enabled then
                 applyEyesReplication(args)
@@ -685,8 +634,6 @@ local function start()
     if AntiDreadEnabled then setAntiDread(true) end
     if AntiHaltEnabled then setAntiHalt(true) end
 
-    -- Install the temporary diagnostic hook even while Anti Eyes is OFF,
-    -- so we can observe the game's real MotorReplication state at Eyes spawn.
     installEyesHook()
 end
 
