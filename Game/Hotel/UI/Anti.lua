@@ -48,15 +48,19 @@ local function getFloorName()
 end
 
 local function isEyesActive()
-    -- Eyes is normally a direct Workspace child, matching Abyssal's
-    -- EntityHandler, but some builds can parent the runtime entity deeper.
-    -- Track the actual Eyes Model anywhere under Workspace so the bypass
-    -- does not silently stop when its parent changes.
+    -- Abyssal checks for the runtime name, not the class. Do the same here:
+    -- requiring Model can silently disable the bypass when the game briefly
+    -- represents Eyes with another Instance class during its spawn/update.
+    if workspace:FindFirstChild("Eyes") then
+        return true
+    end
+
     for _, object in ipairs(workspace:GetDescendants()) do
-        if object.Name == "Eyes" and object:IsA("Model") then
+        if object.Name == "Eyes" then
             return true
         end
     end
+
     return false
 end
 
