@@ -2200,6 +2200,7 @@ local function scanRoom(room, seen)
         end
 
         local special = {
+            TipJar="TipJar",
             Vitamins="Vitamins", Lighter="Lighter", Candle="Candle",
             AlarmClock="AlarmClock", Lockpick="Lockpick", SkeletonKey="SkeletonKey",
             Shears="Shears", RiftCandle="RiftCandle", RiftSmoothie="RiftSmoothie",
