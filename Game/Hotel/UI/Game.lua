@@ -509,23 +509,15 @@ local function processInteractTargets()
             continue
         end
 
-        local promptNames
-        if data.Kind == "Doors" then
-            promptNames = {"UnlockPrompt"}
-        elseif data.Kind == "Vent Gate" then
-            promptNames = {"AwesomePrompt"}
-        else
-            promptNames = {"ActivateEventPrompt"}
-        end
-
-        -- DOORS can replace the prompt while a drawer is opening.
-        local currentPrompt = getPrompt(container, promptNames)
-        if currentPrompt and currentPrompt ~= data.Prompt then
-            data.Prompt = currentPrompt
-        end
-
         local prompt = data.Prompt
         if not prompt or not prompt.Parent then
+            prompt = getPrompt(container, data.Kind == "Doors" and {"UnlockPrompt"}
+                or data.Kind == "Vent Gate" and {"AwesomePrompt"}
+                or {"ActivateEventPrompt"})
+            data.Prompt = prompt
+        end
+
+        if not prompt then
             continue
         end
 
