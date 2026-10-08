@@ -121,7 +121,7 @@ local function updateEyesBypass()
         return
     end
 
-    motorReplication:FireServer(-650, 0)
+    motorReplication:FireServer(650, 0)
 end
 
 local CrouchThrottle = 0
