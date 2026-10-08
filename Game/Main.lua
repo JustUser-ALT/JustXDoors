@@ -2254,7 +2254,7 @@ local function setupConnections()
     connect(RunService.RenderStepped, function()
         updatePositionSpoof()
         updateCollisionSpoof()
-        updateEyesBypass()
+        -- Anti Eyes is isolated in Game/Hotel/UI/Anti.lua for this test.
 
         if VelocityManipulationEnabled and RootPart and Character then
             if not ManipulateBody then
