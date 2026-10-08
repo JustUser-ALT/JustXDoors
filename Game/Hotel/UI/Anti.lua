@@ -83,16 +83,15 @@ local function applyEyesReplication(args)
 
     local floor = getFloorName()
 
+    -- Match Abyssal's __namecall hook: replace the first argument for
+    -- Hotel, but preserve the original call's remaining arguments.
     if floor == "Fools" or floor == "OldHotel" then
         args[1] = 0
         args[2] = -65
         args[3] = 0
         args[4] = false
     else
-        args[1] = 650
-        args[2] = 0
-        args[3] = nil
-        args[4] = nil
+        args[1] = -650
     end
 
     return args
@@ -103,7 +102,8 @@ local function fireEyesBypass()
         return
     end
 
-    local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("RemotesFolder")
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local remotes = replicatedStorage:FindFirstChild("RemotesFolder")
     local motorReplication = remotes and remotes:FindFirstChild("MotorReplication")
     if not motorReplication
         or not (motorReplication:IsA("RemoteEvent") or motorReplication:IsA("UnreliableRemoteEvent"))
@@ -113,10 +113,11 @@ local function fireEyesBypass()
 
     local floor = getFloorName()
 
+    -- Match Abyssal's one-shot activation call.
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
-        motorReplication:FireServer(650, 0)
+        motorReplication:FireServer(-650)
     end
 end
 
@@ -135,7 +136,8 @@ local function startEyesBypassLoop()
     EyesBypassConnection = RunService.Heartbeat:Connect(function()
         if not AntiEyesEnabled or not eyesExists() then return end
 
-        local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+        local replicatedStorage = game:GetService("ReplicatedStorage")
+        local remotes = replicatedStorage:FindFirstChild("RemotesFolder")
         local motorReplication = remotes and remotes:FindFirstChild("MotorReplication")
         if not motorReplication
             or not (motorReplication:IsA("RemoteEvent") or motorReplication:IsA("UnreliableRemoteEvent"))
@@ -143,7 +145,12 @@ local function startEyesBypassLoop()
             return
         end
 
-        motorReplication:FireServer(650, 0)
+        local floor = getFloorName()
+        if floor == "Fools" or floor == "OldHotel" then
+            motorReplication:FireServer(0, -65, 0, false)
+        else
+            motorReplication:FireServer(-650)
+        end
     end)
 end
 
@@ -159,8 +166,6 @@ local function installEyesHook()
         return
     end
 
-    EyesHookState.Installed = true
-
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         local method = getnamecallmethod()
@@ -168,31 +173,24 @@ local function installEyesHook()
         if method == "FireServer"
             and self
             and self.Name == "MotorReplication"
+            and EyesHookState.Enabled
             and eyesExists()
         then
             local args = { ... }
-
-            if EyesHookState.Enabled then
-                -- Replace the complete call with the tested Anti Eyes
-                -- signature. Do not preserve the game's dynamic arguments.
-                -- TEST: the hook must not modify MotorReplication at all.
-                return oldNamecall(self, ...)
-            end
-
+            args = applyEyesReplication(args)
             return oldNamecall(self, table.unpack(args))
         end
 
         return oldNamecall(self, ...)
     end))
+
+    EyesHookState.Installed = true
 end
 
 local function setAntiEyes(value)
     AntiEyesEnabled = value == true
     EyesHookState.Enabled = AntiEyesEnabled
 
-    -- The hook itself cannot be removed safely, but the render spam must be
-    -- owned by the shared state. This prevents an old hub instance from
-    -- continuing to fire -650 after the toggle is turned off.
     if EyesHookState.RenderConnection then
         pcall(function()
             EyesHookState.RenderConnection:Disconnect()
@@ -200,12 +198,22 @@ local function setAntiEyes(value)
         EyesHookState.RenderConnection = nil
     end
 
+    if EyesBypassConnection then
+        pcall(function()
+            EyesBypassConnection:Disconnect()
+        end)
+        EyesBypassConnection = nil
+    end
+
     if not AntiEyesEnabled then
         return
     end
 
-    -- Main no longer owns the bypass call for this test.
-    -- Anti.lua uses one dedicated connection.
+    installEyesHook()
+
+    -- Abyssal sends one immediate call when the toggle is enabled while
+    -- Eyes is present, then also sends during its main update loop.
+    fireEyesBypass()
     startEyesBypassLoop()
 end
 
