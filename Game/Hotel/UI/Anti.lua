@@ -27,18 +27,30 @@ local PositionSpoofState = false
 
 local AntiEyesEnabled = false
 
--- The __namecall hook cannot be physically removed safely after installation.
--- Keep one shared state so old hook closures become inert when the hub restarts.
+-- Controlled Anti Eyes test:
+-- disable the previous hook state so an older hub instance cannot rewrite
+-- MotorReplication calls. This version keeps the new hook pass-through only.
 local EyesHookState
 if type(shared) == "table" then
-    EyesHookState = shared.__JustXDoorsEyesHookState
+    local legacyState = shared.__JustXDoorsEyesHookState
+    if type(legacyState) == "table" then
+        legacyState.Enabled = false
+        if legacyState.RenderConnection then
+            pcall(function()
+                legacyState.RenderConnection:Disconnect()
+            end)
+            legacyState.RenderConnection = nil
+        end
+    end
+
+    EyesHookState = shared.__JustXDoorsEyesHookStateV2
     if type(EyesHookState) ~= "table" then
         EyesHookState = {
             Enabled = false,
             Installed = false,
             RenderConnection = nil,
         }
-        shared.__JustXDoorsEyesHookState = EyesHookState
+        shared.__JustXDoorsEyesHookStateV2 = EyesHookState
     end
 else
     EyesHookState = {
@@ -136,7 +148,8 @@ local function installEyesHook()
             if EyesHookState.Enabled then
                 -- Replace the complete call with the tested Anti Eyes
                 -- signature. Do not preserve the game's dynamic arguments.
-                return oldNamecall(self, 650, 0)
+                -- TEST: the hook must not modify MotorReplication at all.
+                return oldNamecall(self, ...)
             end
 
             return oldNamecall(self, table.unpack(args))
@@ -164,8 +177,8 @@ local function setAntiEyes(value)
         return
     end
 
-    -- Main owns the per-frame bypass so it executes after collision updates,
-    -- in the same RenderStepped order as Abyssal.
+    -- Main owns the only Anti Eyes MotorReplication call for this test.
+    -- The __namecall hook is intentionally pass-through.
     installEyesHook()
 end
 
