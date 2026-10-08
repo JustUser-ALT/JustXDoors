@@ -129,9 +129,14 @@ function Connector:Load()
         CoreInstance:CreateSettings()
     end
 
-    -- Config loading happens while JustLib builds Settings. Re-apply runtime
-    -- features only after all cleanup handlers are registered.
-    task.defer(function()
+    -- JustLib applies the selected Auto Load preset asynchronously after
+    -- Settings has been built. Wait briefly before syncing runtime features,
+    -- so callbacks read the final saved toggle values rather than defaults.
+    task.delay(0.75, function()
+        if environment.__JustXDoorsSession == nil then
+            -- The session is assigned below during startup; don't use this
+            -- guard here because the deferred callback runs after Load returns.
+        end
         if Main and Main.ReapplyEnabledFeatures then
             pcall(function() Main:ReapplyEnabledFeatures() end)
         end
