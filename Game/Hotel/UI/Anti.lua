@@ -91,7 +91,7 @@ local function applyEyesReplication(args)
         args[3] = 0
         args[4] = false
     else
-        args[1] = -650
+        args[1] = 900
     end
 
     return args
@@ -117,7 +117,7 @@ local function fireEyesBypass()
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
-        motorReplication:FireServer(-650)
+        motorReplication:FireServer(900)
     end
 end
 
@@ -149,7 +149,7 @@ local function startEyesBypassLoop()
         if floor == "Fools" or floor == "OldHotel" then
             motorReplication:FireServer(0, -65, 0, false)
         else
-            motorReplication:FireServer(-650)
+            motorReplication:FireServer(900)
         end
     end)
 end
