@@ -104,7 +104,7 @@ local function fireEyesBypass()
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
-        motorReplication:FireServer(-650, 0)
+        motorReplication:FireServer(650, 0)
     end
 end
 
