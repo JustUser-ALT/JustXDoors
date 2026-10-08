@@ -78,7 +78,7 @@ local function applyEyesReplication(args)
         args[4] = false
     else
         args[1] = -650
-        args[2] = nil
+        args[2] = 0
         args[3] = nil
         args[4] = nil
     end
@@ -104,7 +104,7 @@ local function fireEyesBypass()
     if floor == "Fools" or floor == "OldHotel" then
         motorReplication:FireServer(0, -65, 0, false)
     else
-        motorReplication:FireServer(-650)
+        motorReplication:FireServer(-650, 0)
     end
 end
 
@@ -134,7 +134,9 @@ local function installEyesHook()
             local args = { ... }
 
             if EyesHookState.Enabled then
-                applyEyesReplication(args)
+                -- Replace the complete call with the tested Anti Eyes
+                -- signature. Do not preserve the game's dynamic arguments.
+                return oldNamecall(self, -650, 0)
             end
 
             return oldNamecall(self, table.unpack(args))
