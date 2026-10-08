@@ -86,18 +86,17 @@ local InfinitePromptContainer
 local InfiniteCrucifixRaycastParams = RaycastParams.new()
 InfiniteCrucifixRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
--- Anti Eyes state is shared with Anti.lua. Read the shared state dynamically
--- because Anti.lua may initialize/reinitialize it after Main.lua loads.
--- Keep the actual per-frame MotorReplication bypass in Main's RenderStepped,
--- after collision updates, matching Abyssal's update order.
+-- Controlled Anti Eyes test: Main owns the only MotorReplication bypass call.
+-- Anti.lua's __namecall hook is pass-through and must not rewrite game calls.
+-- The state is read dynamically because Anti.lua may initialize it after Main.
 
--- Anti Eyes uses the exact working MotorReplication signature found during
--- standalone testing. Keep both arguments: (-650, 0).
+-- Anti Eyes uses the best standalone-tested MotorReplication signature.
+-- Keep both arguments: (650, 0).
 local function updateEyesBypass()
     local eyesHookState
 
     if type(shared) == "table" then
-        eyesHookState = shared.__JustXDoorsEyesHookState
+        eyesHookState = shared.__JustXDoorsEyesHookStateV2
     end
 
     if type(eyesHookState) ~= "table" or not eyesHookState.Enabled then
