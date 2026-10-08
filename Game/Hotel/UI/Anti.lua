@@ -120,6 +120,33 @@ local function fireEyesBypass()
     end
 end
 
+local EyesBypassConnection
+
+local function startEyesBypassLoop()
+    if EyesBypassConnection then
+        pcall(function()
+            EyesBypassConnection:Disconnect()
+        end)
+        EyesBypassConnection = nil
+    end
+
+    if not AntiEyesEnabled then return end
+
+    EyesBypassConnection = RunService.Heartbeat:Connect(function()
+        if not AntiEyesEnabled or not eyesExists() then return end
+
+        local remotes = ReplicatedStorage:FindFirstChild("RemotesFolder")
+        local motorReplication = remotes and remotes:FindFirstChild("MotorReplication")
+        if not motorReplication
+            or not (motorReplication:IsA("RemoteEvent") or motorReplication:IsA("UnreliableRemoteEvent"))
+        then
+            return
+        end
+
+        motorReplication:FireServer(650, 0)
+    end)
+end
+
 local function installEyesHook()
     if EyesHookState.Installed then
         return
@@ -177,9 +204,9 @@ local function setAntiEyes(value)
         return
     end
 
-    -- Main owns the only Anti Eyes MotorReplication call for this test.
-    -- The __namecall hook is intentionally pass-through.
-    installEyesHook()
+    -- Main no longer owns the bypass call for this test.
+    -- Anti.lua uses one dedicated connection.
+    startEyesBypassLoop()
 end
 
 local EntityNames = {
