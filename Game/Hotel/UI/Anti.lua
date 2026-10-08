@@ -77,7 +77,7 @@ local function applyEyesReplication(args)
         args[3] = 0
         args[4] = false
     else
-        args[1] = -650
+        args[1] = 650
         args[2] = 0
         args[3] = nil
         args[4] = nil
@@ -136,7 +136,7 @@ local function installEyesHook()
             if EyesHookState.Enabled then
                 -- Replace the complete call with the tested Anti Eyes
                 -- signature. Do not preserve the game's dynamic arguments.
-                return oldNamecall(self, -650, 0)
+                return oldNamecall(self, 650, 0)
             end
 
             return oldNamecall(self, table.unpack(args))
