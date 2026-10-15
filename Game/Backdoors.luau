@@ -294,7 +294,7 @@ function Module.Init(Shared)
 	-- An invisible copy of an object (welded to the real parts). The ESP highlight is put on THIS copy: the game puts its own
 	-- highlight on the real object while its prompt is showing, and two highlights on the same object replace each other, which
 	-- made the ESP vanish whenever you walked up to an item or interactable.
-	local function BuildProxy(Target)
+	local function BuildProxy(Target, VisiblePartsOnly)
 		local Proxy = Instance.new("Model")
 		Proxy.Name = "BackdoorsESPProxy"
 		-- Match the game's own door ESP proxy: its HighlightModel contains a Humanoid.
@@ -306,6 +306,8 @@ function Module.Init(Shared)
 
 		local function AddPart(Part)
 			if Count >= 80 then return end
+			-- Item models may contain invisible, room-sized pickup/hitbox parts. Those should not define the ESP shape.
+			if VisiblePartsOnly and (Part.Transparency >= 1 or Part.LocalTransparencyModifier >= 1) then return end
 			local Ok, Copy = pcall(function() return Part:Clone() end)
 			if not Ok or not Copy then return end
 			for _, Child in Copy:GetChildren() do
@@ -425,6 +427,7 @@ function Module.Init(Shared)
 			end
 			return true
 		elseif Entry.Category == "Timer Lever" then
+			if Entry.Activated then return true end
 			local Prompt = LeverPrompt(Entry.Object)
 			if Prompt and Prompt.Enabled then
 				Entry.WasReady = true
@@ -546,7 +549,8 @@ function Module.Init(Shared)
 				return
 			end
 		else
-			Proxy = BuildProxy(Object)
+			-- Items use only visible source parts; invisible pickup hitboxes can span the whole room or create oversized shapes.
+			Proxy = BuildProxy(Object, not InteractableCategories[Entry.Category])
 		end
 		-- Never fall back to the real object: game-owned highlights can suppress the outline,
 		-- leaving only the ESP label and distance visible.
@@ -621,10 +625,22 @@ function Module.Init(Shared)
 		elseif Entry.Category == "Timer Lever" then
 			local Prompt = LeverPrompt(Object)
 			if Prompt then HookLeverPrompt(Prompt) end
+			-- The lever's prompt may remain enabled after use. The game signals activation by playing Main.SoundToPlay.
+			local function HookActivationSound(Descendant)
+				if Descendant:IsA("Sound") and Descendant.Name == "SoundToPlay" then
+					table.insert(Conns, Descendant.Played:Connect(function()
+						Entry.Activated = true
+						Refresh()
+					end))
+				end
+			end
+			for _, Descendant in Object:GetDescendants() do HookActivationSound(Descendant) end
 			table.insert(Conns, Object.DescendantAdded:Connect(function(Descendant)
 				if Descendant.Name == "ActivateEventPrompt" and Descendant:IsA("ProximityPrompt") then
 					HookLeverPrompt(Descendant)
 					Refresh()
+				elseif Descendant:IsA("Sound") and Descendant.Name == "SoundToPlay" then
+					HookActivationSound(Descendant)
 				end
 			end))
 		end
