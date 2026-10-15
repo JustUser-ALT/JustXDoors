@@ -710,11 +710,32 @@ function Module.Init(Shared)
 	end
 
 	local function TrackPrompt(Prompt)
-		if Prompts[Prompt] then return end
-		local Category = ClassifyPrompt(Prompt)
-		if not Category then return end
-		Prompts[Prompt] = { Category = Category, LastFire = 0 }
-		Prompt.Destroying:Once(function() Prompts[Prompt] = nil end)
+		if Prompts[Prompt] then
+			local Category = ClassifyPrompt(Prompt)
+			if Category then Prompts[Prompt].Category = Category end
+			return
+		end
+
+		-- Some prompts are inserted before their final parent hierarchy is ready.
+		-- Keep a pending record and classify it again when the prompt is reparented.
+		local Info = { Category = ClassifyPrompt(Prompt), LastFire = 0 }
+		Prompts[Prompt] = Info
+		if not Info.Category then
+			Info.AncestryConnection = Prompt.AncestryChanged:Connect(function()
+				local Category = ClassifyPrompt(Prompt)
+				if Category then
+					Info.Category = Category
+					if Info.AncestryConnection then
+						Info.AncestryConnection:Disconnect()
+						Info.AncestryConnection = nil
+					end
+				end
+			end)
+		end
+		Prompt.Destroying:Once(function()
+			if Info.AncestryConnection then Info.AncestryConnection:Disconnect() end
+			Prompts[Prompt] = nil
+		end)
 	end
 
 	local LastAutomationTick = 0
