@@ -40,7 +40,7 @@ function Module.Init(Shared)
 		Text = "Auto Interact", Default = false, Tooltip = "Automatically interacts with the selected objects when you are close to them."
 	})
 	Groupboxes.Backdoors_Automation:AddDropdown("BackdoorsAutoInteractList", {
-		Text = "Auto Interact List", Values = { "Drawer", "Door", "Timer Lever" }, Multi = true, AllowNull = true
+		Text = "Auto Interact List", Values = { "Drawer", "Door", "Exit Door", "Timer Lever" }, Multi = true, AllowNull = true
 	})
 	Groupboxes.Backdoors_Automation:AddDivider()
 	Groupboxes.Backdoors_Automation:AddToggle("BackdoorsAutoLootToggle", {
@@ -76,7 +76,7 @@ function Module.Init(Shared)
 		Text = "Interactables ESP", Default = false, Tooltip = "Highlights the selected interactable objects."
 	})
 	Groupboxes.Backdoors_ESP:AddDropdown("BackdoorsInteractableESPList", {
-		Text = "Interactables", Values = { "Drawer", "Door", "Timer Lever", "Closet" }, Multi = true, AllowNull = true
+		Text = "Interactables", Values = { "Drawer", "Door", "Exit Door", "Timer Lever", "Closet" }, Multi = true, AllowNull = true
 	})
 	Groupboxes.Backdoors_ESP:AddDivider()
 	Groupboxes.Backdoors_ESP:AddToggle("BackdoorsItemESPToggle", {
@@ -124,7 +124,7 @@ function Module.Init(Shared)
 	end
 	local ColorGroups = {
 		{ Category = "Entity", Label = "Entity ESP Color", Idx = "BackdoorsEntityESPColor", Items = { "Blitz", "Lookman" } },
-		{ Category = "Interactable", Label = "Interactables ESP Color", Idx = "BackdoorsInteractableESPColor", Items = { "Drawer", "Door", "Timer Lever", "Closet" } },
+		{ Category = "Interactable", Label = "Interactables ESP Color", Idx = "BackdoorsInteractableESPColor", Items = { "Drawer", "Door", "Exit Door", "Timer Lever", "Closet" } },
 		{ Category = "Item", Label = "Items ESP Color", Idx = "BackdoorsItemESPColor", Items = { "Key", "Star Vial", "Star Bottle" } },
 	}
 	local AllColorPickers = {}
@@ -141,25 +141,25 @@ function Module.Init(Shared)
 
 	-- Settings: notification settings + Show Entity Path. The originals live on the Hotel tab (moved there from Visuals);
 	-- these are copies that stay in sync with them.
-	Groupboxes.Backdoors_Settings:AddDivider()
-	Groupboxes.Backdoors_Settings:AddToggle("EntityChatToggleBackdoors", { Text = "Notify Chat", Default = false, Tooltip = "Sends a message in the chat when an entity spawns." })
-	Groupboxes.Backdoors_Settings:AddInput("EntityChatMessageBackdoors", { Text = "Message", Default = "spawned!", Numeric = false, Placeholder = "Message" })
-	Groupboxes.Backdoors_Settings:AddDivider()
-	Groupboxes.Backdoors_Settings:AddDropdown("NotifyStyleBackdoors", { Text = "Notify Style", Values = { "Abysall", "Doors", "STX", "Library" }, Default = 1 })
-	Groupboxes.Backdoors_Settings:AddSlider("NotifySoundVolumeBackdoors", { Text = "Sound Volume", Min = 0, Max = 10, Default = 3, Rounding = 1 })
-	Groupboxes.Backdoors_Settings:AddToggle("NotifyPlaySoundBackdoors", { Text = "Play Sound", Default = true, Tooltip = "Makes notifications play an alert sound." })
-	Groupboxes.Backdoors_Settings:AddToggle("NotifyKeepNotificationsBackdoors", { Text = "Keep Notifications", Default = false, Tooltip = "Certain notifications will stay on screen until they are no longer needed." })
-	Groupboxes.Backdoors_Settings:AddButton({ Text = "Test Notification", DoubleClick = false, Tooltip = "Sends a test notifcation, so you can see how your settings look.", Func = function()
+	Groupboxes.Backdoors_Notifications:AddDivider()
+	Groupboxes.Backdoors_Notifications:AddToggle("EntityChatToggleBackdoors", { Text = "Notify Chat", Default = false, Tooltip = "Sends a message in the chat when an entity spawns." })
+	Groupboxes.Backdoors_Notifications:AddInput("EntityChatMessageBackdoors", { Text = "Message", Default = "spawned!", Numeric = false, Placeholder = "Message" })
+	Groupboxes.Backdoors_Notifications:AddDivider()
+	Groupboxes.Backdoors_Notifications:AddDropdown("NotifyStyleBackdoors", { Text = "Notify Style", Values = { "Abysall", "Doors", "STX", "Library" }, Default = 1 })
+	Groupboxes.Backdoors_Notifications:AddSlider("NotifySoundVolumeBackdoors", { Text = "Sound Volume", Min = 0, Max = 10, Default = 3, Rounding = 1 })
+	Groupboxes.Backdoors_Notifications:AddToggle("NotifyPlaySoundBackdoors", { Text = "Play Sound", Default = true, Tooltip = "Makes notifications play an alert sound." })
+	Groupboxes.Backdoors_Notifications:AddToggle("NotifyKeepNotificationsBackdoors", { Text = "Keep Notifications", Default = false, Tooltip = "Certain notifications will stay on screen until they are no longer needed." })
+	Groupboxes.Backdoors_Notifications:AddButton({ Text = "Test Notification", DoubleClick = false, Tooltip = "Sends a test notifcation, so you can see how your settings look.", Func = function()
 		Functions.Notify({Title = "This is a test."})
 	end})
-	Groupboxes.Backdoors_Settings:AddDivider()
-	Groupboxes.Backdoors_Settings:AddToggle("ShowEntityPathBackdoors", {
+	Groupboxes.Backdoors_Notifications:AddDivider()
+	Groupboxes.Backdoors_ESP:AddToggle("ShowEntityPathBackdoors", {
 	    Text = "Show Entity Path",
 	    Default = false,
 	    Tooltip = "Shows the path of entitys."
 	})
 
-	Groupboxes.Backdoors_Settings:AddSlider("ShowEntityPathNodeTransparencyBackdoors", {
+	Groupboxes.Backdoors_ESP:AddSlider("ShowEntityPathNodeTransparencyBackdoors", {
 	    Text = "Node Transparency",
 	    Default = 0,
 	    Min = 0,
@@ -169,7 +169,7 @@ function Module.Init(Shared)
 	    Tooltip = "Transparency of the path nodes when shown"
 	})
 
-	Groupboxes.Backdoors_Settings:AddSlider("ShowEntityPathLineTransparencyBackdoors", {
+	Groupboxes.Backdoors_ESP:AddSlider("ShowEntityPathLineTransparencyBackdoors", {
 	    Text = "Line Transparency",
 	    Default = 0.15,
 	    Min = 0,
@@ -179,7 +179,7 @@ function Module.Init(Shared)
 	    Tooltip = "Transparency of the path lines"
 	})
 
-	Groupboxes.Backdoors_Settings:AddSlider("ShowEntityPathLineThicknessBackdoors", {
+	Groupboxes.Backdoors_ESP:AddSlider("ShowEntityPathLineThicknessBackdoors", {
 	    Text = "Line Thickness",
 	    Default = 0.3,
 	    Min = 0.08,
@@ -214,7 +214,7 @@ function Module.Init(Shared)
 	----------------------------------------------------------------------------------------------------
 	-- Helpers
 	----------------------------------------------------------------------------------------------------
-	local InteractableCategories = { Drawer = true, Door = true, ["Timer Lever"] = true, Closet = true }
+	local InteractableCategories = { Drawer = true, Door = true, ["Exit Door"] = true, ["Timer Lever"] = true, Closet = true }
 	local EntryNames = {
 		Backdoor_Table = "Drawer", TimerLever = "Timer Lever", Door = "Door", Backdoor_Wardrobe = "Closet",
 		KeyObtain = "Key", StarVial = "Star Vial", StarBottle = "Star Bottle"
@@ -300,8 +300,9 @@ function Module.Init(Shared)
 		local Count = 0
 
 		local function AddPart(Part)
-			if Part.Transparency >= 0.98 or Count >= 80 then return end
-			local Copy = Part:Clone()
+			if Count >= 80 then return end
+			local Ok, Copy = pcall(function() return Part:Clone() end)
+			if not Ok or not Copy then return end
 			for _, Child in Copy:GetChildren() do
 				if not Child:IsA("DataModelMesh") then Child:Destroy() end
 			end
@@ -333,7 +334,8 @@ function Module.Init(Shared)
 			Proxy:Destroy()
 			return nil
 		end
-		Proxy.Parent = Services.Workspace.CurrentCamera
+		-- Keep the adornee in Workspace instead of parenting the model under CurrentCamera.
+		Proxy.Parent = Services.Workspace
 		return Proxy
 	end
 
@@ -351,13 +353,14 @@ function Module.Init(Shared)
 		if Category == "Door" then
 			local Parent = Object.Parent
 			if not Parent then return end
-			-- room doors live directly in a room (numeric name); the exit door lives in Backdoors_Exit
-			if not tonumber(Parent.Name) and Parent.Name ~= "Backdoors_Exit" then return end
+			if Parent.Name == "Backdoors_Exit" then return "Exit Door" end
+			if not tonumber(Parent.Name) then return end
 		end
 		return Category
 	end
 
 	local function DoorLabel(Door)
+		if Door.Parent and Door.Parent.Name == "Backdoors_Exit" then return "Exit Door" end
 		local Ok, Number = pcall(Functions.GetDoorNumber, Door)
 		return (Ok and Number) and ("Door " .. Number) or "Door"
 	end
@@ -365,10 +368,11 @@ function Module.Init(Shared)
 	-- Same object Abysall's own Door ESP uses: the invisible HighlightPart / HighlightModel that copies the door panel.
 	-- Returns nil while Abysall has not created it yet; the exit door is not handled by Abysall (it gets its own copy).
 	local function ResolveDoorObject(Door)
+		if Door.Parent and Door.Parent.Name == "Backdoors_Exit" then return Door, true end
 		local Proxy = Door:FindFirstChild("HighlightModel") or Door:FindFirstChild("HighlightPart")
 		if Proxy then return Proxy, false end
-		if Door.Parent and tonumber(Door.Parent.Name) then return nil end
-		return Door, true
+		-- Regular room doors use Abysall's own HighlightModel/HighlightPart. Wait until it exists.
+		return nil
 	end
 
 	-- A DrawerContainer is done once its LootHolder spawned (while we watched) or its knob prompt was usable and no longer is.
@@ -524,20 +528,26 @@ function Module.Init(Shared)
 		end
 
 		local Object, Label, Proxy = Entry.Object, Entry.Label, nil
-		if Entry.Category == "Door" then
+		if Entry.Category == "Door" or Entry.Category == "Exit Door" then
 			local Resolved, NeedsProxy = ResolveDoorObject(Entry.Object)
 			if not Resolved then return end
 			Label = DoorLabel(Entry.Object)
 			Object = Resolved
 			if NeedsProxy then Proxy = BuildProxy(Resolved) end
+			if not NeedsProxy then
+				Entry.EspObject = Object
+				Entry.Shown = true
+				Functions.AddESP({ Object = Object, Text = Label, Color = EntryColor(Entry) })
+				return
+			end
 		else
 			Proxy = BuildProxy(Object)
 		end
-		if Proxy then
-			Entry.Visual = { Proxy = Proxy }
-			Object = Proxy
-		end
-
+		-- Never fall back to the real object: game-owned highlights can suppress the outline,
+		-- leaving only the ESP label and distance visible.
+		if not Proxy then return end
+		Entry.Visual = { Proxy = Proxy }
+		Object = Proxy
 		Entry.EspObject = Object
 		Entry.Shown = true
 		Functions.AddESP({ Object = Object, Text = Label, Color = EntryColor(Entry) })
@@ -691,7 +701,7 @@ function Module.Init(Shared)
 		elseif Name == "UnlockPrompt" and ParentName == "Lock" and GrandName == "Door" then
 			return "Door"
 		elseif Name == "EnterPrompt" and ParentName == "Door" and GrandName == "Backdoors_Exit" then
-			return "Door"
+			return "Exit Door"
 		elseif Name == "ModulePrompt" then
 			if ParentName == "KeyObtain" then return "Key"
 			elseif ParentName == "StarVial" then return "Star Vial"
