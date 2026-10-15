@@ -1,24 +1,83 @@
-local BASE = "https://raw.githubusercontent.com/JustUser-ALT/JustXDoors/main/"
+local Env = getgenv()
+local Config = Env.AbysallConfig or {}
 
-local ok, source = pcall(function()
-    return game:HttpGet(BASE .. "Connector.lua")
+if Env.Abysall then
+    warn("[Abysall] already loaded")
+    return
+end
+
+local BaseUrl = Config.BaseUrl or "https://raw.githubusercontent.com/JustUser-ALT/Doors/main/"
+
+-- repo layout (relative to BaseUrl). Change here if a file lives somewhere else.
+local Files = {
+    Interface   = "Interface.lua",
+    Environment = "Components/Environment.luau",
+    ESP         = "Components/ESP.luau",
+    Main        = "Game/Main.luau",
+    Lobby       = "Game/Lobby.luau",
+    Modules     = "Game/%s.luau", -- tab modules: Game/General.luau, Game/Hotel.luau
+}
+
+local LobbyPlaceId = 6516141723
+
+-- ".luau" <-> ".lua" so a renamed file still loads
+local function Alternate(Path)
+    if string.sub(Path, -5) == ".luau" then
+        return string.sub(Path, 1, -6) .. ".lua"
+    elseif string.sub(Path, -4) == ".lua" then
+        return Path .. "u"
+    end
+end
+
+local function Read(Path, Base)
+    if Config.LocalFolder and readfile then
+        return readfile(Config.LocalFolder .. "/" .. Path)
+    end
+    return game:HttpGet((Base or BaseUrl) .. Path)
+end
+
+local function Fetch(Path, Base)
+    local Ok, Result = pcall(Read, Path, Base)
+    if Ok and type(Result) == "string" and #Result > 0 and not string.find(Result, "^404") then
+        return Result
+    end
+    local Other = Alternate(Path)
+    if Other then
+        local Ok2, Result2 = pcall(Read, Other, Base)
+        if Ok2 and type(Result2) == "string" and #Result2 > 0 and not string.find(Result2, "^404") then
+            return Result2
+        end
+    end
+    error("[Abysall] could not load '" .. Path .. "' (" .. tostring(Result) .. ")", 0)
+end
+
+local function Load(Path, Base)
+    local Fn, Err = loadstring(Fetch(Path, Base))
+    assert(Fn, "[Abysall] syntax error in '" .. Path .. "': " .. tostring(Err))
+    return Fn()
+end
+
+Env.Abysall = {
+    Environment = Load(Files.Environment, Config.ComponentsUrl),
+    ESPLibrary  = Load(Files.ESP, Config.ComponentsUrl),
+    Interface   = Load(Files.Interface),
+    Legit       = true,
+}
+
+-- Main.luau loads its tab modules through this: Abysall.LoadModule("General")(Shared)
+Env.Abysall.LoadModule = function(Name)
+    return Load(string.format(Files.Modules, Name))
+end
+
+local Ok, Err = pcall(function()
+    if game.PlaceId ~= LobbyPlaceId then
+        Load(Files.Main)
+    else
+        Load(Files.Lobby)
+    end
 end)
 
-if not ok or not source or source == "" then
-    warn("[JustXDoors] Failed to download Connector.")
-    return
+if not Ok then
+    warn("[Abysall] failed to start: " .. tostring(Err))
+    Env.Abysall = nil
 end
-
-local okLoad, connector = pcall(loadstring, source)
-if not okLoad or type(connector) ~= "function" then
-    warn("[JustXDoors] Failed to compile Connector.")
-    return
-end
-
-local okInit, module = pcall(connector)
-if not okInit or type(module) ~= "table" or not module.Load then
-    warn("[JustXDoors] Failed to initialize Connector.")
-    return
-end
-
-module:Load()
