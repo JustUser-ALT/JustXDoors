@@ -297,6 +297,11 @@ function Module.Init(Shared)
 	local function BuildProxy(Target)
 		local Proxy = Instance.new("Model")
 		Proxy.Name = "BackdoorsESPProxy"
+		-- Match the game's own door ESP proxy: its HighlightModel contains a Humanoid.
+		-- Without this, Highlight may fail to outline proxy-only models on some objects.
+		local Humanoid = Instance.new("Humanoid")
+		Humanoid.Name = "HighlightHumanoid"
+		Humanoid.Parent = Proxy
 		local Count = 0
 
 		local function AddPart(Part)
