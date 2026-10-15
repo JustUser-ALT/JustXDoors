@@ -646,9 +646,9 @@ function Module.Init(Shared)
 		end
 	end
 
-	local function TrackObject(Object)
+	local function TrackObject(Object, CategoryOverride)
 		if Entries[Object] then return end
-		local Category = ClassifyObject(Object)
+		local Category = CategoryOverride or ClassifyObject(Object)
 		if not Category then return end
 
 		local Entry = { Object = Object, Category = Category, Label = Category, Shown = false, Conns = {}, Containers = {} }
@@ -933,6 +933,16 @@ function Module.Init(Shared)
 	local function Consider(Object)
 		if Object:IsA("ProximityPrompt") then
 			TrackPrompt(Object)
+			-- Item prompts can appear after their model was first parented into a drawer.
+			-- Use the prompt as a second discovery path so a missed/early model event cannot leave the Key untracked.
+			if Object.Name == "ModulePrompt" and Object.Parent and Object.Parent.Name == "KeyObtain" then
+				local Item = Object.Parent
+				task.defer(function()
+					if Item.Parent and (Item:IsA("Model") or Item:IsA("BasePart")) then
+						TrackObject(Item, "Key")
+					end
+				end)
+			end
 		elseif EntryNames[Object.Name] then
 			TrackObject(Object)
 		elseif (Object.Name == "HighlightPart" or Object.Name == "HighlightModel") and Object.Parent and Object.Parent.Name == "Door" then
