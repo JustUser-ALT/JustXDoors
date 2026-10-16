@@ -917,6 +917,7 @@ function Module.Init(Shared)
 	local AutoEnabledPositionSpoof = false
 	local ChangingPositionSpoof = false
 	local AntiBlitzRunning = true
+	local AntiBlitzElapsed = 0
 
 	local function SetPositionSpoof(Value)
 		if not PositionSpoofToggle or PositionSpoofToggle.Value == Value then return end
@@ -938,8 +939,11 @@ function Module.Init(Shared)
 		end)
 	end
 
-	Connections.BackdoorsAntiBlitz = Services.RunService.Heartbeat:Connect(function()
+	Connections.BackdoorsAntiBlitz = Services.RunService.Heartbeat:Connect(function(DeltaTime)
 		if not AntiBlitzRunning then return end
+		AntiBlitzElapsed += DeltaTime
+		if AntiBlitzElapsed < 0.1 then return end
+		AntiBlitzElapsed = 0
 		local ThreatNearby = false
 		if Toggles.BackdoorsAntiBlitz.Value and OnBackdoors() then
 			local Character = LocalPlayer.Character
@@ -1019,6 +1023,11 @@ function Module.Init(Shared)
 	Connections.BackdoorsEntryCleanup = {
 		Disconnect = function()
 			WatchdogRunning = false
+			AntiBlitzRunning = false
+			if AutoEnabledPositionSpoof then
+				AutoEnabledPositionSpoof = false
+				if not UserWantsPositionSpoof then SetPositionSpoof(false) end
+			end
 			for _, Entry in Entries do
 				HideEntry(Entry)
 				for _, Conn in Entry.Conns do Conn:Disconnect() end
