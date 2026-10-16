@@ -955,6 +955,7 @@ function Module.Init(Shared)
 		end
 	end)
 
+	local SetPositionSpoof
 	local function ResolvePositionSpoofToggle()
 		if not PositionSpoofToggle then
 			PositionSpoofToggle = Toggles.PositionSpoof
@@ -977,7 +978,7 @@ function Module.Init(Shared)
 		return PositionSpoofToggle
 	end
 
-	local function SetPositionSpoof(Value)
+	SetPositionSpoof = function(Value)
 		ResolvePositionSpoofToggle()
 		if not PositionSpoofToggle then
 			AntiBlitzDebug("ERROR: Toggles.PositionSpoof is nil")
