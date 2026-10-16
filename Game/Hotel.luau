@@ -14,8 +14,8 @@
 local Module = {}
 
 function Module.Init(Shared)
-	local CurrentRooms, Functions, Globals, Groupboxes, LocalPlayer, Options, Tabs, Toggles, Window
-	   = Shared.CurrentRooms, Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.LocalPlayer, Shared.Options, Shared.Tabs, Shared.Toggles, Shared.Window
+	local Connections, CurrentRooms, Functions, Globals, Groupboxes, LocalPlayer, Options, Services, Tabs, Toggles, Window
+	   = Shared.Connections, Shared.CurrentRooms, Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.LocalPlayer, Shared.Options, Shared.Services, Shared.Tabs, Shared.Toggles, Shared.Window
 
 	Tabs.Hotel = Window:AddTab("Hotel", "hotel", { Columns = 3 })
 
@@ -27,6 +27,117 @@ function Module.Init(Shared)
 	Groupboxes.Hotel_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you." })
 	Groupboxes.Hotel_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you." })
 	Groupboxes.Hotel_Anti:AddToggle("BypassSeekObstructions", { Text = "Anti Seek Obstructions", Default = false, Tooltip = "Prevents obstacles in the 'Seek' chase from harming you." })
+	Groupboxes.Hotel_Anti:AddDivider()
+	Groupboxes.Hotel_Anti:AddToggle("HotelAntiRush", {
+		Text = "Anti Rush", Default = false,
+		Tooltip = "Automatically enables Position Spoof when Rush is nearby."
+	})
+	Groupboxes.Hotel_Anti:AddToggle("HotelAntiAmbush", {
+		Text = "Anti Ambush", Default = false,
+		Tooltip = "Automatically enables Position Spoof when Ambush is nearby."
+	})
+	Groupboxes.Hotel_Anti:AddToggle("HotelAntiGlitchRush", {
+		Text = "Anti RNIUSHCG==", Default = false,
+		Tooltip = "Automatically enables Position Spoof when the glitch Rush variant is nearby."
+	})
+	Groupboxes.Hotel_Anti:AddToggle("HotelAntiGlitchAmbush", {
+		Text = "Anti AR0xMBUSH", Default = false,
+		Tooltip = "Automatically enables Position Spoof when the glitch Ambush variant is nearby."
+	})
+
+	-- All four protections share the existing Position Spoof toggle. Cache nested entity models
+	-- because these entities may be inserted below folders instead of directly under Workspace.
+	local HotelAntiModels = {}
+	local HotelAntiRunning = true
+	local HotelAntiElapsed = 0
+	local HotelAutoEnabledPositionSpoof = false
+	local HotelUserWantsPositionSpoof = Toggles.PositionSpoof and Toggles.PositionSpoof.Value == true or false
+	local HotelChangingPositionSpoof = false
+	local HotelEntityAntiConfig = {
+		RushMoving = { Toggle = "HotelAntiRush", Distance = 85 },
+		AmbushMoving = { Toggle = "HotelAntiAmbush", Distance = 150 },
+		GlitchRush = { Toggle = "HotelAntiGlitchRush", Distance = 90 },
+		GlitchAmbush = { Toggle = "HotelAntiGlitchAmbush", Distance = 175 },
+	}
+	local function RegisterHotelAntiModel(Object)
+		if Object:IsA("Model") and HotelEntityAntiConfig[Object.Name] then
+			HotelAntiModels[Object] = true
+		end
+	end
+	for _, Object in Services.Workspace:GetDescendants() do RegisterHotelAntiModel(Object) end
+	Connections.HotelAntiModelsAdded = Services.Workspace.DescendantAdded:Connect(RegisterHotelAntiModel)
+	Connections.HotelAntiModelsRemoving = Services.Workspace.DescendantRemoving:Connect(function(Object)
+		HotelAntiModels[Object] = nil
+	end)
+
+	local function HotelHasThreat()
+		if Shared.Floor ~= "Hotel" then return false end
+		local Character = LocalPlayer.Character
+		local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
+		if not Root then return false end
+		for Model in HotelAntiModels do
+			local Config = HotelEntityAntiConfig[Model.Name]
+			local Toggle = Config and Toggles[Config.Toggle]
+			if Config and Toggle and Toggle.Value and Model.Parent and Model:IsDescendantOf(Services.Workspace) then
+				local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart", true) or Model:FindFirstChildWhichIsA("BasePart", true)
+				if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= Config.Distance then return true end
+			end
+		end
+		return false
+	end
+	local function BlitzHasThreat()
+		if not Toggles.BackdoorsAntiBlitz or not Toggles.BackdoorsAntiBlitz.Value then return false end
+		local Character = LocalPlayer.Character
+		local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
+		if not Root then return false end
+		for _, Model in Services.Workspace:GetDescendants() do
+			if Model:IsA("Model") and Model.Name == "BackdoorRush" then
+				local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart", true) or Model:FindFirstChildWhichIsA("BasePart", true)
+				if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then return true end
+			end
+		end
+		return false
+	end
+	local function HotelSetPositionSpoof(Value)
+		local Toggle = Toggles.PositionSpoof
+		if not Toggle or Toggle.Value == Value then return Toggle ~= nil end
+		HotelChangingPositionSpoof = true
+		local Ok = pcall(function() Toggle:SetValue(Value) end)
+		HotelChangingPositionSpoof = false
+		return Ok and Toggle.Value == Value
+	end
+	if Toggles.PositionSpoof then
+		Connections.HotelPositionSpoofChanged = Toggles.PositionSpoof:OnChanged(function(Value)
+			if not HotelChangingPositionSpoof then HotelUserWantsPositionSpoof = Value == true end
+		end)
+	end
+	Connections.HotelAntiSpoof = Services.RunService.Heartbeat:Connect(function(DeltaTime)
+		if not HotelAntiRunning then return end
+		HotelAntiElapsed += DeltaTime
+		if HotelAntiElapsed < 0.1 then return end
+		HotelAntiElapsed = 0
+		local ThreatNearby = HotelHasThreat()
+		local SpoofToggle = Toggles.PositionSpoof
+		if ThreatNearby then
+			if SpoofToggle and not SpoofToggle.Value then
+				HotelAutoEnabledPositionSpoof = not HotelUserWantsPositionSpoof
+				HotelSetPositionSpoof(true)
+			end
+		elseif HotelAutoEnabledPositionSpoof and not BlitzHasThreat() then
+			if not HotelUserWantsPositionSpoof then HotelSetPositionSpoof(false) end
+			HotelAutoEnabledPositionSpoof = false
+		end
+	end)
+	Connections.HotelAntiCleanup = {
+		Disconnect = function()
+			HotelAntiRunning = false
+			if HotelAutoEnabledPositionSpoof and not HotelUserWantsPositionSpoof and not BlitzHasThreat() then
+				HotelSetPositionSpoof(false)
+			end
+			HotelAutoEnabledPositionSpoof = false
+			table.clear(HotelAntiModels)
+		end
+	}
 
 	-- middle column: ESP | Notifications | Settings. The entity lists below belong to this floor only; the global lists in
 	-- the Visuals tab keep working, an entity is shown / announced when EITHER asks for it (see Functions.EntityESPWanted).
