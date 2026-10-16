@@ -955,6 +955,28 @@ function Module.Init(Shared)
 		end
 	end)
 
+	local function HotelThreatNearby()
+		if Shared.Floor ~= "Hotel" then return false end
+		local Character = LocalPlayer.Character
+		local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
+		if not Root then return false end
+		local Config = {
+			RushMoving = { "HotelAntiRush", 85 },
+			AmbushMoving = { "HotelAntiAmbush", 150 },
+			GlitchRush = { "HotelAntiGlitchRush", 90 },
+			GlitchAmbush = { "HotelAntiGlitchAmbush", 175 },
+		}
+		for _, Model in Services.Workspace:GetDescendants() do
+			local Entry = Model:IsA("Model") and Config[Model.Name]
+			local Toggle = Entry and Toggles[Entry[1]]
+			if Entry and Toggle and Toggle.Value then
+				local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart", true) or Model:FindFirstChildWhichIsA("BasePart", true)
+				if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= Entry[2] then return true end
+			end
+		end
+		return false
+	end
+
 	local SetPositionSpoof
 	local function ResolvePositionSpoofToggle()
 		if not PositionSpoofToggle then
@@ -1056,7 +1078,7 @@ function Module.Init(Shared)
 				AutoEnabledPositionSpoof = not UserWantsPositionSpoof
 				SetPositionSpoof(true)
 			end
-		elseif AutoEnabledPositionSpoof then
+		elseif AutoEnabledPositionSpoof and not HotelThreatNearby() then
 			AutoEnabledPositionSpoof = false
 			if not UserWantsPositionSpoof then SetPositionSpoof(false) end
 		end
@@ -1114,7 +1136,7 @@ function Module.Init(Shared)
 		Disconnect = function()
 			WatchdogRunning = false
 			AntiBlitzRunning = false
-			if AutoEnabledPositionSpoof then
+			if AutoEnabledPositionSpoof and not HotelThreatNearby() then
 				AutoEnabledPositionSpoof = false
 				if not UserWantsPositionSpoof then SetPositionSpoof(false) end
 			end
