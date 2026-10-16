@@ -211,6 +211,10 @@ function Module.Init(Shared)
 		Text = "Anti Blitz", Default = false,
 		Tooltip = "Automatically enables Position Spoof while Blitz is within 150 studs, and restores your previous setting when safe."
 	})
+	Groupboxes.Backdoors_Anti:AddToggle("BackdoorsAntiBlitzDebug", {
+		Text = "Anti Blitz Debug", Default = false,
+		Tooltip = "Shows diagnostic notifications for Blitz detection and Position Spoof."
+	})
 
 	----------------------------------------------------------------------------------------------------
 	-- Helpers
@@ -907,11 +911,7 @@ function Module.Init(Shared)
 	end)
 
 	----------------------------------------------------------------------------------------------------
-	-- Anti Blitz: request the existing Position Spoof toggle while any Blitz is close.
-	-- Track every live Blitz each tick so retreat / re-entry and simultaneous entities are handled.
-	-- The user's Position Spoof preference is kept separately; auto mode never turns off a spoof
-	-- that was already enabled by the user before the threat appeared.
-	----------------------------------------------------------------------------------------------------
+	-- Anti Blitz diagnostics: report each meaningful state change instead of silently guessing.
 	local PositionSpoofToggle = Toggles.PositionSpoof
 	local UserWantsPositionSpoof = PositionSpoofToggle and PositionSpoofToggle.Value == true or false
 	local AutoEnabledPositionSpoof = false
@@ -919,40 +919,63 @@ function Module.Init(Shared)
 	local AntiBlitzRunning = true
 	local AntiBlitzElapsed = 0
 	local BlitzModels = {}
+	local LastAntiBlitzState = nil
+
+	local function AntiBlitzDebug(Text)
+		if Toggles.BackdoorsAntiBlitzDebug and Toggles.BackdoorsAntiBlitzDebug.Value then
+			Functions.Notify({ Title = "Anti Blitz Debug", Body = tostring(Text), Time = 7 })
+		end
+	end
 
 	local function RegisterBlitz(Object)
 		if Object:IsA("Model") and Object.Name == "BackdoorRush" then
 			BlitzModels[Object] = true
+			AntiBlitzDebug("Blitz model registered: " .. Object:GetFullName())
 		end
 	end
 
-	-- Blitz can be nested inside a room/container rather than being a direct Workspace child.
 	for _, Object in Services.Workspace:GetDescendants() do
 		RegisterBlitz(Object)
 	end
 	Connections.BackdoorsAntiBlitzAdded = Services.Workspace.DescendantAdded:Connect(RegisterBlitz)
 	Connections.BackdoorsAntiBlitzRemoving = Services.Workspace.DescendantRemoving:Connect(function(Object)
-		if BlitzModels[Object] then BlitzModels[Object] = nil end
+		if BlitzModels[Object] then
+			BlitzModels[Object] = nil
+			AntiBlitzDebug("Blitz model removed: " .. Object.Name)
+		end
 	end)
 
 	local function SetPositionSpoof(Value)
-		if not PositionSpoofToggle or PositionSpoofToggle.Value == Value then return end
+		if not PositionSpoofToggle then
+			AntiBlitzDebug("ERROR: Toggles.PositionSpoof is nil")
+			return false
+		end
+		if PositionSpoofToggle.Value == Value then return true end
 		ChangingPositionSpoof = true
-		local Ok = pcall(function() PositionSpoofToggle:SetValue(Value) end)
+		local Ok, Err = pcall(function() PositionSpoofToggle:SetValue(Value) end)
 		ChangingPositionSpoof = false
-		if not Ok then return end
+		if not Ok then
+			AntiBlitzDebug("ERROR SetValue(" .. tostring(Value) .. "): " .. tostring(Err))
+			return false
+		end
+		if PositionSpoofToggle.Value ~= Value then
+			AntiBlitzDebug("ERROR: SetValue returned but toggle state is still " .. tostring(PositionSpoofToggle.Value))
+			return false
+		end
+		AntiBlitzDebug("Position Spoof changed to " .. tostring(Value))
+		return true
 	end
 
 	if PositionSpoofToggle then
 		Connections.BackdoorsPositionSpoofChanged = PositionSpoofToggle:OnChanged(function(Value)
 			if ChangingPositionSpoof then return end
 			UserWantsPositionSpoof = Value == true
-			-- If the user switches spoof off during a Blitz encounter, auto protection
-			-- immediately requests it again, but remembers the user's off preference for later.
 			if Toggles.BackdoorsAntiBlitz.Value and AutoEnabledPositionSpoof and not Value then
 				SetPositionSpoof(true)
 			end
 		end)
+	else
+		AntiBlitzDebug("ERROR: Position Spoof toggle was missing during Backdoors init")
 	end
 
 	Connections.BackdoorsAntiBlitz = Services.RunService.Heartbeat:Connect(function(DeltaTime)
@@ -960,23 +983,36 @@ function Module.Init(Shared)
 		AntiBlitzElapsed += DeltaTime
 		if AntiBlitzElapsed < 0.1 then return end
 		AntiBlitzElapsed = 0
+
 		local ThreatNearby = false
-		-- Do not gate this on Shared.Floor: its value can differ between builds, while the
-		-- presence of a live BackdoorRush model is itself enough to identify the threat.
+		local NearestDistance = nil
+		local LiveModels = 0
 		if Toggles.BackdoorsAntiBlitz.Value then
 			local Character = LocalPlayer.Character
 			local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
-			if Root then
+			if not Root then
+				if LastAntiBlitzState ~= "no-root" then AntiBlitzDebug("Player root not found; Character=" .. tostring(Character)) end
+				LastAntiBlitzState = "no-root"
+			else
 				for Model in BlitzModels do
 					if Model.Parent and Model:IsDescendantOf(Services.Workspace) then
+						LiveModels += 1
 						local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart", true) or Model:FindFirstChildWhichIsA("BasePart", true)
-						if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then
-							ThreatNearby = true
-							break
+						if EntityRoot then
+							local Distance = (EntityRoot.Position - Root.Position).Magnitude
+							if not NearestDistance or Distance < NearestDistance then NearestDistance = Distance end
+							if Distance <= 150 then ThreatNearby = true end
 						end
 					end
 				end
+				local State = ThreatNearby and "threat" or ("safe:" .. tostring(LiveModels))
+				if State ~= LastAntiBlitzState then
+					AntiBlitzDebug("Active. Cached models=" .. tostring(LiveModels) .. ", nearest distance=" .. tostring(NearestDistance) .. ", PositionSpoof toggle=" .. tostring(PositionSpoofToggle ~= nil) .. ", current value=" .. tostring(PositionSpoofToggle and PositionSpoofToggle.Value))
+					LastAntiBlitzState = State
+				end
 			end
+		else
+			LastAntiBlitzState = "disabled"
 		end
 
 		if ThreatNearby then
