@@ -215,6 +215,8 @@ function Module.Init(Shared)
 		Text = "Anti Blitz Debug", Default = false,
 		Tooltip = "Shows diagnostic notifications for Blitz detection and Position Spoof."
 	})
+	local AntiBlitzStatusLabel = Groupboxes.Backdoors_Anti:AddLabel("Anti Blitz status: waiting for initialization")
+
 
 	----------------------------------------------------------------------------------------------------
 	-- Helpers
@@ -920,6 +922,12 @@ function Module.Init(Shared)
 	local AntiBlitzElapsed = 0
 	local BlitzModels = {}
 	local LastAntiBlitzState = nil
+	local function SetAntiBlitzStatus(Text)
+		if AntiBlitzStatusLabel then
+			AntiBlitzStatusLabel:SetText("Anti Blitz status: " .. tostring(Text))
+		end
+	end
+	SetAntiBlitzStatus("initialized | Position Spoof toggle: " .. tostring(PositionSpoofToggle ~= nil))
 
 	local function AntiBlitzDebug(Text)
 		if Toggles.BackdoorsAntiBlitzDebug and Toggles.BackdoorsAntiBlitzDebug.Value then
@@ -948,6 +956,7 @@ function Module.Init(Shared)
 	local function SetPositionSpoof(Value)
 		if not PositionSpoofToggle then
 			AntiBlitzDebug("ERROR: Toggles.PositionSpoof is nil")
+			SetAntiBlitzStatus("ERROR: Position Spoof toggle missing")
 			return false
 		end
 		if PositionSpoofToggle.Value == Value then return true end
@@ -956,13 +965,16 @@ function Module.Init(Shared)
 		ChangingPositionSpoof = false
 		if not Ok then
 			AntiBlitzDebug("ERROR SetValue(" .. tostring(Value) .. "): " .. tostring(Err))
+			SetAntiBlitzStatus("ERROR SetValue(" .. tostring(Value) .. "): " .. tostring(Err))
 			return false
 		end
 		if PositionSpoofToggle.Value ~= Value then
 			AntiBlitzDebug("ERROR: SetValue returned but toggle state is still " .. tostring(PositionSpoofToggle.Value))
+			SetAntiBlitzStatus("ERROR: SetValue did not change Position Spoof")
 			return false
 		end
 		AntiBlitzDebug("Position Spoof changed to " .. tostring(Value))
+		SetAntiBlitzStatus("Position Spoof set to " .. tostring(Value))
 		return true
 	end
 
@@ -992,6 +1004,7 @@ function Module.Init(Shared)
 			local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
 			if not Root then
 				if LastAntiBlitzState ~= "no-root" then AntiBlitzDebug("Player root not found; Character=" .. tostring(Character)) end
+				SetAntiBlitzStatus("ERROR: player character root not found")
 				LastAntiBlitzState = "no-root"
 			else
 				for Model in BlitzModels do
@@ -1006,10 +1019,15 @@ function Module.Init(Shared)
 					end
 				end
 				local State = ThreatNearby and "threat" or ("safe:" .. tostring(LiveModels))
+				local StatusText = (ThreatNearby and "BLITZ IN RANGE" or "no threat in range")
+					.. " | models=" .. tostring(LiveModels)
+					.. " | nearest=" .. (NearestDistance and string.format("%.1f", NearestDistance) or "unknown")
+					.. " | Position Spoof=" .. tostring(PositionSpoofToggle and PositionSpoofToggle.Value)
 				if State ~= LastAntiBlitzState then
 					AntiBlitzDebug("Active. Cached models=" .. tostring(LiveModels) .. ", nearest distance=" .. tostring(NearestDistance) .. ", PositionSpoof toggle=" .. tostring(PositionSpoofToggle ~= nil) .. ", current value=" .. tostring(PositionSpoofToggle and PositionSpoofToggle.Value))
 					LastAntiBlitzState = State
 				end
+				SetAntiBlitzStatus(StatusText)
 			end
 		else
 			LastAntiBlitzState = "disabled"
