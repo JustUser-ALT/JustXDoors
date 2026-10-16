@@ -945,16 +945,30 @@ function Module.Init(Shared)
 		if AntiBlitzElapsed < 0.1 then return end
 		AntiBlitzElapsed = 0
 		local ThreatNearby = false
-		if Toggles.BackdoorsAntiBlitz.Value and OnBackdoors() then
+		-- Do not gate this on Shared.Floor: its value can differ between builds, while the
+		-- presence of a live BackdoorRush model is itself enough to identify the threat.
+		if Toggles.BackdoorsAntiBlitz.Value then
 			local Character = LocalPlayer.Character
 			local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
 			if Root then
-				for _, Model in Services.Workspace:GetChildren() do
-					if Model.Name == "BackdoorRush" and Model:IsA("Model") and Model.Parent then
+				for Model, Data in TrackedEntities do
+					if Data.Alias == "Blitz" and Model.Parent then
 						local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart") or Model:FindFirstChildWhichIsA("BasePart")
 						if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then
 							ThreatNearby = true
 							break
+						end
+					end
+				end
+				-- Fallback in case entity tracking has not finished yet.
+				if not ThreatNearby then
+					for _, Model in Services.Workspace:GetChildren() do
+						if Model.Name == "BackdoorRush" and Model:IsA("Model") and Model.Parent then
+							local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart") or Model:FindFirstChildWhichIsA("BasePart")
+							if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then
+								ThreatNearby = true
+								break
+							end
 						end
 					end
 				end
