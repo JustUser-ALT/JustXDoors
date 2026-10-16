@@ -442,7 +442,8 @@ end
 
 local function MakeValueDropdown(Idx, Cfg2)
     local D = NewObj("ValueDropdown", Idx, Cfg2)
-    D.Values = Cfg2.Values or {}
+    D.Values = Cfg2.Options or {}
+    D.Settings = Cfg2.Values or {}
     D.Multi = Cfg2.Multi == true
     D.Value = {}
 
@@ -768,7 +769,7 @@ local function RenderValueDropdown(Sec, D, Risky)
         MaxSelect = D.Multi and math.max(#D.Values, 1) or 1,
         Search = #D.Values > 8,
         Default = D.Value,
-        Values = D.Values,
+        Values = D.Settings,
         Flag = "Option_" .. D.Idx,
         Tooltip = D.Tooltip,
         Callback = function(V) D:_apply(V, true) end,
