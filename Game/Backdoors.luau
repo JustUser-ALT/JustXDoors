@@ -918,6 +918,22 @@ function Module.Init(Shared)
 	local ChangingPositionSpoof = false
 	local AntiBlitzRunning = true
 	local AntiBlitzElapsed = 0
+	local BlitzModels = {}
+
+	local function RegisterBlitz(Object)
+		if Object:IsA("Model") and Object.Name == "BackdoorRush" then
+			BlitzModels[Object] = true
+		end
+	end
+
+	-- Blitz can be nested inside a room/container rather than being a direct Workspace child.
+	for _, Object in Services.Workspace:GetDescendants() do
+		RegisterBlitz(Object)
+	end
+	Connections.BackdoorsAntiBlitzAdded = Services.Workspace.DescendantAdded:Connect(RegisterBlitz)
+	Connections.BackdoorsAntiBlitzRemoving = Services.Workspace.DescendantRemoving:Connect(function(Object)
+		if BlitzModels[Object] then BlitzModels[Object] = nil end
+	end)
 
 	local function SetPositionSpoof(Value)
 		if not PositionSpoofToggle or PositionSpoofToggle.Value == Value then return end
@@ -951,24 +967,12 @@ function Module.Init(Shared)
 			local Character = LocalPlayer.Character
 			local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
 			if Root then
-				for Model, Data in TrackedEntities do
-					if Data.Alias == "Blitz" and Model.Parent then
-						local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart") or Model:FindFirstChildWhichIsA("BasePart")
+				for Model in BlitzModels do
+					if Model.Parent and Model:IsDescendantOf(Services.Workspace) then
+						local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart", true) or Model:FindFirstChildWhichIsA("BasePart", true)
 						if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then
 							ThreatNearby = true
 							break
-						end
-					end
-				end
-				-- Fallback in case entity tracking has not finished yet.
-				if not ThreatNearby then
-					for _, Model in Services.Workspace:GetChildren() do
-						if Model.Name == "BackdoorRush" and Model:IsA("Model") and Model.Parent then
-							local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart") or Model:FindFirstChildWhichIsA("BasePart")
-							if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then
-								ThreatNearby = true
-								break
-							end
 						end
 					end
 				end
