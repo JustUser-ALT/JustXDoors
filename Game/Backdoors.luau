@@ -914,8 +914,10 @@ function Module.Init(Shared)
 
 	----------------------------------------------------------------------------------------------------
 	-- Anti Blitz diagnostics: report each meaningful state change instead of silently guessing.
-	local PositionSpoofToggle = Toggles.PositionSpoof
-	local UserWantsPositionSpoof = PositionSpoofToggle and PositionSpoofToggle.Value == true or false
+	-- Position Spoof may be created after this module initializes, so resolve it lazily.
+	local PositionSpoofToggle = nil
+	local PositionSpoofChangedConnected = false
+	local UserWantsPositionSpoof = false
 	local AutoEnabledPositionSpoof = false
 	local ChangingPositionSpoof = false
 	local AntiBlitzRunning = true
@@ -927,7 +929,7 @@ function Module.Init(Shared)
 			AntiBlitzStatusLabel:SetText("Anti Blitz status: " .. tostring(Text))
 		end
 	end
-	SetAntiBlitzStatus("initialized | Position Spoof toggle: " .. tostring(PositionSpoofToggle ~= nil))
+	SetAntiBlitzStatus("initialized | waiting for Position Spoof toggle")
 
 	local function AntiBlitzDebug(Text)
 		if Toggles.BackdoorsAntiBlitzDebug and Toggles.BackdoorsAntiBlitzDebug.Value then
@@ -953,7 +955,30 @@ function Module.Init(Shared)
 		end
 	end)
 
+	local function ResolvePositionSpoofToggle()
+		if not PositionSpoofToggle then
+			PositionSpoofToggle = Toggles.PositionSpoof
+			if PositionSpoofToggle then
+				UserWantsPositionSpoof = PositionSpoofToggle.Value == true
+				SetAntiBlitzStatus("initialized | Position Spoof toggle found")
+				if not PositionSpoofChangedConnected then
+					PositionSpoofChangedConnected = true
+					Connections.BackdoorsPositionSpoofChanged = PositionSpoofToggle:OnChanged(function(Value)
+						if ChangingPositionSpoof then return end
+						UserWantsPositionSpoof = Value == true
+						if Toggles.BackdoorsAntiBlitz.Value and AutoEnabledPositionSpoof and not Value then
+							SetPositionSpoof(true)
+						end
+					end)
+				end
+				AntiBlitzDebug("Position Spoof toggle found after initialization")
+			end
+		end
+		return PositionSpoofToggle
+	end
+
 	local function SetPositionSpoof(Value)
+		ResolvePositionSpoofToggle()
 		if not PositionSpoofToggle then
 			AntiBlitzDebug("ERROR: Toggles.PositionSpoof is nil")
 			SetAntiBlitzStatus("ERROR: Position Spoof toggle missing")
@@ -978,20 +1003,12 @@ function Module.Init(Shared)
 		return true
 	end
 
-	if PositionSpoofToggle then
-		Connections.BackdoorsPositionSpoofChanged = PositionSpoofToggle:OnChanged(function(Value)
-			if ChangingPositionSpoof then return end
-			UserWantsPositionSpoof = Value == true
-			if Toggles.BackdoorsAntiBlitz.Value and AutoEnabledPositionSpoof and not Value then
-				SetPositionSpoof(true)
-			end
-		end)
-	else
-		AntiBlitzDebug("ERROR: Position Spoof toggle was missing during Backdoors init")
-	end
+	-- Try immediately, then retry from Heartbeat if General initializes later.
+	ResolvePositionSpoofToggle()
 
 	Connections.BackdoorsAntiBlitz = Services.RunService.Heartbeat:Connect(function(DeltaTime)
 		if not AntiBlitzRunning then return end
+		ResolvePositionSpoofToggle()
 		AntiBlitzElapsed += DeltaTime
 		if AntiBlitzElapsed < 0.1 then return end
 		AntiBlitzElapsed = 0
