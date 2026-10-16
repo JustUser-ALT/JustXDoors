@@ -68,22 +68,49 @@ function Module.Init(Shared)
 	Groupboxes.Backdoors_ESP:AddToggle("BackdoorsEntityESPToggle", {
 		Text = "Entity ESP", Default = false, Tooltip = "Highlights the selected entities."
 	})
-	Groupboxes.Backdoors_ESP:AddDropdown("BackdoorsEntityESPList", {
-		Text = "Entities", Values = { "Blitz", "Lookman" }, Multi = true, AllowNull = true
+	local CategoryDefaults = {
+		Entity = Color3.fromRGB(255, 70, 70),
+		Interactable = Color3.fromRGB(80, 170, 255),
+		Item = Color3.fromRGB(255, 210, 60)
+	}
+	local function BuildESPValues(Items, Category, WithRooms)
+		local Values = {}
+		for _, Name in Items do
+			local Controls = { Mode = "Move" }
+			if WithRooms then
+				table.insert(Controls, { Type = "Toggle", Name = "Always", Master = true, Default = false })
+				table.insert(Controls, { Type = "Toggle", Name = "Previous", Default = false })
+				table.insert(Controls, { Type = "Toggle", Name = "Current", Default = true })
+				table.insert(Controls, { Type = "Toggle", Name = "Next", Default = false })
+			end
+			table.insert(Controls, { Type = "ColorPicker", Name = "Color", Default = CategoryDefaults[Category] })
+			Values[Name] = Controls
+		end
+		return Values
+	end
+	local EntityOptions = { "Blitz", "Lookman" }
+	local InteractableOptions = { "Drawer", "Door", "Exit Door", "Timer Lever", "Closet" }
+	local ItemOptions = { "Key", "Star Vial", "Star Bottle" }
+
+	Groupboxes.Backdoors_ESP:AddValueDropdown("BackdoorsEntityESPList", {
+		Text = "Entities", Options = EntityOptions, Multi = true,
+		Values = BuildESPValues(EntityOptions, "Entity", false)
 	})
 	Groupboxes.Backdoors_ESP:AddDivider()
 	Groupboxes.Backdoors_ESP:AddToggle("BackdoorsInteractableESPToggle", {
 		Text = "Interactables ESP", Default = false, Tooltip = "Highlights the selected interactable objects."
 	})
-	Groupboxes.Backdoors_ESP:AddDropdown("BackdoorsInteractableESPList", {
-		Text = "Interactables", Values = { "Drawer", "Door", "Exit Door", "Timer Lever", "Closet" }, Multi = true, AllowNull = true
+	Groupboxes.Backdoors_ESP:AddValueDropdown("BackdoorsInteractableESPList", {
+		Text = "Interactables", Options = InteractableOptions, Multi = true,
+		Values = BuildESPValues(InteractableOptions, "Interactable", true)
 	})
 	Groupboxes.Backdoors_ESP:AddDivider()
 	Groupboxes.Backdoors_ESP:AddToggle("BackdoorsItemESPToggle", {
 		Text = "Items ESP", Default = false, Tooltip = "Highlights the selected items (current room and dropped items)."
 	})
-	Groupboxes.Backdoors_ESP:AddDropdown("BackdoorsItemESPList", {
-		Text = "Items", Values = { "Key", "Star Vial", "Star Bottle" }, Multi = true, AllowNull = true
+	Groupboxes.Backdoors_ESP:AddValueDropdown("BackdoorsItemESPList", {
+		Text = "Items", Options = ItemOptions, Multi = true,
+		Values = BuildESPValues(ItemOptions, "Item", true)
 	})
 
 	Groupboxes.Backdoors_Notifications:AddToggle("BackdoorsNotifyEntitiesToggle", {
@@ -107,37 +134,7 @@ function Module.Init(Shared)
 		Text = "Remove ESP On Active", Default = true,
 		Tooltip = "Removes the ESP of a Timer Lever once it is pulled and of a Drawer once all of its drawers are looted."
 	})
-	Groupboxes.Backdoors_Settings:AddDropdown("BackdoorsInteractableESPType", {
-		Text = "Interactables ESP Type", Values = { "Current Room", "Current & Next", "Previous & Current & Next", "Always" }, Default = 1
-	})
-	Groupboxes.Backdoors_Settings:AddDropdown("BackdoorsItemESPType", {
-		Text = "Items ESP Type", Values = { "Current Room", "Current & Next", "Previous & Current & Next", "Always" }, Default = 1
-	})
-
-	-- Settings: ESP colours. One colour per category and one per entity / object / item; an item follows its category colour until
-	-- you change its own.
-	local CategoryDefaults = {
-		Entity = Color3.fromRGB(255, 70, 70), Interactable = Color3.fromRGB(80, 170, 255), Item = Color3.fromRGB(255, 210, 60)
-	}
-	local function ColorIdx(Name)
-		return "BackdoorsColor_" .. (Name:gsub("[^%w]", ""))
-	end
-	local ColorGroups = {
-		{ Category = "Entity", Label = "Entity ESP Color", Idx = "BackdoorsEntityESPColor", Items = { "Blitz", "Lookman" } },
-		{ Category = "Interactable", Label = "Interactables ESP Color", Idx = "BackdoorsInteractableESPColor", Items = { "Drawer", "Door", "Exit Door", "Timer Lever", "Closet" } },
-		{ Category = "Item", Label = "Items ESP Color", Idx = "BackdoorsItemESPColor", Items = { "Key", "Star Vial", "Star Bottle" } },
-	}
-	local AllColorPickers = {}
-	for _, Group in ColorGroups do
-		Groupboxes.Backdoors_Settings:AddDivider()
-		Groupboxes.Backdoors_Settings:AddLabel(Group.Label):AddColorPicker(Group.Idx, { Default = CategoryDefaults[Group.Category] })
-		Group.ItemIdxs = {}
-		for _, Item in Group.Items do
-			local Idx = ColorIdx(Item)
-			table.insert(Group.ItemIdxs, Idx)
-			Groupboxes.Backdoors_Settings:AddLabel(Item .. " Color"):AddColorPicker(Idx, { Default = CategoryDefaults[Group.Category] })
-		end
-	end
+	-- Room filters and colours are configured per option inside each ValueDropdown.
 
 	-- Settings: notification settings + Show Entity Path. The originals live on the Hotel tab (moved there from Visuals);
 	-- these are copies that stay in sync with them.
@@ -258,17 +255,17 @@ function Module.Init(Shared)
 		return nil
 	end
 
-	-- ESP range:  Current Room | Current & Next | Previous & Current & Next | Always
-	local function InRange(Room, Mode)
-		if Room == nil or Mode == "Always" then return true end
+	-- Room filters are per ESP option. "Always" is exclusive; Previous / Current / Next can be combined.
+	-- Objects outside CurrentRooms (for example dropped loot) remain visible regardless of room filters.
+	local function InRange(Room, Settings)
+		if Room == nil then return true end
+		Settings = type(Settings) == "table" and Settings or {}
+		if Settings.Always then return true end
 		local Current = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
 		if not Current then return false end
-		if Mode == "Current & Next" then
-			return Room == Current or Room == Current + 1
-		elseif Mode == "Previous & Current & Next" then
-			return Room >= Current - 1 and Room <= Current + 1
-		end
-		return Room == Current
+		return (Settings.Previous and Room == Current - 1)
+			or (Settings.Current and Room == Current)
+			or (Settings.Next and Room == Current + 1)
 	end
 
 	local function PromptPosition(Prompt)
@@ -442,21 +439,25 @@ function Module.Init(Shared)
 		if not OnBackdoors() or not Entry.Object:IsDescendantOf(Services.Workspace) then return false end
 		if IsInPlayerModel(Entry.Object) then return false end
 		if Entry.Category == "Drawer" and #DrawerContainers(Entry.Object) == 0 then return false end
-		local Mode
+		local Settings
 		if InteractableCategories[Entry.Category] then
 			if not (Toggles.BackdoorsInteractableESPToggle.Value and Options.BackdoorsInteractableESPList.Value[Entry.Category]) then return false end
-			Mode = Options.BackdoorsInteractableESPType.Value
+			Settings = Options.BackdoorsInteractableESPList.Value[Entry.Category]
 		else
 			if not (Toggles.BackdoorsItemESPToggle.Value and Options.BackdoorsItemESPList.Value[Entry.Category]) then return false end
-			Mode = Options.BackdoorsItemESPType.Value
+			Settings = Options.BackdoorsItemESPList.Value[Entry.Category]
 		end
-		if not InRange(RoomOf(Entry.Object), Mode) then return false end
+		if not InRange(RoomOf(Entry.Object), Settings) then return false end
 		if Toggles.BackdoorsRemoveESPOnActive.Value and IsEntryDone(Entry) then return false end
 		return true
 	end
 
 	local function EntryColor(Entry)
-		return Options[ColorIdx(Entry.Category)].Value
+		local Source = InteractableCategories[Entry.Category] and Options.BackdoorsInteractableESPList.Value or Options.BackdoorsItemESPList.Value
+		local Settings = Source[Entry.Category]
+		if type(Settings) == "table" and typeof(Settings.Color) == "Color3" then return Settings.Color end
+		local Category = InteractableCategories[Entry.Category] and "Interactable" or "Item"
+		return CategoryDefaults[Category]
 	end
 
 	-- Drawer: ONE box around the whole Backdoor_Table (all of its drawers). Highlights are composited by depth and would paint over
@@ -675,30 +676,12 @@ function Module.Init(Shared)
 	end
 
 	----------------------------------------------------------------------------------------------------
-	-- Colours: an item follows its category colour until you change its own
+	-- Per-option ValueDropdown settings: changing a room toggle or colour reapplies the affected ESP.
 	----------------------------------------------------------------------------------------------------
-	local AllColorIdxs = {}
-	local function InheritColors(CategoryIdx, ItemIdxs)
-		local Previous = Options[CategoryIdx].Value
-		Options[CategoryIdx]:OnChanged(function(New)
-			for _, Idx in ItemIdxs do
-				if Options[Idx].Value == Previous then Options[Idx]:SetValue(New) end
-			end
-			Previous = New
-		end)
-	end
-	for _, Group in ColorGroups do
-		InheritColors(Group.Idx, Group.ItemIdxs)
-		table.insert(AllColorIdxs, Group.Idx)
-		for _, Idx in Group.ItemIdxs do table.insert(AllColorIdxs, Idx) end
-	end
-
 	Toggles.BackdoorsInteractableESPToggle:OnChanged(function() Refresh() end)
-	Options.BackdoorsInteractableESPList:OnChanged(function() Refresh() end)
-	Options.BackdoorsInteractableESPType:OnChanged(function() Refresh() end)
+	Options.BackdoorsInteractableESPList:OnChanged(function() Recolor() end)
 	Toggles.BackdoorsItemESPToggle:OnChanged(function() Refresh() end)
-	Options.BackdoorsItemESPList:OnChanged(function() Refresh() end)
-	Options.BackdoorsItemESPType:OnChanged(function() Refresh() end)
+	Options.BackdoorsItemESPList:OnChanged(function() Recolor() end)
 	Toggles.BackdoorsRemoveESPOnActive:OnChanged(function() Refresh() end)
 	Connections.BackdoorsRoomChanged = LocalPlayer:GetAttributeChangedSignal("CurrentRoom"):Connect(function() Refresh() end)
 
@@ -844,7 +827,7 @@ function Module.Init(Shared)
 		local Want = Toggles.BackdoorsEntityESPToggle.Value and Options.BackdoorsEntityESPList.Value[Data.Alias]
 		if Want and not Data.Shown and Model.Parent then
 			Data.Shown = true
-			Functions.AddESP({ Object = Model, Text = Data.Alias, Color = Options[ColorIdx(Data.Alias)].Value })
+			Functions.AddESP({ Object = Model, Text = Data.Alias, Color = (type(Options.BackdoorsEntityESPList.Value[Data.Alias]) == "table" and Options.BackdoorsEntityESPList.Value[Data.Alias].Color) or CategoryDefaults.Entity })
 		elseif not Want and Data.Shown then
 			Data.Shown = false
 			Functions.RemoveESP(Model)
@@ -910,15 +893,7 @@ function Module.Init(Shared)
 	end
 
 	Toggles.BackdoorsEntityESPToggle:OnChanged(RefreshEntities)
-	Options.BackdoorsEntityESPList:OnChanged(RefreshEntities)
-
-	-- every colour picker (category or single object) re-applies the colours
-	for _, Idx in AllColorIdxs do
-		Options[Idx]:OnChanged(function()
-			Recolor()
-			RecolorEntities()
-		end)
-	end
+	Options.BackdoorsEntityESPList:OnChanged(RecolorEntities)
 
 	for _, Child in Services.Workspace:GetChildren() do
 		task.spawn(HandleEntity, Child, true)
