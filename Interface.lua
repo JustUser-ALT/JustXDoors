@@ -440,6 +440,27 @@ local function MakeDropdown(Idx, Cfg2)
     return D
 end
 
+local function MakeValueDropdown(Idx, Cfg2)
+    local D = NewObj("ValueDropdown", Idx, Cfg2)
+    D.Values = Cfg2.Values or {}
+    D.Multi = Cfg2.Multi == true
+    D.Value = {}
+
+    function D:_apply(Value, FromUI)
+        if type(Value) ~= "table" then Value = {} end
+        local New = {}
+        for Name, Settings in pairs(Value) do
+            if table.find(self.Values, Name) then New[Name] = Settings end
+        end
+        self.Value = New
+        if not FromUI then CallCtrl(self, "Set", New) end
+        Fire(self)
+    end
+
+    Options[Idx] = D
+    return D
+end
+
 local function MakeInput(Idx, Cfg2)
     local I = NewObj("Input", Idx, Cfg2)
     I.Value = Cfg2.Default ~= nil and tostring(Cfg2.Default) or ""
@@ -482,6 +503,12 @@ end
 function GroupboxMethods:AddDropdown(Idx, Cfg2)
     local D = MakeDropdown(Idx, Cfg2 or {})
     table.insert(self.Elements, { Kind = "Dropdown", Obj = D })
+    return D
+end
+
+function GroupboxMethods:AddValueDropdown(Idx, Cfg2)
+    local D = MakeValueDropdown(Idx, Cfg2 or {})
+    table.insert(self.Elements, { Kind = "ValueDropdown", Obj = D })
     return D
 end
 
@@ -733,6 +760,25 @@ RenderDropdown = function(Sec, D, Risky)
     if D.Risky and D.Text then Risky[D.Text] = true end
 end
 
+local function RenderValueDropdown(Sec, D, Risky)
+    local O = Merge({
+        Name = D.Text or D.Idx,
+        Options = D.Values,
+        MultiSelect = D.Multi,
+        MaxSelect = D.Multi and math.max(#D.Values, 1) or 1,
+        Search = #D.Values > 8,
+        Default = D.Value,
+        Values = D.Values,
+        Flag = "Option_" .. D.Idx,
+        Tooltip = D.Tooltip,
+        Callback = function(V) D:_apply(V, true) end,
+    }, LockOpts(D))
+    D._ctrl = Sec:ValueDropdown(O)
+    local Ok, Got = pcall(function() return D._ctrl:Get() end)
+    if Ok and type(Got) == "table" then D.Value = Got end
+    if D.Risky and D.Text then Risky[D.Text] = true end
+end
+
 local function RenderInput(Sec, I, Risky)
     local O = Merge({
         Name = I.Text or I.Idx,
@@ -792,6 +838,8 @@ local function RenderElements(Sec, Box, Panel)
             RenderSlider(Sec, E.Obj, Risky)
         elseif Kind == "Dropdown" then
             RenderDropdown(Sec, E.Obj, Risky)
+        elseif Kind == "ValueDropdown" then
+            RenderValueDropdown(Sec, E.Obj, Risky)
         elseif Kind == "Input" then
             RenderInput(Sec, E.Obj, Risky)
         elseif Kind == "Button" then
