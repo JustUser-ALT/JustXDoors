@@ -207,6 +207,10 @@ function Module.Init(Shared)
 	Groupboxes.Backdoors_Anti = Tabs.Backdoors:AddRightGroupbox("Anti")
 	Groupboxes.Backdoors_Anti:AddToggle("BypassLookman",        { Text = "Anti Lookman",          Default = false, Tooltip = "Prevents 'Lookman' from hurting you." })
 	Groupboxes.Backdoors_Anti:AddToggle("BypassVacuum",         { Text = "Anti Vacuum",           Default = false, Tooltip = "Prevents you from falling into 'Vacuum' fake doors." })
+	Groupboxes.Backdoors_Anti:AddToggle("BackdoorsAntiBlitz", {
+		Text = "Anti Blitz", Default = false,
+		Tooltip = "Automatically enables Position Spoof while Blitz is within 150 studs, and restores your previous setting when safe."
+	})
 
 	----------------------------------------------------------------------------------------------------
 	-- Helpers
@@ -900,6 +904,68 @@ function Module.Init(Shared)
 	end
 	Connections.BackdoorsEntities = Services.Workspace.ChildAdded:Connect(function(Child)
 		task.spawn(HandleEntity, Child)
+	end)
+
+	----------------------------------------------------------------------------------------------------
+	-- Anti Blitz: request the existing Position Spoof toggle while any Blitz is close.
+	-- Track every live Blitz each tick so retreat / re-entry and simultaneous entities are handled.
+	-- The user's Position Spoof preference is kept separately; auto mode never turns off a spoof
+	-- that was already enabled by the user before the threat appeared.
+	----------------------------------------------------------------------------------------------------
+	local PositionSpoofToggle = Toggles.PositionSpoof
+	local UserWantsPositionSpoof = PositionSpoofToggle and PositionSpoofToggle.Value == true or false
+	local AutoEnabledPositionSpoof = false
+	local ChangingPositionSpoof = false
+	local AntiBlitzRunning = true
+
+	local function SetPositionSpoof(Value)
+		if not PositionSpoofToggle or PositionSpoofToggle.Value == Value then return end
+		ChangingPositionSpoof = true
+		local Ok = pcall(function() PositionSpoofToggle:SetValue(Value) end)
+		ChangingPositionSpoof = false
+		if not Ok then return end
+	end
+
+	if PositionSpoofToggle then
+		Connections.BackdoorsPositionSpoofChanged = PositionSpoofToggle:OnChanged(function(Value)
+			if ChangingPositionSpoof then return end
+			UserWantsPositionSpoof = Value == true
+			-- If the user switches spoof off during a Blitz encounter, auto protection
+			-- immediately requests it again, but remembers the user's off preference for later.
+			if Toggles.BackdoorsAntiBlitz.Value and AutoEnabledPositionSpoof and not Value then
+				SetPositionSpoof(true)
+			end
+		end)
+	end
+
+	Connections.BackdoorsAntiBlitz = Services.RunService.Heartbeat:Connect(function()
+		if not AntiBlitzRunning then return end
+		local ThreatNearby = false
+		if Toggles.BackdoorsAntiBlitz.Value and OnBackdoors() then
+			local Character = LocalPlayer.Character
+			local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
+			if Root then
+				for _, Model in Services.Workspace:GetChildren() do
+					if Model.Name == "BackdoorRush" and Model:IsA("Model") and Model.Parent then
+						local EntityRoot = Model.PrimaryPart or Model:FindFirstChild("HumanoidRootPart") or Model:FindFirstChildWhichIsA("BasePart")
+						if EntityRoot and (EntityRoot.Position - Root.Position).Magnitude <= 150 then
+							ThreatNearby = true
+							break
+						end
+					end
+				end
+			end
+		end
+
+		if ThreatNearby then
+			if PositionSpoofToggle and not PositionSpoofToggle.Value then
+				AutoEnabledPositionSpoof = not UserWantsPositionSpoof
+				SetPositionSpoof(true)
+			end
+		elseif AutoEnabledPositionSpoof then
+			AutoEnabledPositionSpoof = false
+			if not UserWantsPositionSpoof then SetPositionSpoof(false) end
+		end
 	end)
 
 	----------------------------------------------------------------------------------------------------
