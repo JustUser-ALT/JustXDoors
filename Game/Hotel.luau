@@ -154,6 +154,60 @@ function Module.Init(Shared)
 	Groupboxes.Hotel_ESP:AddDropdown("HotelEntityESPList", {
 		Text = "Entities", Values = HotelEntities, Multi = true, AllowNull = true
 	})
+	
+	-- Hotel item / objective ESP. Keep only real lootable objects; decorative models without their pickup prompt are ignored.
+	local HotelLootItems = { "Gold", "Glitch Fragment" }
+	local HotelObjectiveItems = { "Key", "Electrical Key", "Book", "Hint Paper", "Breaker Pole" }
+	local HotelRegularItems = {
+		"Flashlight", "Candle", "Lighter", "Lockpick", "Vitamins", "Smoothie", "Bandage",
+		"Battery", "Skeleton Key", "Shears", "Crucifix", "Alarm Clock", "Tip Jar", "Donut", "Sally Toy"
+	}
+	local HotelRiftItems = { "Rift Jar", "Rift Candle", "Rift Smoothie" }
+	local HotelESPColorDefaults = {
+		Loot = Color3.fromRGB(255, 210, 60),
+		Objectives = Color3.fromRGB(80, 220, 120),
+		Items = Color3.fromRGB(170, 100, 255),
+		Rift = Color3.fromRGB(80, 190, 255),
+	}
+	local function BuildHotelESPValues(Names, Group)
+		local Values = {}
+		for _, Name in Names do
+			local Controls = { Mode = "Move" }
+			table.insert(Controls, { Type = "Toggle", Name = "Always", Master = true, Default = false })
+			table.insert(Controls, { Type = "Toggle", Name = "Previous", Default = false })
+			table.insert(Controls, { Type = "Toggle", Name = "Current", Default = true })
+			table.insert(Controls, { Type = "Toggle", Name = "Next", Default = false })
+			table.insert(Controls, { Type = "ColorPicker", Name = "Color", Default = HotelESPColorDefaults[Group] })
+			if Name == "Gold" then
+				table.insert(Controls, { Type = "Slider", Name = "Minimum Level", Min = 1, Max = 6, Step = 1, Default = 1 })
+				table.insert(Controls, { Type = "Slider", Name = "Maximum Level", Min = 1, Max = 6, Step = 1, Default = 6 })
+			end
+			Values[Name] = Controls
+		end
+		return Values
+	end
+
+	Groupboxes.Hotel_ESP:AddDivider()
+	Groupboxes.Hotel_ESP:AddToggle("HotelItemESPToggle", {
+		Text = "Items / Objectives ESP", Default = false,
+		Tooltip = "Highlights loot and objectives without highlighting decorative props."
+	})
+	Groupboxes.Hotel_ESP:AddDivider("Loot")
+	Groupboxes.Hotel_ESP:AddValueDropdown("HotelLootESPList", {
+		Text = "Loot", Options = HotelLootItems, Multi = true, Values = BuildHotelESPValues(HotelLootItems, "Loot")
+	})
+	Groupboxes.Hotel_ESP:AddDivider("Objectives")
+	Groupboxes.Hotel_ESP:AddValueDropdown("HotelObjectivesESPList", {
+		Text = "Objectives", Options = HotelObjectiveItems, Multi = true, Values = BuildHotelESPValues(HotelObjectiveItems, "Objectives")
+	})
+	Groupboxes.Hotel_ESP:AddDivider("Items")
+	Groupboxes.Hotel_ESP:AddValueDropdown("HotelRegularItemsESPList", {
+		Text = "Items", Options = HotelRegularItems, Multi = true, Values = BuildHotelESPValues(HotelRegularItems, "Items")
+	})
+	Groupboxes.Hotel_ESP:AddDivider("Rift")
+	Groupboxes.Hotel_ESP:AddValueDropdown("HotelRiftESPList", {
+		Text = "Rift", Options = HotelRiftItems, Multi = true, Values = BuildHotelESPValues(HotelRiftItems, "Rift")
+	})
 
 	Groupboxes.Hotel_Notifications:AddToggle("HotelNotifyEntitiesToggle", {
 		Text = "Notify Entities", Default = false, Tooltip = "Sends a notification when the selected entities spawn."
@@ -244,6 +298,34 @@ function Module.Init(Shared)
 	end
 
 Groupboxes.Self_Automation = Tabs.Hotel:AddLeftGroupbox("Automation")
+
+Groupboxes.Self_Automation:AddToggle("HotelAutoLootToggle", {
+	Text = "Auto Loot", Default = false,
+	Tooltip = "Automatically collects selected Hotel loot and objectives when their prompts are in range."
+})
+Groupboxes.Self_Automation:AddDivider("Loot")
+Groupboxes.Self_Automation:AddDropdown("HotelAutoLootLootList", {
+	Text = "Loot", Values = HotelLootItems, Multi = true, AllowNull = true
+})
+Groupboxes.Self_Automation:AddDivider("Objectives")
+Groupboxes.Self_Automation:AddDropdown("HotelAutoLootObjectivesList", {
+	Text = "Objectives", Values = HotelObjectiveItems, Multi = true, AllowNull = true
+})
+Groupboxes.Self_Automation:AddDivider("Items")
+Groupboxes.Self_Automation:AddDropdown("HotelAutoLootItemsList", {
+	Text = "Items", Values = HotelRegularItems, Multi = true, AllowNull = true
+})
+Groupboxes.Self_Automation:AddDivider("Rift")
+Groupboxes.Self_Automation:AddDropdown("HotelAutoLootRiftList", {
+	Text = "Rift", Values = HotelRiftItems, Multi = true, AllowNull = true
+})
+Groupboxes.Self_Automation:AddSlider("HotelAutoLootGoldMinimum", {
+	Text = "Gold Minimum Level", Min = 1, Max = 6, Default = 1, Rounding = 0
+})
+Groupboxes.Self_Automation:AddSlider("HotelAutoLootGoldMaximum", {
+	Text = "Gold Maximum Level", Min = 1, Max = 6, Default = 6, Rounding = 0
+})
+Groupboxes.Self_Automation:AddDivider()
 Groupboxes.Self_Automation:AddToggle("AutoBreakerBox", {
 	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box."
 })
@@ -319,6 +401,413 @@ Groupboxes.Self_Automation:AddDropdown("AutoInteractIgnoreList", {
 	Default = { "Glitch Fragments", "Jeff Items", "Dropped Items" },
 	Multi = true, AllowNull = true
 })
+
+----------------------------------------------------------------------------------------------------
+-- Hotel item / objective ESP + Auto Loot
+----------------------------------------------------------------------------------------------------
+local HotelObjectNames = {
+	GoldPile = "Gold",
+	GlitchCube = "Glitch Fragment",
+	KeyObtain = "Key",
+	ElectricalKeyObtain = "Electrical Key",
+	LiveHintBook = "Book",
+	LibraryHintPaper = "Hint Paper",
+	LiveBreakerPolePickup = "Breaker Pole",
+	Flashlight = "Flashlight",
+	Candle = "Candle",
+	Lighter = "Lighter",
+	Lockpick = "Lockpick",
+	Vitamins = "Vitamins",
+	Smoothie = "Smoothie",
+	Bandage = "Bandage",
+	Battery = "Battery",
+	SkeletonKey = "Skeleton Key",
+	Shears = "Shears",
+	Crucifix = "Crucifix",
+	CrucifixWall = "Crucifix",
+	CrucifixOnWall = "Crucifix",
+	AlarmClock = "Alarm Clock",
+	AlarmClockModel = "Alarm Clock",
+	TipJar = "Tip Jar",
+	Donut = "Donut",
+	SallyToy = "Sally Toy",
+	SallyToyObtain = "Sally Toy",
+	RiftJar = "Rift Jar",
+	RiftCandle = "Rift Candle",
+	RiftSmoothie = "Rift Smoothie",
+}
+local HotelESPListForItem = {}
+for _, Name in HotelLootItems do HotelESPListForItem[Name] = "HotelLootESPList" end
+for _, Name in HotelObjectiveItems do HotelESPListForItem[Name] = "HotelObjectivesESPList" end
+for _, Name in HotelRegularItems do HotelESPListForItem[Name] = "HotelRegularItemsESPList" end
+for _, Name in HotelRiftItems do HotelESPListForItem[Name] = "HotelRiftESPList" end
+local HotelAutoLootListForItem = {
+	Gold = "HotelAutoLootLootList", ["Glitch Fragment"] = "HotelAutoLootLootList",
+	Key = "HotelAutoLootObjectivesList", ["Electrical Key"] = "HotelAutoLootObjectivesList",
+	Book = "HotelAutoLootObjectivesList", ["Hint Paper"] = "HotelAutoLootObjectivesList",
+	["Breaker Pole"] = "HotelAutoLootObjectivesList",
+	Flashlight = "HotelAutoLootItemsList", Candle = "HotelAutoLootItemsList", Lighter = "HotelAutoLootItemsList",
+	Lockpick = "HotelAutoLootItemsList", Vitamins = "HotelAutoLootItemsList", Smoothie = "HotelAutoLootItemsList",
+	Bandage = "HotelAutoLootItemsList", Battery = "HotelAutoLootItemsList", ["Skeleton Key"] = "HotelAutoLootItemsList",
+	Shears = "HotelAutoLootItemsList", Crucifix = "HotelAutoLootItemsList", ["Alarm Clock"] = "HotelAutoLootItemsList",
+	["Tip Jar"] = "HotelAutoLootItemsList", Donut = "HotelAutoLootItemsList", ["Sally Toy"] = "HotelAutoLootItemsList",
+	["Rift Jar"] = "HotelAutoLootRiftList", ["Rift Candle"] = "HotelAutoLootRiftList",
+	["Rift Smoothie"] = "HotelAutoLootRiftList",
+}
+local HotelEntries = {}
+local HotelPrompts = {}
+local HotelESPRefresh
+local HotelESPRunning = true
+local HotelESPRefreshQueued = false
+local HotelLastLootTick = 0
+local HotelPlayers = game:GetService("Players")
+
+local function HotelIsInPlayerModel(Object)
+	local Current = Object
+	while Current and Current ~= Services.Workspace do
+		if HotelPlayers:GetPlayerFromCharacter(Current) then return true end
+		Current = Current.Parent
+	end
+	local Backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+	return Backpack ~= nil and Object:IsDescendantOf(Backpack)
+end
+
+local function HotelFindItemRoot(Object)
+	local Current = Object
+	local Root, Label
+	while Current and Current ~= Services.Workspace do
+		if (Current:IsA("Model") or Current:IsA("BasePart")) and HotelObjectNames[Current.Name] then
+			Root, Label = Current, HotelObjectNames[Current.Name]
+		end
+		Current = Current.Parent
+	end
+	return Root, Label
+end
+
+local function HotelRoomOf(Object)
+	local Current = Object
+	while Current and Current.Parent do
+		if Current.Parent == CurrentRooms then return tonumber(Current.Name) end
+		Current = Current.Parent
+	end
+	return nil
+end
+
+local function HotelInRoomRange(Room, Settings)
+	if Room == nil then return true end
+	Settings = type(Settings) == "table" and Settings or {}
+	if Settings.Always then return true end
+	local CurrentRoom = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
+	if not CurrentRoom then return false end
+	return (Settings.Previous and Room == CurrentRoom - 1)
+		or (Settings.Current and Room == CurrentRoom)
+		or (Settings.Next and Room == CurrentRoom + 1)
+end
+
+local function HotelIsVisiblePart(Part)
+	return Part:IsA("BasePart") and Part.Transparency < 1 and Part.LocalTransparencyModifier < 1
+end
+
+local function HotelGoldLevel(GoldPile)
+	local Level = 0
+	for _, Layer in GoldPile:GetChildren() do
+		local Number = tonumber(Layer.Name)
+		if Number and Number >= 1 and Number <= 6 and Number % 1 == 0 then
+			local Visible = false
+			if Layer:IsA("BasePart") and HotelIsVisiblePart(Layer) then
+				Visible = true
+			else
+				for _, Part in Layer:GetDescendants() do
+					if HotelIsVisiblePart(Part) then Visible = true break end
+				end
+			end
+			if Visible then Level = math.max(Level, Number) end
+		end
+	end
+	if Level > 0 then return Level end
+	local AttributeLevel = tonumber(GoldPile:GetAttribute("GoldLevel")) or tonumber(GoldPile:GetAttribute("Level"))
+	return AttributeLevel and math.clamp(math.floor(AttributeLevel), 1, 6) or nil
+end
+
+local function HotelPromptName(Label)
+	if Label == "Gold" then return "LootPrompt" end
+	if Label == "Book" or Label == "Breaker Pole" then return "ActivateEventPrompt" end
+	return "ModulePrompt"
+end
+
+local function HotelGetPrompt(Object, Label)
+	local PromptName = HotelPromptName(Label)
+	for _, Descendant in Object:GetDescendants() do
+		if Descendant:IsA("ProximityPrompt") and Descendant.Name == PromptName then
+			return Descendant
+		end
+	end
+	return nil
+end
+
+local function HotelBuildProxy(Target)
+	local Proxy = Instance.new("Model")
+	Proxy.Name = "HotelItemESPProxy"
+	local Humanoid = Instance.new("Humanoid")
+	Humanoid.Name = "HighlightHumanoid"
+	Humanoid.Parent = Proxy
+	local Count = 0
+	local function AddPart(Part)
+		if Count >= 80 or not HotelIsVisiblePart(Part) then return end
+		local Ok, Copy = pcall(function() return Part:Clone() end)
+		if not Ok or not Copy then return end
+		for _, Child in Copy:GetChildren() do
+			if not Child:IsA("DataModelMesh") then Child:Destroy() end
+		end
+		Copy.Anchored = false
+		Copy.CanCollide = false
+		Copy.CanQuery = false
+		Copy.CanTouch = false
+		Copy.Massless = true
+		Copy.CastShadow = false
+		Copy.Transparency = 0.999
+		Copy.LocalTransparencyModifier = 0
+		Copy.Name = "ESPPart"
+		local Weld = Instance.new("WeldConstraint")
+		Weld.Part0 = Part
+		Weld.Part1 = Copy
+		Weld.Parent = Copy
+		Copy.Parent = Proxy
+		Count += 1
+	end
+	if Target:IsA("BasePart") then
+		AddPart(Target)
+	else
+		for _, Descendant in Target:GetDescendants() do
+			if Descendant:IsA("BasePart") then AddPart(Descendant) end
+		end
+	end
+	if Count == 0 then Proxy:Destroy() return nil end
+	Proxy.Parent = Services.Workspace
+	return Proxy
+end
+
+local function HotelEntryColor(Entry)
+	local ListId = HotelESPListForItem[Entry.Label]
+	local Settings = ListId and Options[ListId] and Options[ListId].Value[Entry.Label]
+	if type(Settings) == "table" and typeof(Settings.Color) == "Color3" then return Settings.Color end
+	return Color3.fromRGB(255, 210, 60)
+end
+
+local function HotelWantsEntry(Entry)
+	local Object, Label = Entry.Object, Entry.Label
+	if Shared.Floor ~= "Hotel" or not Object.Parent or not Object:IsDescendantOf(Services.Workspace) then return false end
+	if HotelIsInPlayerModel(Object) then return false end
+	local Prompt = HotelGetPrompt(Object, Label)
+	if not Prompt or not Prompt.Parent then return false end
+	if Label == "Glitch Fragment" then
+		local Handle = Object:FindFirstChild("Handle") or Object:FindFirstChildWhichIsA("BasePart", true)
+		if Handle and Handle.LocalTransparencyModifier >= 0.8 then return false end
+	end
+	local ListId = HotelESPListForItem[Label]
+	local Settings = ListId and Options[ListId] and Options[ListId].Value[Label]
+	if not (Toggles.HotelItemESPToggle.Value and type(Settings) == "table") then return false end
+	if not HotelInRoomRange(HotelRoomOf(Object), Settings) then return false end
+	if Label == "Gold" then
+		local Level = HotelGoldLevel(Object)
+		Entry.GoldLevel = Level
+		if not Level then return false end
+		local Minimum = tonumber(Settings["Minimum Level"]) or 1
+		local Maximum = tonumber(Settings["Maximum Level"]) or 6
+		if Level < math.min(Minimum, Maximum) or Level > math.max(Minimum, Maximum) then return false end
+	else
+		Entry.GoldLevel = nil
+	end
+	return true
+end
+
+local function HotelHideEntry(Entry)
+	if not Entry.Shown then return end
+	Entry.Shown = false
+	if Entry.Proxy then
+		Functions.RemoveESP(Entry.Proxy)
+		pcall(function() Entry.Proxy:Destroy() end)
+		Entry.Proxy = nil
+	end
+	Entry.LastColor = nil
+end
+
+local function HotelShowEntry(Entry)
+	local Proxy = HotelBuildProxy(Entry.Object)
+	if not Proxy then return end
+	local Color = HotelEntryColor(Entry)
+	local Label = Entry.Label
+	if Label == "Gold" then
+		local GoldValue = Entry.Object:GetAttribute("GoldValue")
+		if GoldValue ~= nil then Label = "Gold [" .. tostring(GoldValue) .. "]" end
+	end
+	Entry.Proxy = Proxy
+	Entry.LastColor = Color
+	Entry.Shown = true
+	Functions.AddESP({ Object = Proxy, Text = Label, Color = Color })
+end
+
+local function HotelApplyEntry(Entry)
+	if Entry.Shown and Entry.Proxy and (not Entry.Proxy.Parent or (Abysall and Abysall.ESPLibrary and Abysall.ESPLibrary.ElementsEnabled[Entry.Proxy] ~= true)) then
+		HotelHideEntry(Entry)
+	end
+	local PreviousLevel = Entry.GoldLevel
+	local Want = HotelWantsEntry(Entry)
+	local Color = Want and HotelEntryColor(Entry) or nil
+	local LevelChanged = Entry.Label == "Gold" and Entry.Shown and PreviousLevel ~= Entry.GoldLevel
+	if Want and (not Entry.Shown or Entry.LastColor ~= Color or LevelChanged) then
+		HotelHideEntry(Entry)
+		HotelShowEntry(Entry)
+	elseif not Want and Entry.Shown then
+		HotelHideEntry(Entry)
+	end
+end
+
+HotelESPRefresh = function()
+	if HotelESPRefreshQueued then return end
+	HotelESPRefreshQueued = true
+	task.defer(function()
+		HotelESPRefreshQueued = false
+		if not HotelESPRunning then return end
+		for _, Entry in HotelEntries do
+			pcall(HotelApplyEntry, Entry)
+		end
+	end)
+end
+
+local function HotelTrackObject(Object)
+	local Root, Label = HotelFindItemRoot(Object)
+	if not Root or not Label or not Root:IsDescendantOf(Services.Workspace) then return end
+	if HotelEntries[Root] then return end
+	local Entry = { Object = Root, Label = Label, Shown = false, Proxy = nil, LastColor = nil, Conns = {} }
+	HotelEntries[Root] = Entry
+	table.insert(Entry.Conns, Root.AncestryChanged:Connect(HotelESPRefresh))
+	if Label == "Glitch Fragment" then
+		local Handle = Root:FindFirstChild("Handle") or Root:FindFirstChildWhichIsA("BasePart", true)
+		if Handle then
+			table.insert(Entry.Conns, Handle:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(HotelESPRefresh))
+		end
+	end
+	table.insert(Entry.Conns, Root.Destroying:Connect(function()
+		HotelHideEntry(Entry)
+		for _, Conn in Entry.Conns do pcall(function() Conn:Disconnect() end) end
+		HotelEntries[Root] = nil
+	end))
+	HotelESPRefresh()
+end
+
+local function HotelTrackPrompt(Prompt)
+	if not Prompt:IsA("ProximityPrompt") then return end
+	HotelTrackObject(Prompt)
+	if HotelPrompts[Prompt] then return end
+	HotelPrompts[Prompt] = { LastFire = 0 }
+	Prompt.Destroying:Once(function() HotelPrompts[Prompt] = nil end)
+end
+
+for _, Object in Services.Workspace:GetDescendants() do
+	HotelTrackObject(Object)
+	if Object:IsA("ProximityPrompt") then HotelTrackPrompt(Object) end
+end
+Connections.HotelItemDescendantAdded = Services.Workspace.DescendantAdded:Connect(function(Object)
+	HotelTrackObject(Object)
+	if Object:IsA("ProximityPrompt") then HotelTrackPrompt(Object) end
+end)
+Connections.HotelItemDescendantRemoving = Services.Workspace.DescendantRemoving:Connect(function(Object)
+	if HotelEntries[Object] then
+		local Entry = HotelEntries[Object]
+		HotelHideEntry(Entry)
+		for _, Conn in Entry.Conns do pcall(function() Conn:Disconnect() end) end
+		HotelEntries[Object] = nil
+	end
+	if HotelPrompts[Object] then HotelPrompts[Object] = nil end
+end)
+Toggles.HotelItemESPToggle:OnChanged(HotelESPRefresh)
+for _, ListId in { "HotelLootESPList", "HotelObjectivesESPList", "HotelRegularItemsESPList", "HotelRiftESPList" } do
+	Options[ListId]:OnChanged(HotelESPRefresh)
+end
+Connections.HotelItemRoomChanged = LocalPlayer:GetAttributeChangedSignal("CurrentRoom"):Connect(HotelESPRefresh)
+
+-- Re-scan periodically: prompts may be parented after their item model and transparency may change during pickup.
+task.spawn(function()
+	while HotelESPRunning do
+		task.wait(0.75)
+		if not HotelESPRunning then break end
+		for _, Object in Services.Workspace:GetDescendants() do
+			if Object:IsA("ProximityPrompt") then
+				HotelTrackPrompt(Object)
+			elseif HotelFindItemRoot(Object) then
+				HotelTrackObject(Object)
+			end
+		end
+		HotelESPRefresh()
+	end
+end)
+
+local function HotelAutoLootSelected(Label)
+	local ListId = HotelAutoLootListForItem[Label]
+	return ListId ~= nil and Options[ListId] ~= nil and Options[ListId].Value[Label] == true
+end
+
+local function HotelAutoLootGoldAllowed(Object)
+	local Level = HotelGoldLevel(Object)
+	if not Level then return false end
+	local Minimum = tonumber(Options.HotelAutoLootGoldMinimum.Value) or 1
+	local Maximum = tonumber(Options.HotelAutoLootGoldMaximum.Value) or 6
+	return Level >= math.min(Minimum, Maximum) and Level <= math.max(Minimum, Maximum)
+end
+
+Connections.HotelAutoLoot = Services.RunService.Heartbeat:Connect(function()
+	if not Toggles.HotelAutoLootToggle.Value or Shared.Floor ~= "Hotel" then return end
+	if tick() - HotelLastLootTick < 0.12 then return end
+	HotelLastLootTick = tick()
+	local Character = LocalPlayer.Character
+	if not Character or Character:GetAttribute("Hiding") == true then return end
+	local RootPart = Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart
+	if not RootPart then return end
+	local BestPrompt, BestDistance
+	for Prompt, Info in HotelPrompts do
+		if not Prompt.Parent or not Prompt.Enabled or not Prompt:IsDescendantOf(Services.Workspace) then continue end
+		if HotelIsInPlayerModel(Prompt) then continue end
+		local ItemRoot, Label = HotelFindItemRoot(Prompt)
+		if not ItemRoot or not Label or not HotelAutoLootSelected(Label) then continue end
+		if Label == "Gold" and not HotelAutoLootGoldAllowed(ItemRoot) then continue end
+		if Label == "Glitch Fragment" then
+			local Handle = ItemRoot:FindFirstChild("Handle") or ItemRoot:FindFirstChildWhichIsA("BasePart", true)
+			if Handle and Handle.LocalTransparencyModifier >= 0.8 then continue end
+		end
+		local CorrectPrompt = HotelGetPrompt(ItemRoot, Label)
+		if CorrectPrompt ~= Prompt then continue end
+		local Position
+		if Prompt.Parent:IsA("BasePart") then
+			Position = Prompt.Parent.Position
+		else
+			Position = ItemRoot:GetPivot().Position
+		end
+		local Distance = (Position - RootPart.Position).Magnitude
+		if Distance > Prompt.MaxActivationDistance then continue end
+		if tick() - (Info.LastFire or 0) < 0.65 then continue end
+		if not BestDistance or Distance < BestDistance then
+			BestPrompt, BestDistance = Prompt, Distance
+		end
+	end
+	if BestPrompt then
+		HotelPrompts[BestPrompt].LastFire = tick()
+		task.spawn(Functions.FirePrompt, BestPrompt)
+	end
+end)
+
+Connections.HotelItemCleanup = {
+	Disconnect = function()
+		HotelESPRunning = false
+		for _, Entry in HotelEntries do
+			HotelHideEntry(Entry)
+			for _, Conn in Entry.Conns do pcall(function() Conn:Disconnect() end) end
+		end
+		table.clear(HotelEntries)
+		table.clear(HotelPrompts)
+	end
+}
+
 Groupboxes.Self_Automation:AddDivider()
 Groupboxes.Self_Automation:AddToggle("AutoClosetToggle", {
 	Text = "Auto Closet", Default = false,
