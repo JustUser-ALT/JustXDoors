@@ -163,26 +163,43 @@ function Module.Init(Shared)
 		"Battery", "Skeleton Key", "Shears", "Crucifix", "Alarm Clock", "Tip Jar", "Donut", "Sally Toy"
 	}
 	local HotelRiftItems = { "Rift Jar", "Rift Candle", "Rift Smoothie" }
+	local HotelAllItems = { "--Loot--", "Gold", "Glitch Fragment", "--Objectives--", "Key", "Electrical Key", "Book", "Hint Paper", "Breaker Pole", "--Items--",
+		"Flashlight", "Candle", "Lighter", "Lockpick", "Vitamins", "Smoothie", "Bandage", "Battery", "Skeleton Key", "Shears",
+		"Crucifix", "Alarm Clock", "Tip Jar", "Donut", "Sally Toy", "--Rift--", "Rift Jar", "Rift Candle", "Rift Smoothie" }
+	local HotelRealItems = {}
+	for _, Name in HotelAllItems do
+		if not Name:match("^%-%-.*%-%-$") then table.insert(HotelRealItems, Name) end
+	end
 	local HotelESPColorDefaults = {
 		Loot = Color3.fromRGB(255, 210, 60),
 		Objectives = Color3.fromRGB(80, 220, 120),
 		Items = Color3.fromRGB(170, 100, 255),
 		Rift = Color3.fromRGB(80, 190, 255),
 	}
-	local function BuildHotelESPValues(Names, Group)
+	local function HotelItemGroup(Name)
+		if table.find(HotelLootItems, Name) then return "Loot" end
+		if table.find(HotelObjectiveItems, Name) then return "Objectives" end
+		if table.find(HotelRegularItems, Name) then return "Items" end
+		return "Rift"
+	end
+	local function BuildHotelESPValues(Names)
 		local Values = {}
 		for _, Name in Names do
-			local Controls = { Mode = "Move" }
-			table.insert(Controls, { Type = "Toggle", Name = "Always", Master = true, Default = false })
-			table.insert(Controls, { Type = "Toggle", Name = "Previous", Default = false })
-			table.insert(Controls, { Type = "Toggle", Name = "Current", Default = true })
-			table.insert(Controls, { Type = "Toggle", Name = "Next", Default = false })
-			table.insert(Controls, { Type = "ColorPicker", Name = "Color", Default = HotelESPColorDefaults[Group] })
-			if Name == "Gold" then
-				table.insert(Controls, { Type = "Slider", Name = "Minimum Level", Min = 1, Max = 6, Step = 1, Default = 1 })
-				table.insert(Controls, { Type = "Slider", Name = "Maximum Level", Min = 1, Max = 6, Step = 1, Default = 6 })
+			if not Name:match("^%-%-.*%-%-$") then
+				local Group = HotelItemGroup(Name)
+				local Controls = { Mode = "Move" }
+				table.insert(Controls, { Type = "Toggle", Name = "Always", Master = true, Default = false })
+				table.insert(Controls, { Type = "Toggle", Name = "Previous", Default = false })
+				table.insert(Controls, { Type = "Toggle", Name = "Current", Default = true })
+				table.insert(Controls, { Type = "Toggle", Name = "Next", Default = false })
+				table.insert(Controls, { Type = "ColorPicker", Name = "Color", Default = HotelESPColorDefaults[Group] })
+				if Name == "Gold" then
+					table.insert(Controls, { Type = "Divider", Name = "--Gold Level--" })
+					table.insert(Controls, { Type = "Slider", Name = "Minimum Level", Min = 1, Max = 6, Step = 1, Default = 1 })
+					table.insert(Controls, { Type = "Slider", Name = "Maximum Level", Min = 1, Max = 6, Step = 1, Default = 6 })
+				end
+				Values[Name] = Controls
 			end
-			Values[Name] = Controls
 		end
 		return Values
 	end
@@ -192,22 +209,12 @@ function Module.Init(Shared)
 		Text = "Items / Objectives ESP", Default = false,
 		Tooltip = "Highlights loot and objectives without highlighting decorative props."
 	})
-	Groupboxes.Hotel_ESP:AddDivider("Loot")
-	Groupboxes.Hotel_ESP:AddValueDropdown("HotelLootESPList", {
-		Text = "Loot", Options = HotelLootItems, Multi = true, Values = BuildHotelESPValues(HotelLootItems, "Loot")
+	Groupboxes.Hotel_ESP:AddValueDropdown("HotelAllItemsESPList", {
+		Text = "Items", Options = HotelAllItems, Multi = true, Values = BuildHotelESPValues(HotelAllItems)
 	})
-	Groupboxes.Hotel_ESP:AddDivider("Objectives")
-	Groupboxes.Hotel_ESP:AddValueDropdown("HotelObjectivesESPList", {
-		Text = "Objectives", Options = HotelObjectiveItems, Multi = true, Values = BuildHotelESPValues(HotelObjectiveItems, "Objectives")
-	})
-	Groupboxes.Hotel_ESP:AddDivider("Items")
-	Groupboxes.Hotel_ESP:AddValueDropdown("HotelRegularItemsESPList", {
-		Text = "Items", Options = HotelRegularItems, Multi = true, Values = BuildHotelESPValues(HotelRegularItems, "Items")
-	})
-	Groupboxes.Hotel_ESP:AddDivider("Rift")
-	Groupboxes.Hotel_ESP:AddValueDropdown("HotelRiftESPList", {
-		Text = "Rift", Options = HotelRiftItems, Multi = true, Values = BuildHotelESPValues(HotelRiftItems, "Rift")
-	})
+	Groupboxes.Hotel_ESP:AddToggle("HotelESPJeffItems", { Text = "ESP Jeff Items", Default = true })
+	Groupboxes.Hotel_ESP:AddToggle("HotelESPDrops", { Text = "ESP Drops", Default = true })
+	Groupboxes.Hotel_ESP:AddToggle("HotelESPRiftRooms", { Text = "ESP in Rift Rooms", Default = true })
 
 	Groupboxes.Hotel_Notifications:AddToggle("HotelNotifyEntitiesToggle", {
 		Text = "Notify Entities", Default = false, Tooltip = "Sends a notification when the selected entities spawn."
@@ -297,35 +304,44 @@ function Module.Init(Shared)
 		end)
 	end
 
-Groupboxes.Self_Automation = Tabs.Hotel:AddLeftGroupbox("Automation")
+Groupboxes.Hotel_AutomationTabbox = Tabs.Hotel:AddLeftTabbox("Automation / Settings")
+Groupboxes.Self_Automation = Groupboxes.Hotel_AutomationTabbox:AddTab("Automation")
+Groupboxes.Hotel_AutomationSettings = Groupboxes.Hotel_AutomationTabbox:AddTab("Settings")
 
 Groupboxes.Self_Automation:AddToggle("HotelAutoLootToggle", {
 	Text = "Auto Loot", Default = false,
-	Tooltip = "Automatically collects selected Hotel loot and objectives when their prompts are in range."
+	Tooltip = "Automatically collects the selected items when their prompts are in range."
 })
-Groupboxes.Self_Automation:AddDivider("Loot")
-Groupboxes.Self_Automation:AddDropdown("HotelAutoLootLootList", {
-	Text = "Loot", Values = HotelLootItems, Multi = true, AllowNull = true
+local function BuildHotelAutoLootValues(Names)
+	local Values = {}
+	for _, Name in Names do
+		if not Name:match("^%-%-.*%-%-$") then
+			local Controls = { Mode = "Move" }
+			if Name == "Gold" then
+				table.insert(Controls, { Type = "Divider", Name = "--Gold Level--" })
+				table.insert(Controls, { Type = "Slider", Name = "Minimum Level", Min = 1, Max = 6, Step = 1, Default = 1 })
+				table.insert(Controls, { Type = "Slider", Name = "Maximum Level", Min = 1, Max = 6, Step = 1, Default = 6 })
+			end
+			Values[Name] = Controls
+		end
+	end
+	return Values
+end
+Groupboxes.Self_Automation:AddValueDropdown("HotelAutoLootList", {
+	Text = "Auto Loot List", Options = HotelAllItems, Multi = true, Values = BuildHotelAutoLootValues(HotelAllItems)
 })
-Groupboxes.Self_Automation:AddDivider("Objectives")
-Groupboxes.Self_Automation:AddDropdown("HotelAutoLootObjectivesList", {
-	Text = "Objectives", Values = HotelObjectiveItems, Multi = true, AllowNull = true
+Groupboxes.Hotel_AutomationSettings:AddToggle("HotelLootDroppedItems", {
+	Text = "Loot Drops", Default = true,
+	Tooltip = "When off, Auto Loot ignores items lying in workspace.Drops."
 })
-Groupboxes.Self_Automation:AddDivider("Items")
-Groupboxes.Self_Automation:AddDropdown("HotelAutoLootItemsList", {
-	Text = "Items", Values = HotelRegularItems, Multi = true, AllowNull = true
+Groupboxes.Hotel_AutomationSettings:AddToggle("HotelBuyJeffShopItems", {
+	Text = "Buy Jeff Shop Items", Default = false,
+	Tooltip = "Allows Auto Loot to purchase selected items from Jeff's Shop."
 })
-Groupboxes.Self_Automation:AddDivider("Rift")
-Groupboxes.Self_Automation:AddDropdown("HotelAutoLootRiftList", {
-	Text = "Rift", Values = HotelRiftItems, Multi = true, AllowNull = true
+Groupboxes.Hotel_AutomationSettings:AddToggle("HotelAutoLootInRiftRooms", {
+	Text = "Auto Loot In Rift Rooms", Default = true,
+	Tooltip = "Allows Auto Loot to collect selected items inside Rift Rooms."
 })
-Groupboxes.Self_Automation:AddSlider("HotelAutoLootGoldMinimum", {
-	Text = "Gold Minimum Level", Min = 1, Max = 6, Default = 1, Rounding = 0
-})
-Groupboxes.Self_Automation:AddSlider("HotelAutoLootGoldMaximum", {
-	Text = "Gold Maximum Level", Min = 1, Max = 6, Default = 6, Rounding = 0
-})
-Groupboxes.Self_Automation:AddDivider()
 Groupboxes.Self_Automation:AddToggle("AutoBreakerBox", {
 	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box."
 })
@@ -437,23 +453,11 @@ local HotelObjectNames = {
 	RiftSmoothie = "Rift Smoothie",
 }
 local HotelESPListForItem = {}
-for _, Name in HotelLootItems do HotelESPListForItem[Name] = "HotelLootESPList" end
-for _, Name in HotelObjectiveItems do HotelESPListForItem[Name] = "HotelObjectivesESPList" end
-for _, Name in HotelRegularItems do HotelESPListForItem[Name] = "HotelRegularItemsESPList" end
-for _, Name in HotelRiftItems do HotelESPListForItem[Name] = "HotelRiftESPList" end
-local HotelAutoLootListForItem = {
-	Gold = "HotelAutoLootLootList", ["Glitch Fragment"] = "HotelAutoLootLootList",
-	Key = "HotelAutoLootObjectivesList", ["Electrical Key"] = "HotelAutoLootObjectivesList",
-	Book = "HotelAutoLootObjectivesList", ["Hint Paper"] = "HotelAutoLootObjectivesList",
-	["Breaker Pole"] = "HotelAutoLootObjectivesList",
-	Flashlight = "HotelAutoLootItemsList", Candle = "HotelAutoLootItemsList", Lighter = "HotelAutoLootItemsList",
-	Lockpick = "HotelAutoLootItemsList", Vitamins = "HotelAutoLootItemsList", Smoothie = "HotelAutoLootItemsList",
-	Bandage = "HotelAutoLootItemsList", Battery = "HotelAutoLootItemsList", ["Skeleton Key"] = "HotelAutoLootItemsList",
-	Shears = "HotelAutoLootItemsList", Crucifix = "HotelAutoLootItemsList", ["Alarm Clock"] = "HotelAutoLootItemsList",
-	["Tip Jar"] = "HotelAutoLootItemsList", Donut = "HotelAutoLootItemsList", ["Sally Toy"] = "HotelAutoLootItemsList",
-	["Rift Jar"] = "HotelAutoLootRiftList", ["Rift Candle"] = "HotelAutoLootRiftList",
-	["Rift Smoothie"] = "HotelAutoLootRiftList",
-}
+local HotelAutoLootListForItem = {}
+for _, Name in HotelRealItems do
+	HotelESPListForItem[Name] = "HotelAllItemsESPList"
+	HotelAutoLootListForItem[Name] = "HotelAutoLootList"
+end
 local HotelEntries = {}
 local HotelPrompts = {}
 local HotelESPRefresh
@@ -598,6 +602,7 @@ local function HotelWantsEntry(Entry)
 	local Object, Label = Entry.Object, Entry.Label
 	if Shared.Floor ~= "Hotel" or not Object.Parent or not Object:IsDescendantOf(Services.Workspace) then return false end
 	if HotelIsInPlayerModel(Object) then return false end
+	if not HotelSourceAllowed(Object, true) then return false end
 	local Prompt = HotelGetPrompt(Object, Label)
 	if not Prompt or not Prompt.Parent then return false end
 	if Label == "Glitch Fragment" then
@@ -722,8 +727,9 @@ Connections.HotelItemDescendantRemoving = Services.Workspace.DescendantRemoving:
 	if HotelPrompts[Object] then HotelPrompts[Object] = nil end
 end)
 Toggles.HotelItemESPToggle:OnChanged(HotelESPRefresh)
-for _, ListId in { "HotelLootESPList", "HotelObjectivesESPList", "HotelRegularItemsESPList", "HotelRiftESPList" } do
-	Options[ListId]:OnChanged(HotelESPRefresh)
+Options.HotelAllItemsESPList:OnChanged(HotelESPRefresh)
+for _, ToggleId in { "HotelESPJeffItems", "HotelESPDrops", "HotelESPRiftRooms" } do
+	Toggles[ToggleId]:OnChanged(HotelESPRefresh)
 end
 Connections.HotelItemRoomChanged = LocalPlayer:GetAttributeChangedSignal("CurrentRoom"):Connect(HotelESPRefresh)
 
@@ -745,15 +751,41 @@ end)
 
 local function HotelAutoLootSelected(Label)
 	local ListId = HotelAutoLootListForItem[Label]
-	return ListId ~= nil and Options[ListId] ~= nil and Options[ListId].Value[Label] == true
+	local Settings = ListId and Options[ListId] and Options[ListId].Value[Label]
+	return type(Settings) == "table"
 end
 
 local function HotelAutoLootGoldAllowed(Object)
 	local Level = HotelGoldLevel(Object)
 	if not Level then return false end
-	local Minimum = tonumber(Options.HotelAutoLootGoldMinimum.Value) or 1
-	local Maximum = tonumber(Options.HotelAutoLootGoldMaximum.Value) or 6
+	local Settings = Options.HotelAutoLootList and Options.HotelAutoLootList.Value.Gold
+	Settings = type(Settings) == "table" and Settings or {}
+	local Minimum = tonumber(Settings["Minimum Level"]) or 1
+	local Maximum = tonumber(Settings["Maximum Level"]) or 6
 	return Level >= math.min(Minimum, Maximum) and Level <= math.max(Minimum, Maximum)
+end
+
+local function HotelSourceOf(Object)
+	local Current = Object
+	while Current and Current ~= Services.Workspace do
+		if Current.Name:match("^RiftRoom_") then return "Rift" end
+		if Current.Name == "JeffShop" then return "JeffShop" end
+		if Current.Name == "Drops" then return "Drops" end
+		Current = Current.Parent
+	end
+	return "Room"
+end
+
+local function HotelSourceAllowed(Object, ForESP)
+	local Source = HotelSourceOf(Object)
+	if Source == "JeffShop" then
+		return ForESP and Toggles.HotelESPJeffItems.Value or (not ForESP and Toggles.HotelBuyJeffShopItems.Value)
+	elseif Source == "Drops" then
+		return ForESP and Toggles.HotelESPDrops.Value or (not ForESP and Toggles.HotelLootDroppedItems.Value)
+	elseif Source == "Rift" then
+		return ForESP and Toggles.HotelESPRiftRooms.Value or (not ForESP and Toggles.HotelAutoLootInRiftRooms.Value)
+	end
+	return true
 end
 
 Connections.HotelAutoLoot = Services.RunService.Heartbeat:Connect(function()
@@ -770,6 +802,7 @@ Connections.HotelAutoLoot = Services.RunService.Heartbeat:Connect(function()
 		if HotelIsInPlayerModel(Prompt) then continue end
 		local ItemRoot, Label = HotelFindItemRoot(Prompt)
 		if not ItemRoot or not Label or not HotelAutoLootSelected(Label) then continue end
+		if not HotelSourceAllowed(ItemRoot, false) then continue end
 		if Label == "Gold" and not HotelAutoLootGoldAllowed(ItemRoot) then continue end
 		if Label == "Glitch Fragment" then
 			local Handle = ItemRoot:FindFirstChild("Handle") or ItemRoot:FindFirstChildWhichIsA("BasePart", true)
