@@ -304,7 +304,7 @@ function Module.Init(Shared)
 		end)
 	end
 
-Groupboxes.Hotel_AutomationTabbox = Tabs.Hotel:AddLeftTabbox("Automation / Settings")
+Groupboxes.Hotel_AutomationTabbox = Tabs.Hotel:AddLeftTabbox("Automation | Settings")
 Groupboxes.Self_Automation = Groupboxes.Hotel_AutomationTabbox:AddTab("Automation")
 Groupboxes.Hotel_AutomationSettings = Groupboxes.Hotel_AutomationTabbox:AddTab("Settings")
 
