@@ -4,7 +4,7 @@
 	Loaded by Main.luau:   local Module = Abysall.LoadModule("Mines");  Module.Init(Shared) ... Module.Floors(...)
 	Column 1 Automation: Skip Seek (Mines), Auto Steer Minecart, Turn Distance, Crouch Distance, Auto Complete Dam Seek
 	Column 2 Visual:     Show Seek Path
-	Column 3 Anti:       Anti Giggle, Anti Gloombat Eggs, Anti Figure (copy of "Delete Figure", kept in sync with it)
+	Anti / No Damage controls are centralized in the Main tab; this module keeps Mines automation and visuals.
 	The code is moved 1:1 out of Main.luau.
 ]]
 
