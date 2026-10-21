@@ -13,6 +13,31 @@
 
 local Module = {}
 
+function Module.SyncToggleAliases(Shared, Pairs)
+	local Toggles = Shared.Toggles
+	for _, Pair in ipairs(Pairs) do
+		local Primary, Alias = Toggles[Pair[1]], Toggles[Pair[2]]
+		if Primary and Alias then
+			local Syncing = false
+			Primary:OnChanged(function(Value)
+				if not Syncing and Alias.Value ~= Value then
+					Syncing = true
+					Alias:SetValue(Value)
+					Syncing = false
+				end
+			end)
+			Alias:OnChanged(function(Value)
+				if not Syncing and Primary.Value ~= Value then
+					Syncing = true
+					Primary:SetValue(Value)
+					Syncing = false
+				end
+			end)
+			Alias:SetValue(Primary.Value)
+		end
+	end
+end
+
 function Module.Init(Shared)
 	local Connections, CurrentRooms, Functions, Globals, Groupboxes, LocalPlayer, Options, Services, Tabs, Toggles, Window
 	   = Shared.Connections, Shared.CurrentRooms, Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.LocalPlayer, Shared.Options, Shared.Services, Shared.Tabs, Shared.Toggles, Shared.Window
@@ -55,6 +80,12 @@ function Module.Init(Shared)
 		Tooltip = "Automatically enables Position Spoof when the glitch Ambush variant is nearby."
 	})
 
+	Module.SyncToggleAliases(Shared, {
+		{ "HotelAntiRush", "MinesAntiRush" },
+		{ "HotelAntiAmbush", "MinesAntiAmbush" },
+		{ "BypassEyes", "MinesBypassEyes" },
+	})
+
 	-- All four protections share the existing Position Spoof toggle. Cache nested entity models
 	-- because these entities may be inserted below folders instead of directly under Workspace.
 	local HotelAntiModels = {}
@@ -81,7 +112,7 @@ function Module.Init(Shared)
 	end)
 
 	local function HotelHasThreat()
-		if Shared.Floor ~= "Hotel" then return false end
+		if Shared.Floor ~= "Hotel" and Shared.Floor ~= "Mines" then return false end
 		local Character = LocalPlayer.Character
 		local Root = Character and (Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart)
 		if not Root then return false end
@@ -1987,6 +2018,17 @@ Groupboxes.Hotel_Anti:AddToggle("RemoveHalt",    { Text = "Anti Halt",     Defau
 Groupboxes.Hotel_Anti:AddToggle("RemoveDread",   { Text = "Anti Dread",    Default = false, Tooltip = "Prevents 'Dread' from spawning." })
 Groupboxes.Hotel_NoDamage:AddToggle("NoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Prevents 'Screech' from hurting you." })
 Groupboxes.Hotel_NoDamage:AddToggle("NoHaltDamage",    { Text = "No Halt Damage",    Default = false, Tooltip = "Prevents 'Halt' from hurting you." })
+Groupboxes.Main_MinesAnti:AddToggle("MinesRemoveScreech", { Text = "Anti Screech", Default = false, Tooltip = "Same protection as Hotel Anti Screech." })
+Groupboxes.Main_MinesAnti:AddToggle("MinesRemoveHalt", { Text = "Anti Halt", Default = false, Tooltip = "Same protection as Hotel Anti Halt." })
+Groupboxes.Main_MinesAnti:AddToggle("MinesNoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Same protection as Hotel No Screech Damage." })
+Groupboxes.Main_MinesAnti:AddToggle("MinesNoHaltDamage", { Text = "No Halt Damage", Default = false, Tooltip = "Same protection as Hotel No Halt Damage." })
+
+Module.SyncToggleAliases(Shared, {
+	{ "RemoveScreech", "MinesRemoveScreech" },
+	{ "RemoveHalt", "MinesRemoveHalt" },
+	{ "NoScreechDamage", "MinesNoScreechDamage" },
+	{ "NoHaltDamage", "MinesNoHaltDamage" },
+})
 
 Toggles.NoScreechDamage:OnChanged(function(Value)
 	if Value then
