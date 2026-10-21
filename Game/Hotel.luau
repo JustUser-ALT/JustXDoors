@@ -17,12 +17,22 @@ function Module.Init(Shared)
 	local Connections, CurrentRooms, Functions, Globals, Groupboxes, LocalPlayer, Options, Services, Tabs, Toggles, Window
 	   = Shared.Connections, Shared.CurrentRooms, Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.LocalPlayer, Shared.Options, Shared.Services, Shared.Tabs, Shared.Toggles, Shared.Window
 
+	Tabs.Game = Window:AddTab("Game", "gamepad-2", { Columns = 3 })
 	Tabs.Hotel = Window:AddTab("Hotel", "hotel", { Columns = 3 })
 
 	-- right column: Anti / No Damage multisection (toggles moved from the Exploits tab and renamed "Anti ...")
-	Groupboxes.Hotel_AntiTabbox = Tabs.Hotel:AddRightTabbox("Anti / No Damage")
+	Groupboxes.Hotel_AntiTabbox = Tabs.Game:AddRightTabbox("Hotel")
 	Groupboxes.Hotel_Anti = Groupboxes.Hotel_AntiTabbox:AddTab("Anti")
 	Groupboxes.Hotel_NoDamage = Groupboxes.Hotel_AntiTabbox:AddTab("No Damage")
+
+	Groupboxes.Game_MinesAnti = Tabs.Game:AddRightGroupbox("Mines")
+	Groupboxes.Game_MinesAnti:AddToggle("BypassGiggle", { Text = "Anti Giggle", Default = false, Tooltip = "Prevents 'Giggle' from attacking you." })
+	Groupboxes.Game_MinesAnti:AddToggle("BypassGloombatEggs", { Text = "Anti Gloombat Eggs", Default = false, Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs." })
+	Groupboxes.Game_MinesAnti:AddToggle("RemoveFigureMines", {
+		Text = "Anti Figure", Default = false, Tooltip = "Completely removes the entity 'Figure' (doesn't always work).",
+		Risky = not (Shared.Floor == "Fools" or Shared.Floor == "OldHotel" or Shared.Floor == "Mines"),
+		Disabled = not Functions.CheckCompatability({"isnetworkowner"}), DisabledTooltip = Globals.IncompatibleMessage
+	})
 	Groupboxes.Hotel_Anti:AddToggle("BypassDupe",           { Text = "Anti Dupe",             Default = false, Tooltip = "Prevents you from open 'Dupe' fake doors." })
 	Groupboxes.Hotel_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you." })
 	Groupboxes.Hotel_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you." })
