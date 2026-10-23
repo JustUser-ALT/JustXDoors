@@ -12,10 +12,14 @@ function Module.Init(Shared)
 
     Tabs.Main = Window:AddTab("Main", "gamepad-2", { Columns = 3 })
 
-    Groupboxes.Main_InfoTabbox = Tabs.Main:AddMiddleTabbox("ESP / Notifications / Settings")
+    Groupboxes.Main_InfoTabbox = Tabs.Main:AddMiddleTabbox("Visual")
     Groupboxes.Main_ESP = Groupboxes.Main_InfoTabbox:AddTab("ESP")
     Groupboxes.Main_Notifications = Groupboxes.Main_InfoTabbox:AddTab("Notifications")
     Groupboxes.Main_Settings = Groupboxes.Main_InfoTabbox:AddTab("Settings")
+
+    Groupboxes.Main_AntiTabbox = Tabs.Main:AddRightTabbox("Anti / No Damage")
+    Groupboxes.Main_Anti = Groupboxes.Main_AntiTabbox:AddTab("Anti")
+    Groupboxes.Main_NoDamage = Groupboxes.Main_AntiTabbox:AddTab("No Damage")
 
     local HotelEntities = { "Rush", "Ambush", "Eyes", "Halt", "Sally", "Dupe", "Figure", "Snare", "AR0xMBUSH", "RNIUSHCG==" }
 
