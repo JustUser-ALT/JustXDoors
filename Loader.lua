@@ -6,7 +6,7 @@ if Env.Abysall then
     return
 end
 
-local BaseUrl = Config.BaseUrl or "https://raw.githubusercontent.com/JustUser-ALT/Doors/main/"
+local BaseUrl = Config.BaseUrl or "https://raw.githubusercontent.com/JustUser-ALT/JustXDoors/main/"
 
 -- repo layout (relative to BaseUrl). Change here if a file lives somewhere else.
 local Files = {
