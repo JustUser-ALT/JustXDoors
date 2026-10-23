@@ -30,7 +30,7 @@ function Module.Init(Shared)
 	Groupboxes.Hotel_Anti:AddToggle("BypassSeekObstructions", { Text = "Anti Seek Obstructions", Default = false, Tooltip = "Prevents obstacles in the 'Seek' chase from harming you." })
 
 
-Groupboxes.Self_Automation = Tabs.Hotel:AddLeftGroupbox("Automation")
+-- Automation UI is created in Main > Automation; controls and callbacks remain here.
 Groupboxes.Self_Automation:AddToggle("AutoBreakerBox", {
 	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box."
 })
@@ -91,21 +91,6 @@ Toggles.AutoHotelIgnoreEntities = Groupboxes.Self_Automation:AddToggle("AutoHote
 	Default = false
 })
 Groupboxes.Self_Automation:AddDivider()
-Groupboxes.Self_Automation:AddToggle("AutoInteractToggle", {
-	Text = "Auto Interact", Default = false, Tooltip = "Automatically triggers nearby prompts."
-})
-Toggles.AutoInteractToggle:AddKeyPicker("AutoInteractKeybind", {
-    Text = "Auto Interact",
-    Default = "R",
-    Mode = "Toggle",
-    SyncToggleState = true
-})
-Groupboxes.Self_Automation:AddDropdown("AutoInteractIgnoreList", {
-	Text = "Ignore List",
-	Values = { "Glitch Fragments", "Jeff Items", "Dropped Items", "Currency", "Minecarts", "Locks" },
-	Default = { "Glitch Fragments", "Jeff Items", "Dropped Items" },
-	Multi = true, AllowNull = true
-})
 Groupboxes.Self_Automation:AddDivider()
 Groupboxes.Self_Automation:AddToggle("AutoClosetToggle", {
 	Text = "Auto Closet", Default = false,
