@@ -1289,9 +1289,11 @@ local Shared = setmetatable({
 	end,
 })
 
--- Sidebar order: General, Hotel, Mines, Backdoors, Outdoors, Visions, Archives, Stairwell, then the tabs below.
+-- Sidebar order starts with General, then Main, followed by the floor tabs.
 local GeneralModule = Abysall.LoadModule("General")
 GeneralModule.Init(Shared)
+local GameModule = Abysall.LoadModule("Game")
+GameModule.Init(Shared)
 local HotelModule = Abysall.LoadModule("Hotel")
 HotelModule.Init(Shared)
 
