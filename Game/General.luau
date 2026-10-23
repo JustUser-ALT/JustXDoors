@@ -167,7 +167,10 @@ local function TrackAndSetAttribute(Object, AttributeName)
 		ByAttribute[AttributeName] = Object:GetAttribute(AttributeName)
 	end
 	local ObjectConnections = TwoHandAttributeConnections[Object]
-	if not ObjectConnections then ObjectConnections = {} TwoHandAttributeConnections[Object] end
+	if not ObjectConnections then
+		ObjectConnections = {}
+		TwoHandAttributeConnections[Object] = ObjectConnections
+	end
 	if not ObjectConnections[AttributeName] then
 		ObjectConnections[AttributeName] = Object:GetAttributeChangedSignal(AttributeName):Connect(function()
 			if Toggles.DisableTwoHandMode.Value and Object.Parent and Object:GetAttribute(AttributeName) ~= false then
