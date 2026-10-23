@@ -158,30 +158,33 @@ local TwoHandOriginalValues = {}
 local TwoHandAttributeConnections = {}
 local function TrackAndSetAttribute(Object, AttributeName)
 	if not Object or Object:GetAttribute(AttributeName) == nil then return end
-	local Key = Object:GetDebugId(0) .. ":" .. AttributeName
-	if TwoHandOriginalValues[Key] == nil then
-		TwoHandOriginalValues[Key] = { Object = Object, Attribute = AttributeName, Value = Object:GetAttribute(AttributeName) }
+	local ByAttribute = TwoHandOriginalValues[Object]
+	if not ByAttribute then ByAttribute = {} TwoHandOriginalValues[Object] = ByAttribute end
+	if ByAttribute[AttributeName] == nil then
+		ByAttribute[AttributeName] = Object:GetAttribute(AttributeName)
 	end
-	if Object:GetAttribute(AttributeName) ~= false then Object:SetAttribute(AttributeName, false) end
-	if not TwoHandAttributeConnections[Key] then
-		TwoHandAttributeConnections[Key] = Object:GetAttributeChangedSignal(AttributeName):Connect(function()
+	local ObjectConnections = TwoHandAttributeConnections[Object]
+	if not ObjectConnections then ObjectConnections = {} TwoHandAttributeConnections[Object] end
+	if not ObjectConnections[AttributeName] then
+		ObjectConnections[AttributeName] = Object:GetAttributeChangedSignal(AttributeName):Connect(function()
 			if Toggles.DisableTwoHandMode.Value and Object.Parent and Object:GetAttribute(AttributeName) ~= false then
 				Object:SetAttribute(AttributeName, false)
 			end
 		end)
 	end
+	if Object:GetAttribute(AttributeName) ~= false then Object:SetAttribute(AttributeName, false) end
 end
 
 local function RestoreTwoHandAttributes()
-	for Key, Connection in TwoHandAttributeConnections do
-		Connection:Disconnect()
-		TwoHandAttributeConnections[Key] = nil
+	for Object, Attributes in TwoHandAttributeConnections do
+		for _, Connection in Attributes do Connection:Disconnect() end
+		TwoHandAttributeConnections[Object] = nil
 	end
-	for Key, Entry in TwoHandOriginalValues do
-		if Entry.Object and Entry.Object.Parent then
-			Entry.Object:SetAttribute(Entry.Attribute, Entry.Value)
+	for Object, Attributes in TwoHandOriginalValues do
+		if Object and Object.Parent then
+			for AttributeName, OriginalValue in Attributes do Object:SetAttribute(AttributeName, OriginalValue) end
 		end
-		TwoHandOriginalValues[Key] = nil
+		TwoHandOriginalValues[Object] = nil
 	end
 end
 
@@ -200,12 +203,13 @@ end
 
 Toggles.DisableTwoHandMode:OnChanged(ApplyTwoHandMode)
 local TwoHandDescendantAdded = Services.Workspace.DescendantAdded:Connect(function(Object)
-	if Toggles.DisableTwoHandMode.Value then
-		local PlayerModel = Services.Workspace:FindFirstChild(LocalPlayer.Name)
-		if PlayerModel and (Object == PlayerModel or Object:IsDescendantOf(PlayerModel)) then
-			TrackAndSetAttribute(Object, "DontUnequip")
-			if Object == PlayerModel then TrackAndSetAttribute(Object, "UsingTwoHanded") end
-		end
+	if not Toggles.DisableTwoHandMode.Value then return end
+	local PlayerModel = Services.Workspace:FindFirstChild(LocalPlayer.Name)
+	if not PlayerModel or (Object ~= PlayerModel and not Object:IsDescendantOf(PlayerModel)) then return end
+	if Object == PlayerModel then TrackAndSetAttribute(Object, "UsingTwoHanded") end
+	TrackAndSetAttribute(Object, "DontUnequip")
+	for _, Descendant in Object:GetDescendants() do
+		TrackAndSetAttribute(Descendant, "DontUnequip")
 	end
 end)
 local TwoHandRespawn = LocalPlayer.CharacterAdded:Connect(function()
@@ -289,14 +293,15 @@ end
 Toggles.InstantPrompts:OnChanged(function(Value)
 	for _, Prompt in Objects.Prompts do
 		if Prompt.Parent then
-			Prompt.HoldDuration = Value and 0 or Prompt:GetAttribute("HoldDuration_Old") or Prompt.HoldDuration
-			ApplyWeaveInstantPrompt(Prompt, Value)
+			if IsWeaveModulePrompt(Prompt) then
+				ApplyWeaveInstantPrompt(Prompt, Value)
+			else
+				Prompt.HoldDuration = Value and 0 or Prompt:GetAttribute("HoldDuration_Old") or Prompt.HoldDuration
+			end
 		end
 	end
-	if Value then
-		for _, Object in Services.Workspace:GetDescendants() do
-			if IsWeaveModulePrompt(Object) then ApplyWeaveInstantPrompt(Object, true) end
-		end
+	for _, Object in Services.Workspace:GetDescendants() do
+		if IsWeaveModulePrompt(Object) then ApplyWeaveInstantPrompt(Object, Value) end
 	end
 end)
 
