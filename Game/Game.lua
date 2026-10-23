@@ -14,6 +14,8 @@ function Module.Init(Shared)
 
     Groupboxes.Main_InfoTabbox = Tabs.Main:AddMiddleTabbox("Visual")
     Groupboxes.Main_ESP = Groupboxes.Main_InfoTabbox:AddTab("ESP")
+
+    Groupboxes.Self_Automation = Tabs.Main:AddLeftGroupbox("Automation")
     Groupboxes.Main_Notifications = Groupboxes.Main_InfoTabbox:AddTab("Notifications")
     Groupboxes.Main_Settings = Groupboxes.Main_InfoTabbox:AddTab("Settings")
 
@@ -90,17 +92,7 @@ function Module.Init(Shared)
     Groupboxes.Main_Settings:AddToggle("ESPArrowsToggle",     { Text = "Enable Arrows", Default = false, Tooltip = "Shows arrow that point to off-screen objects." })
 
 
-    -- Keep the existing Hotel entity color options and behavior, now under Main > Settings.
-    Groupboxes.Main_Settings:AddDivider()
-    Groupboxes.Main_Settings:AddLabel("Entity ESP Color"):AddColorPicker("HotelEntityESPColor", { Default = Color3.fromRGB(255, 0, 0) })
-    local HotelColorNames = {}
-    for _, Entity in HotelEntities do
-        if type(Entity) == "string" then
-            local Idx = "HotelEntityColor_" .. (Entity:gsub("[^%w]", ""))
-            table.insert(HotelColorNames, Idx)
-            Groupboxes.Main_Settings:AddLabel(Entity .. " Color"):AddColorPicker(Idx, { Default = Color3.fromRGB(255, 0, 0) })
-        end
-    end
+    -- Entity ESP uses the global ESP color; no per-entity color pickers here.
 
     table.insert(Globals.FloorEntityLists, {
         ESPToggle = "HotelEntityESPToggle", ESPList = "HotelEntityESPList", ColorPrefix = "HotelEntityColor_",
