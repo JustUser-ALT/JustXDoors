@@ -21,7 +21,7 @@ function Module.Init(Shared)
     Groupboxes.Main_Anti = Groupboxes.Main_AntiTabbox:AddTab("Anti")
     Groupboxes.Main_NoDamage = Groupboxes.Main_AntiTabbox:AddTab("No Damage")
 
-    local HotelEntities = { "Rush", "Ambush", "Eyes", "Halt", "Sally", "Dupe", "Figure", "Snare", "AR0xMBUSH", "RNIUSHCG==" }
+    local HotelEntities = { "Rush", "Ambush", "Eyes", "Halt", "Sally", "Dupe", "Figure", "Snare", "--Glitch--", "Glitch Rush", "Glitch Ambush" }
 
     Groupboxes.Main_ESP:AddToggle("HotelEntityESPToggle", {
         Text = "Entity ESP", Default = false, Tooltip = "Highlights the selected entities."
@@ -95,9 +95,11 @@ function Module.Init(Shared)
     Groupboxes.Main_Settings:AddLabel("Entity ESP Color"):AddColorPicker("HotelEntityESPColor", { Default = Color3.fromRGB(255, 0, 0) })
     local HotelColorNames = {}
     for _, Entity in HotelEntities do
-        local Idx = "HotelEntityColor_" .. (Entity:gsub("[^%w]", ""))
-        table.insert(HotelColorNames, Idx)
-        Groupboxes.Main_Settings:AddLabel(Entity .. " Color"):AddColorPicker(Idx, { Default = Color3.fromRGB(255, 0, 0) })
+        if Entity ~= "--Glitch--" then
+            local Idx = "HotelEntityColor_" .. (Entity:gsub("[^%w]", ""))
+            table.insert(HotelColorNames, Idx)
+            Groupboxes.Main_Settings:AddLabel(Entity .. " Color"):AddColorPicker(Idx, { Default = Color3.fromRGB(255, 0, 0) })
+        end
     end
 
     table.insert(Globals.FloorEntityLists, {
