@@ -95,7 +95,7 @@ function Module.Init(Shared)
     -- Entity ESP uses the global ESP color; no per-entity color pickers here.
 
     table.insert(Globals.FloorEntityLists, {
-        ESPToggle = "HotelEntityESPToggle", ESPList = "HotelEntityESPList", ColorPrefix = "HotelEntityColor_",
+        ESPToggle = "HotelEntityESPToggle", ESPList = "HotelEntityESPList",
         NotifyToggle = "HotelNotifyEntitiesToggle", NotifyList = "HotelNotifyEntitiesList"
     })
 
@@ -105,19 +105,7 @@ function Module.Init(Shared)
     Toggles.HotelEntityESPToggle:OnChanged(RefreshHotelEntities)
     Options.HotelEntityESPList:OnChanged(RefreshHotelEntities)
 
-    local PreviousHotelColor = Options.HotelEntityESPColor.Value
-    Options.HotelEntityESPColor:OnChanged(function(New)
-        for _, Idx in HotelColorNames do
-            if Options[Idx].Value == PreviousHotelColor then Options[Idx]:SetValue(New) end
-        end
-        PreviousHotelColor = New
-        if Functions.RecolorEntityESP then Functions.RecolorEntityESP() end
-    end)
-    for _, Idx in HotelColorNames do
-        Options[Idx]:OnChanged(function()
-            if Functions.RecolorEntityESP then Functions.RecolorEntityESP() end
-        end)
-    end
+
 end
 
 return Module
