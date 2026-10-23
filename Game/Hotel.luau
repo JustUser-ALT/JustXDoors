@@ -19,10 +19,11 @@ function Module.Init(Shared)
 
 	Tabs.Hotel = Window:AddTab("Hotel", "hotel", { Columns = 3 })
 
-	-- right column: Anti / No Damage multisection (toggles moved from the Exploits tab and renamed "Anti ...")
-	Groupboxes.Hotel_AntiTabbox = Tabs.Hotel:AddRightTabbox("Anti / No Damage")
-	Groupboxes.Hotel_Anti = Groupboxes.Hotel_AntiTabbox:AddTab("Anti")
-	Groupboxes.Hotel_NoDamage = Groupboxes.Hotel_AntiTabbox:AddTab("No Damage")
+	-- Anti / No Damage UI lives in Main's third column; keep these aliases so existing
+	-- Hotel toggles and their callbacks continue to register in the moved section.
+	Groupboxes.Hotel_AntiTabbox = Groupboxes.Main_AntiTabbox
+	Groupboxes.Hotel_Anti = Groupboxes.Main_Anti
+	Groupboxes.Hotel_NoDamage = Groupboxes.Main_NoDamage
 	Groupboxes.Hotel_Anti:AddToggle("BypassDupe",           { Text = "Anti Dupe",             Default = false, Tooltip = "Prevents you from open 'Dupe' fake doors." })
 	Groupboxes.Hotel_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you." })
 	Groupboxes.Hotel_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you." })
