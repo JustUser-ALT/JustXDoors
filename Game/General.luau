@@ -159,7 +159,10 @@ local TwoHandAttributeConnections = {}
 local function TrackAndSetAttribute(Object, AttributeName)
 	if not Object or Object:GetAttribute(AttributeName) == nil then return end
 	local ByAttribute = TwoHandOriginalValues[Object]
-	if not ByAttribute then ByAttribute = {} TwoHandOriginalValues[Object] = ByAttribute end
+	if not ByAttribute then
+		ByAttribute = {}
+		TwoHandOriginalValues[Object] = ByAttribute
+	end
 	if ByAttribute[AttributeName] == nil then
 		ByAttribute[AttributeName] = Object:GetAttribute(AttributeName)
 	end
