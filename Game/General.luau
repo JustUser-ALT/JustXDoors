@@ -148,6 +148,76 @@ Groupboxes.General_Self:AddToggle("DoorReachToggle", {
 Groupboxes.General_Self:AddToggle("DisableIdleKick", {
 	Text = "Disable Idle Kick", Default = false, Tooltip = "Prevents the kick from being idle for 20 minutes."
 })
+Groupboxes.General_Self:AddToggle("DisableTwoHandMode", {
+	Text = "Disable 2 Hand Mode", Default = false,
+	Tooltip = "Disables UsingTwoHanded on your player model and DontUnequip on carried items."
+})
+
+-- Disable 2 Hand Mode: save original attribute values, enforce false while enabled, and restore them on disable/unload.
+local TwoHandOriginalValues = {}
+local TwoHandAttributeConnections = {}
+local function TrackAndSetAttribute(Object, AttributeName)
+	if not Object or Object:GetAttribute(AttributeName) == nil then return end
+	local Key = Object:GetDebugId(0) .. ":" .. AttributeName
+	if TwoHandOriginalValues[Key] == nil then
+		TwoHandOriginalValues[Key] = { Object = Object, Attribute = AttributeName, Value = Object:GetAttribute(AttributeName) }
+	end
+	if Object:GetAttribute(AttributeName) ~= false then Object:SetAttribute(AttributeName, false) end
+	if not TwoHandAttributeConnections[Key] then
+		TwoHandAttributeConnections[Key] = Object:GetAttributeChangedSignal(AttributeName):Connect(function()
+			if Toggles.DisableTwoHandMode.Value and Object.Parent and Object:GetAttribute(AttributeName) ~= false then
+				Object:SetAttribute(AttributeName, false)
+			end
+		end)
+	end
+end
+
+local function RestoreTwoHandAttributes()
+	for Key, Connection in TwoHandAttributeConnections do
+		Connection:Disconnect()
+		TwoHandAttributeConnections[Key] = nil
+	end
+	for Key, Entry in TwoHandOriginalValues do
+		if Entry.Object and Entry.Object.Parent then
+			Entry.Object:SetAttribute(Entry.Attribute, Entry.Value)
+		end
+		TwoHandOriginalValues[Key] = nil
+	end
+end
+
+local function ApplyTwoHandMode()
+	if not Toggles.DisableTwoHandMode.Value then
+		RestoreTwoHandAttributes()
+		return
+	end
+	local PlayerModel = Services.Workspace:FindFirstChild(LocalPlayer.Name)
+	if not PlayerModel then return end
+	TrackAndSetAttribute(PlayerModel, "UsingTwoHanded")
+	for _, Object in PlayerModel:GetDescendants() do
+		TrackAndSetAttribute(Object, "DontUnequip")
+	end
+end
+
+Toggles.DisableTwoHandMode:OnChanged(ApplyTwoHandMode)
+local TwoHandDescendantAdded = Services.Workspace.DescendantAdded:Connect(function(Object)
+	if Toggles.DisableTwoHandMode.Value then
+		local PlayerModel = Services.Workspace:FindFirstChild(LocalPlayer.Name)
+		if PlayerModel and (Object == PlayerModel or Object:IsDescendantOf(PlayerModel)) then
+			TrackAndSetAttribute(Object, "DontUnequip")
+			if Object == PlayerModel then TrackAndSetAttribute(Object, "UsingTwoHanded") end
+		end
+	end
+end)
+local TwoHandRespawn = LocalPlayer.CharacterAdded:Connect(function()
+	task.defer(ApplyTwoHandMode)
+end)
+Connections.DisableTwoHandMode = {
+	Disconnect = function()
+		TwoHandDescendantAdded:Disconnect()
+		TwoHandRespawn:Disconnect()
+		RestoreTwoHandAttributes()
+	end
+}
 Toggles.DisableIdleKick:OnChanged(function(Value)
 	if Functions.CheckCompatability({"getconnections"}) then
 		for _, Conn in Abysall.Environment.getconnections(LocalPlayer.Idled) do
@@ -178,11 +248,80 @@ Options.PromptReachSlider:OnChanged(function(Value)
 		Prompt.MaxActivationDistance = Prompt:GetAttribute("MaxActivationDistance_Old") * Value
 	end
 end)
+-- Weave's digit puzzle uses a dynamically named Weave<digits> model and its ModulePrompt.
+-- Keep its hold duration at zero while Instant Prompts is enabled, even if the game rewrites it.
+local WeavePromptConnections = {}
+local function IsWeaveModulePrompt(Object)
+	if not Object or not Object:IsA("ProximityPrompt") or Object.Name ~= "ModulePrompt" then return false end
+	local WeaveView = Object:FindFirstAncestor("WeaveView")
+	if not WeaveView then return false end
+	local Current = Object.Parent
+	while Current and Current ~= WeaveView do
+		if Current.Name:match("^Weave%d+$") then return true end
+		Current = Current.Parent
+	end
+	return false
+end
+
+local function ApplyWeaveInstantPrompt(Prompt, Enabled)
+	if not IsWeaveModulePrompt(Prompt) then return end
+	if Enabled then
+		if Prompt:GetAttribute("Weave_HoldDuration_Old") == nil then
+			Prompt:SetAttribute("Weave_HoldDuration_Old", Prompt.HoldDuration)
+		end
+		Prompt.HoldDuration = 0
+		if not WeavePromptConnections[Prompt] then
+			WeavePromptConnections[Prompt] = Prompt:GetPropertyChangedSignal("HoldDuration"):Connect(function()
+				if Toggles.InstantPrompts.Value and Prompt.Parent and Prompt.HoldDuration ~= 0 then
+					Prompt.HoldDuration = 0
+				end
+			end)
+		end
+	elseif Prompt:GetAttribute("Weave_HoldDuration_Old") ~= nil then
+		local OldDuration = Prompt:GetAttribute("Weave_HoldDuration_Old")
+		local Connection = WeavePromptConnections[Prompt]
+		if Connection then Connection:Disconnect() WeavePromptConnections[Prompt] = nil end
+		Prompt:SetAttribute("Weave_HoldDuration_Old", nil)
+		Prompt.HoldDuration = OldDuration
+	end
+end
+
 Toggles.InstantPrompts:OnChanged(function(Value)
 	for _, Prompt in Objects.Prompts do
-		Prompt.HoldDuration = Value and 0 or Prompt:GetAttribute("HoldDuration_Old")
+		if Prompt.Parent then
+			Prompt.HoldDuration = Value and 0 or Prompt:GetAttribute("HoldDuration_Old") or Prompt.HoldDuration
+			ApplyWeaveInstantPrompt(Prompt, Value)
+		end
+	end
+	if Value then
+		for _, Object in Services.Workspace:GetDescendants() do
+			if IsWeaveModulePrompt(Object) then ApplyWeaveInstantPrompt(Object, true) end
+		end
 	end
 end)
+
+local WeavePromptAdded = Services.Workspace.DescendantAdded:Connect(function(Object)
+	if Toggles.InstantPrompts.Value and IsWeaveModulePrompt(Object) then
+		task.defer(function()
+			if Object.Parent then ApplyWeaveInstantPrompt(Object, true) end
+		end)
+	end
+end)
+
+Connections.InstantPromptsWeave = {
+	Disconnect = function()
+		WeavePromptAdded:Disconnect()
+		for Prompt, Connection in WeavePromptConnections do
+			Connection:Disconnect()
+			if Prompt.Parent and Prompt:GetAttribute("Weave_HoldDuration_Old") ~= nil then
+				Prompt.HoldDuration = Prompt:GetAttribute("Weave_HoldDuration_Old")
+				Prompt:SetAttribute("Weave_HoldDuration_Old", nil)
+			end
+		end
+		table.clear(WeavePromptConnections)
+	end
+}
+
 Toggles.PromptClip:OnChanged(function(Value)
 	for _, Prompt in Objects.Prompts do
 		Prompt.RequiresLineOfSight = Value and false or Prompt:GetAttribute("RequiresLineOfSight_Old")
