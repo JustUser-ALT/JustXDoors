@@ -156,6 +156,7 @@ Groupboxes.General_Self:AddToggle("DisableTwoHandMode", {
 -- Disable 2 Hand Mode: save original attribute values, enforce false while enabled, and restore them on disable/unload.
 local TwoHandOriginalValues = {}
 local TwoHandAttributeConnections = {}
+local TwoHandAttributeWatchers = {}
 local function TrackAndSetAttribute(Object, AttributeName)
 	if not Object or Object:GetAttribute(AttributeName) == nil then return end
 	local ByAttribute = TwoHandOriginalValues[Object]
@@ -181,10 +182,29 @@ local function TrackAndSetAttribute(Object, AttributeName)
 	if Object:GetAttribute(AttributeName) ~= false then Object:SetAttribute(AttributeName, false) end
 end
 
+local function WatchTwoHandAttribute(Object, AttributeName)
+	local ObjectWatchers = TwoHandAttributeWatchers[Object]
+	if not ObjectWatchers then
+		ObjectWatchers = {}
+		TwoHandAttributeWatchers[Object] = ObjectWatchers
+	end
+	if ObjectWatchers[AttributeName] then return end
+	ObjectWatchers[AttributeName] = Object:GetAttributeChangedSignal(AttributeName):Connect(function()
+		if Toggles.DisableTwoHandMode.Value and Object.Parent and Object:GetAttribute(AttributeName) ~= nil then
+			TrackAndSetAttribute(Object, AttributeName)
+		end
+	end)
+	if Object:GetAttribute(AttributeName) ~= nil then TrackAndSetAttribute(Object, AttributeName) end
+end
+
 local function RestoreTwoHandAttributes()
 	for Object, Attributes in TwoHandAttributeConnections do
 		for _, Connection in Attributes do Connection:Disconnect() end
 		TwoHandAttributeConnections[Object] = nil
+	end
+	for Object, Attributes in TwoHandAttributeWatchers do
+		for _, Connection in Attributes do Connection:Disconnect() end
+		TwoHandAttributeWatchers[Object] = nil
 	end
 	for Object, Attributes in TwoHandOriginalValues do
 		if Object and Object.Parent then
@@ -201,9 +221,9 @@ local function ApplyTwoHandMode()
 	end
 	local PlayerModel = Services.Workspace:FindFirstChild(LocalPlayer.Name)
 	if not PlayerModel then return end
-	TrackAndSetAttribute(PlayerModel, "UsingTwoHanded")
+	WatchTwoHandAttribute(PlayerModel, "UsingTwoHanded")
 	for _, Object in PlayerModel:GetDescendants() do
-		TrackAndSetAttribute(Object, "DontUnequip")
+		WatchTwoHandAttribute(Object, "DontUnequip")
 	end
 end
 
@@ -212,10 +232,10 @@ local TwoHandDescendantAdded = Services.Workspace.DescendantAdded:Connect(functi
 	if not Toggles.DisableTwoHandMode.Value then return end
 	local PlayerModel = Services.Workspace:FindFirstChild(LocalPlayer.Name)
 	if not PlayerModel or (Object ~= PlayerModel and not Object:IsDescendantOf(PlayerModel)) then return end
-	if Object == PlayerModel then TrackAndSetAttribute(Object, "UsingTwoHanded") end
-	TrackAndSetAttribute(Object, "DontUnequip")
+	if Object == PlayerModel then WatchTwoHandAttribute(Object, "UsingTwoHanded") end
+	WatchTwoHandAttribute(Object, "DontUnequip")
 	for _, Descendant in Object:GetDescendants() do
-		TrackAndSetAttribute(Descendant, "DontUnequip")
+		WatchTwoHandAttribute(Descendant, "DontUnequip")
 	end
 end)
 local TwoHandRespawn = LocalPlayer.CharacterAdded:Connect(function()
