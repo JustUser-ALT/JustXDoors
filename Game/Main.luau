@@ -230,11 +230,11 @@ local Entities = {
 		NotifyMessage = { Title = "Entity 'Gloombat Swarm' has spawned.", Body = "Keep all light sources turned off." }
 	},
 	["GlitchRush"] = {
-		Alias = "RNIUSHCG==",
+		Alias = "Glitch Rush",
 		NotifyMessage = { Title = "Entity 'RNIUSHCG==' has spawned.", Body = "Find a hiding spot." }
 	},
 	["GlitchAmbush"] = {
-		Alias = "AR0xMBUSH",
+		Alias = "Glitch Ambush",
 		NotifyMessage = { Title = "Entity 'AR0xMBUSH' has spawned.", Body = "Find a hiding spot." }
 	},
 	["MonumentEntity"] = {
