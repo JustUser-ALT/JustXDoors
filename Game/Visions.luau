@@ -27,6 +27,26 @@ function Module.Init(Shared)
 	Groupboxes.Visions_Rooms = Tabs.Visions:AddRightGroupbox("Rooms")
 	Groupboxes.Visions_Cringle = Tabs.Visions:AddRightGroupbox("Cringle Workshop")
 
+    Groupboxes.Visions_Rooms:AddDivider()
+    Groupboxes.Visions_Rooms:AddToggle("VisionsEntityESPToggle", { Text = "Entity ESP", Default = false })
+    Groupboxes.Visions_Rooms:AddDropdown("VisionsEntityESPList", { Text = "Entities", Values = {"A-60", "A-120"}, Multi = true, AllowNull = true })
+    Groupboxes.Visions_Rooms:AddToggle("VisionsNotifyEntitiesToggle", { Text = "Notify Entities", Default = false })
+    Groupboxes.Visions_Rooms:AddDropdown("VisionsNotifyEntitiesList", { Text = "Entities", Values = {"A-60", "A-120"}, Multi = true, AllowNull = true })
+
+    Groupboxes.Visions_SuperHardMode:AddDivider()
+    Groupboxes.Visions_SuperHardMode:AddToggle("VisionsJeffESPToggle", { Text = "Entity ESP", Default = false })
+    Groupboxes.Visions_SuperHardMode:AddDropdown("VisionsJeffESPList", { Text = "Entities", Values = {"Jeff the Killer"}, Multi = true, AllowNull = true })
+    Groupboxes.Visions_SuperHardMode:AddToggle("VisionsJeffNotifyToggle", { Text = "Notify Entities", Default = false })
+    Groupboxes.Visions_SuperHardMode:AddDropdown("VisionsJeffNotifyList", { Text = "Entities", Values = {"Jeff the Killer"}, Multi = true, AllowNull = true })
+
+    table.insert(Shared.Globals.FloorEntityLists, { ESPToggle = "VisionsEntityESPToggle", ESPList = "VisionsEntityESPList", NotifyToggle = "VisionsNotifyEntitiesToggle", NotifyList = "VisionsNotifyEntitiesList" })
+    table.insert(Shared.Globals.FloorEntityLists, { ESPToggle = "VisionsJeffESPToggle", ESPList = "VisionsJeffESPList", NotifyToggle = "VisionsJeffNotifyToggle", NotifyList = "VisionsJeffNotifyList" })
+    local function RefreshVisionsEntities()
+        if Shared.Functions.RefreshEntityESP then Shared.Functions.RefreshEntityESP() end
+    end
+    for _, Name in {"VisionsEntityESPToggle", "VisionsJeffESPToggle"} do Shared.Toggles[Name]:OnChanged(RefreshVisionsEntities) end
+    for _, Name in {"VisionsEntityESPList", "VisionsJeffESPList"} do Shared.Options[Name]:OnChanged(RefreshVisionsEntities) end
+
 	Tabs.Visions:UpdateWarningBox({
 		Visible = true,
 		Title = "Compatability/Risk Warning",
