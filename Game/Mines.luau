@@ -16,7 +16,7 @@ function Module.Init(Shared)
 
 	Tabs.Mines = Window:AddTab("Mines", "mines", { Columns = 3 })
 
-	Groupboxes.Mines_Automation = Tabs.Mines:AddLeftGroupbox("Automation")
+	-- Automation controls are now hosted in Main > Automation > Mines.
 	Groupboxes.Mines_Visual = Tabs.Mines:AddMiddleGroupbox("Visual")
 
 	Groupboxes.Mines_Anti = Tabs.Mines:AddRightGroupbox("Anti")
