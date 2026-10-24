@@ -136,11 +136,6 @@ local function UpdateBeamColor(BeamTable, Value)
 	for _, Beam in BeamTable do Beam.Color = Seq end
 end
 
-Groupboxes.Outdoors_Visual:AddToggle("ShowEyestalkPathToggle", {
-	Text = "Show Eyestalk Path", Default = false, Tooltip = "Shows you the correct path in the eyestalk chase.",
-	Risky = Shared.Floor ~= "Garden"
-})
-Toggles.ShowEyestalkPathToggle:AddColorPicker("ShowEyestalkPathColor", { Text = "Eyestalk Path", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
 Toggles.ShowEyestalkPathToggle:OnChanged(function(V) UpdateBeamVisibility(Objects.EyestalkHighlights, "ShowEyestalkPathColor", V) end)
 Options.ShowEyestalkPathColor:OnChanged(function(V)  UpdateBeamColor(Objects.EyestalkHighlights, V) end)
 end
