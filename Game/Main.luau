@@ -1151,8 +1151,10 @@ end
 Functions.EntityESPColorFor = function(Label)
 	for _, FloorList in Globals.FloorEntityLists do
 		if FloorList.ESPToggle and Toggles[FloorList.ESPToggle].Value and Options[FloorList.ESPList].Value[Label] then
-			local Picker = Options[FloorList.ColorPrefix .. SanitizeEntityLabel(Label)]
-			if Picker then return Picker.Value end
+			if FloorList.ColorPrefix then
+				local Picker = Options[FloorList.ColorPrefix .. SanitizeEntityLabel(Label)]
+				if Picker then return Picker.Value end
+			end
 		end
 	end
 	return Options.EntityESPColor.Value
@@ -1865,7 +1867,7 @@ Groupboxes.Visuals_ESP_Toggles:AddToggle("MiscESPToggle",       { Text = "Misc",
 Groupboxes.Visuals_ESP_Toggles:AddDivider()
 Groupboxes.Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
 	Text = "Entity List",
-	Values = { "Rush","Bash","Scribbles","Teller","DronesStampede","Creak","Noise","Noise_TV","Balls","Portrait","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Gloombat Eggs","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Bash","Scribbles","Teller","DronesStampede","Creak","Noise","Noise_TV","Balls","Portrait","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Gloombat Eggs","Grumble","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Glitch Rush","Glitch Ambush" },
 	Multi = true,
 	AllowNull = true
 })
