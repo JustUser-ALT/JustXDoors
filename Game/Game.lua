@@ -22,24 +22,25 @@ function Module.Init(Shared)
     local AutoClosetSection = Groupboxes.Self_Automation:MultiSection({
         Title = "Auto Closet", Pages = {"Auto Closet", "Spectate"}, Layout = "Rows", Columns = 2
     })
-    AutoClosetSection:Page("Auto Closet"):Toggle("AutoClosetToggle", {
-        Name = "Auto Closet", Shared = true, Default = false,
+    AutoClosetSection:Page("Auto Closet"):Toggle({
+        Flag = "AutoClosetToggle", Name = "Auto Closet", Shared = true, Default = false,
+        Tooltip = "Automatically hides in a nearby closet when an entity is near."
+    })
+    AutoClosetSection:Page("Auto Closet"):Keybind({
+        Flag = "AutoClosetKeybind", Name = "Auto Closet", Shared = true, Default = "Q", Mode = "Toggle",
         Callback = function() end
     })
-    Toggles.AutoClosetToggle:AddKeyPicker("AutoClosetKeybind", {
-        Text = "Auto Closet", Default = "Q", Mode = "Toggle", SyncToggleState = true
-    })
-    AutoClosetSection:Page("Auto Closet"):Dropdown("AutoClosetEntityList", {
-        Name = "Ignore List", Shared = true,
+    AutoClosetSection:Page("Auto Closet"):Dropdown({
+        Flag = "AutoClosetEntityList", Name = "Ignore List", Shared = true,
         Values = {"Rush", "Ambush", "Blitz", "DronesStampede", "Scribbles", "A-60", "A-120", "AR0xMBUSH", "RNIUSHCG=="},
         Multi = true, AllowNull = true
     })
-    AutoClosetSection:Page("Spectate"):Toggle("SpectateEntityToggle", {
-        Name = "Spectate Entity", Shared = true, Default = false,
-        Tooltip = "Spectates the entity while auto hiding.", Callback = function() end
+    AutoClosetSection:Page("Spectate"):Toggle({
+        Flag = "SpectateEntityToggle", Name = "Spectate Entity", Shared = true, Default = false,
+        Tooltip = "Spectates the entity while auto hiding."
     })
-    AutoClosetSection:Page("Spectate"):Dropdown("SpecateEntityMode", {
-        Name = "Spectate Entity Mode", Shared = true,
+    AutoClosetSection:Page("Spectate"):Dropdown({
+        Flag = "SpecateEntityMode", Name = "Spectate Entity Mode", Shared = true,
         Values = {"Player to Entity", "Entity to Player"}, Default = 1, AllowNull = true
     })
     Groupboxes.Main_Notifications = Groupboxes.Main_InfoTabbox:AddTab("Notifications")
