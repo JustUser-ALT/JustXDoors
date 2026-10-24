@@ -25,13 +25,60 @@ function Module.Init(Shared)
     Groupboxes.Main_Anti = Groupboxes.Main_AntiTabbox:AddTab("Anti")
     Groupboxes.Main_NoDamage = Groupboxes.Main_AntiTabbox:AddTab("No Damage")
 
-    local HotelEntities = { "Rush", "Ambush", "Eyes", "Halt", "Sally", "Dupe", "Figure", "Snare", { Divider = "Glitch" }, "Glitch Rush", "Glitch Ambush" }
+    -- Shared entity options for both ESP and Notifications. Divider entries are labels only.
+    local EntityOptions = {
+        { Divider = "Hotel" },
+        "Rush",
+        "Ambush",
+        "Eyes",
+        "Halt",
+        "Sally",
+
+        { Divider = "Mines" },
+        "Rush",
+        "Ambush",
+        "Eyes",
+        "Halt",
+        "Gloombat Swarm",
+
+        { Divider = "Backdoors" },
+        "Blitz",
+        "Lookman",
+
+        { Divider = "Outdoors" },
+        "Groundskeeper",
+        "Monument",
+
+        { Divider = "Archives" },
+        "Bash",
+        "Scribbles",
+        "Teller",
+        "DronesStampede",
+        "Portrait",
+
+        { Divider = "Vision / Rooms" },
+        "A-60",
+        "A-120",
+
+        { Divider = "Vision / Super Hard Mode" },
+        "Jeff the Killer",
+
+        { Divider = "Stairwell" },
+        "Creak",
+        "Noise",
+        "Noise_TV",
+        "Balls",
+
+        { Divider = "Glitch" },
+        "Glitch Ambush",
+        "Glitch Rush",
+    }
 
     Groupboxes.Main_ESP:AddToggle("HotelEntityESPToggle", {
         Text = "Entity ESP", Default = false, Tooltip = "Highlights the selected entities."
     })
     Groupboxes.Main_ESP:AddDropdown("HotelEntityESPList", {
-        Text = "Entities", Values = HotelEntities, Multi = true, AllowNull = true
+        Text = "Entities", Values = EntityOptions, Multi = true, AllowNull = true
     })
 
     Groupboxes.Main_ESP:AddDivider()
@@ -50,7 +97,7 @@ function Module.Init(Shared)
         Text = "Notify Entities", Default = false, Tooltip = "Sends a notification when the selected entities spawn."
     })
     Groupboxes.Main_Notifications:AddDropdown("HotelNotifyEntitiesList", {
-        Text = "Entities", Values = HotelEntities, Multi = true, AllowNull = true
+        Text = "Entities", Values = EntityOptions, Multi = true, AllowNull = true
     })
 
     Groupboxes.Main_Settings:AddToggle("EntityChatToggle", { Text = "Notify Chat", Default = false, Tooltip = "Sends a message in the chat when an entity spawns." })
