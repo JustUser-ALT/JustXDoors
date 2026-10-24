@@ -15,7 +15,9 @@ function Module.Init(Shared)
     Groupboxes.Main_InfoTabbox = Tabs.Main:AddMiddleTabbox("Visual")
     Groupboxes.Main_ESP = Groupboxes.Main_InfoTabbox:AddTab("ESP")
 
-    Groupboxes.Self_Automation = Tabs.Main:AddLeftGroupbox("Automation")
+    Groupboxes.Main_AutomationTabbox = Tabs.Main:AddLeftTabbox("Automation")
+    Groupboxes.Self_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Hotel")
+    Groupboxes.Mines_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Mines")
     Groupboxes.Main_Notifications = Groupboxes.Main_InfoTabbox:AddTab("Notifications")
     Groupboxes.Main_Settings = Groupboxes.Main_InfoTabbox:AddTab("Settings")
 
@@ -34,11 +36,13 @@ function Module.Init(Shared)
 
     Groupboxes.Main_ESP:AddDivider()
     Groupboxes.Main_ESP:AddToggle("ShowSeekPathToggle", {
-        Text = "Show Seek Path", Default = false, Tooltip = "Shows you the correct path in Seek chases."
+        Text = "Show Seek Path", Default = false, Tooltip = "Shows you the correct path in Seek chases.",
+        Risky = Shared.Floor ~= "Mines"
     })
     Toggles.ShowSeekPathToggle:AddColorPicker("ShowSeekPathColor", { Text = "Seek Path", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
     Groupboxes.Main_ESP:AddToggle("ShowEyestalkPathToggle", {
-        Text = "Show Eyestalk Path", Default = false, Tooltip = "Shows you the correct path in the Eyestalk chase."
+        Text = "Show Eyestalk Path", Default = false, Tooltip = "Shows you the correct path in the Eyestalk chase.",
+        Risky = Shared.Floor ~= "Garden"
     })
     Toggles.ShowEyestalkPathToggle:AddColorPicker("ShowEyestalkPathColor", { Text = "Eyestalk Path", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
 
