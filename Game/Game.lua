@@ -18,6 +18,30 @@ function Module.Init(Shared)
     Groupboxes.Main_AutomationTabbox = Tabs.Main:AddLeftTabbox("Automation")
     Groupboxes.Self_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Hotel")
     Groupboxes.Mines_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Mines")
+
+    local AutoClosetSection = Groupboxes.Self_Automation:MultiSection({
+        Title = "Auto Closet", Pages = {"Auto Closet", "Spectate"}, Layout = "Rows", Columns = 2
+    })
+    AutoClosetSection:Page("Auto Closet"):Toggle("AutoClosetToggle", {
+        Name = "Auto Closet", Shared = true, Default = false,
+        Callback = function() end
+    })
+    Toggles.AutoClosetToggle:AddKeyPicker("AutoClosetKeybind", {
+        Text = "Auto Closet", Default = "Q", Mode = "Toggle", SyncToggleState = true
+    })
+    AutoClosetSection:Page("Auto Closet"):Dropdown("AutoClosetEntityList", {
+        Name = "Ignore List", Shared = true,
+        Values = {"Rush", "Ambush", "Blitz", "DronesStampede", "Scribbles", "A-60", "A-120", "AR0xMBUSH", "RNIUSHCG=="},
+        Multi = true, AllowNull = true
+    })
+    AutoClosetSection:Page("Spectate"):Toggle("SpectateEntityToggle", {
+        Name = "Spectate Entity", Shared = true, Default = false,
+        Tooltip = "Spectates the entity while auto hiding.", Callback = function() end
+    })
+    AutoClosetSection:Page("Spectate"):Dropdown("SpecateEntityMode", {
+        Name = "Spectate Entity Mode", Shared = true,
+        Values = {"Player to Entity", "Entity to Player"}, Default = 1, AllowNull = true
+    })
     Groupboxes.Main_Notifications = Groupboxes.Main_InfoTabbox:AddTab("Notifications")
     Groupboxes.Main_Settings = Groupboxes.Main_InfoTabbox:AddTab("Settings")
 
@@ -25,53 +49,28 @@ function Module.Init(Shared)
     Groupboxes.Main_Anti = Groupboxes.Main_AntiTabbox:AddTab("Anti")
     Groupboxes.Main_NoDamage = Groupboxes.Main_AntiTabbox:AddTab("No Damage")
 
-    -- Shared entity options for both ESP and Notifications. Divider entries are labels only.
+    -- Shared entity options for Main ESP and Notifications. Vision entities live in Visions.
     local EntityOptions = {
         { Divider = "Hotel" },
-        "Rush",
-        "Ambush",
-        "Eyes",
-        "Halt",
-        "Sally",
+        "Rush", "Ambush", "Eyes", "Halt", "Dupe", "Figure", "Snare", "Sally",
 
         { Divider = "Mines" },
-        "Rush",
-        "Ambush",
-        "Eyes",
-        "Halt",
-        "Gloombat Swarm",
+        "Rush", "Ambush", "Eyes", "Halt", "Dupe", "Giggle", "Gloombat Eggs", "Gloombat Swarm", "Grumble", "Figure", "Snare",
 
         { Divider = "Backdoors" },
-        "Blitz",
-        "Lookman",
+        "Blitz", "Lookman",
 
         { Divider = "Outdoors" },
-        "Groundskeeper",
-        "Monument",
+        "Groundskeeper", "Monument", "Bramble", "Mandrake Hole",
 
         { Divider = "Archives" },
-        "Bash",
-        "Scribbles",
-        "Teller",
-        "DronesStampede",
-        "Portrait",
-
-        { Divider = "Vision / Rooms" },
-        "A-60",
-        "A-120",
-
-        { Divider = "Vision / Super Hard Mode" },
-        "Jeff the Killer",
+        "Bash", "Scribbles", "Teller", "DronesStampede", "Portrait",
 
         { Divider = "Stairwell" },
-        "Creak",
-        "Noise",
-        "Noise_TV",
-        "Balls",
+        "Creak", "Noise", "Noise_TV", "Balls",
 
         { Divider = "Glitch" },
-        "Glitch Ambush",
-        "Glitch Rush",
+        "Glitch Ambush", "Glitch Rush",
     }
 
     Groupboxes.Main_ESP:AddToggle("HotelEntityESPToggle", {
