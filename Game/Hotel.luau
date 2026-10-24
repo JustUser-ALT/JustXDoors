@@ -17,7 +17,6 @@ function Module.Init(Shared)
 	local CurrentRooms, Functions, Globals, Groupboxes, LocalPlayer, Options, Tabs, Toggles, Window
 	   = Shared.CurrentRooms, Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.LocalPlayer, Shared.Options, Shared.Tabs, Shared.Toggles, Shared.Window
 
-	Tabs.Hotel = Window:AddTab("Hotel", "hotel", { Columns = 3 })
 
 	-- Anti / No Damage UI lives in Main's third column; keep these aliases so existing
 	-- Hotel toggles and their callbacks continue to register in the moved section.
@@ -90,30 +89,7 @@ Toggles.AutoHotelIgnoreEntities = Groupboxes.Self_Automation:AddToggle("AutoHote
 	Tooltip = "Skip all entity waits and pauses.",
 	Default = false
 })
-Groupboxes.Self_Automation:AddDivider()
-Groupboxes.Self_Automation:AddDivider()
-Groupboxes.Self_Automation:AddToggle("AutoClosetToggle", {
-	Text = "Auto Closet", Default = false,
-	Tooltip = "Automatically hides in a nearby closet when an entity is near."
-})
-Toggles.AutoClosetToggle:AddKeyPicker("AutoClosetKeybind", {
-	Text = "Auto Closet", Default = "Q", Mode = "Toggle", SyncToggleState = true
-})
-Groupboxes.Self_Automation:AddDropdown("AutoClosetEntityList", {
-	Text = "Ignore List",
-	Values = { "Rush", "Ambush", "Blitz", "DronesStampede", "Scribbles", "A-60", "A-120", "AR0xMBUSH", "RNIUSHCG==" },
-	Multi = true, AllowNull = true
-})
-Groupboxes.Self_Automation:AddToggle("SpectateEntityToggle", {
-	Text = "Spectate Entity",
-	Default = false,
-	Tooltip = "Spectates the entity while auto hiding."
-})
-Groupboxes.Self_Automation:AddDropdown("SpecateEntityMode", {
-	Values = {"Player to Entity", "Entity to Player"},
-	Default = 1,
-	AllowNull = true
-})
+-- Auto Closet UI is created in Main > Automation.
 
 
 
@@ -1209,11 +1185,6 @@ end)
 
 
 
-	Tabs.Hotel:UpdateWarningBox({
-		Visible = true,
-		Title = "Risk Warning",
-		Text = "Features highlighted in red are risky.",
-	})
 end
 
 -- Anti Screech / Halt / Dread and the No Damage toggles with their handlers (moved from the Exploits "Remove" groupbox).
