@@ -918,8 +918,20 @@ local function RenderAll()
                 for _, Page in ipairs(Item.Tabbox.Pages) do table.insert(Names, Page.Name) end
                 if #Names > 0 then
                     local MS = Tab:MultiSection({ Title = Item.Title, Pages = Names, Column = Column })
+                    local SharedElements = {}
                     for _, Page in ipairs(Item.Tabbox.Pages) do
-                        RenderElements(MS:Page(Page.Name), Page.Box, MS.Panel)
+                        local PageElements = {}
+                        for _, E in ipairs(Page.Box.Elements) do
+                            if E.Obj and E.Obj.Pinned == true then
+                                table.insert(SharedElements, E)
+                            else
+                                table.insert(PageElements, E)
+                            end
+                        end
+                        RenderElements(MS:Page(Page.Name), { Elements = PageElements }, MS.Panel)
+                    end
+                    if #SharedElements > 0 then
+                        RenderElements(MS:Shared(), { Elements = SharedElements }, MS.Panel)
                     end
                 end
             end
