@@ -193,6 +193,7 @@ local function NewObj(Type, Idx, Cfg2)
         Disabled = Cfg2.Disabled == true,
         DisabledTooltip = Cfg2.DisabledTooltip,
         Risky = Cfg2.Risky == true,
+        Pinned = Cfg2.Pinned == true,
         Visible = Cfg2.Visible ~= false,
         _callbacks = {},
         _clicks = {},
