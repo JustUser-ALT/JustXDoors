@@ -53,6 +53,15 @@ function Module.Init(Shared)
         Text = "Anti Lookman", Default = false,
         Tooltip = "Prevents 'Lookman' from hurting you."
     })
+    Groupboxes.Main_Anti:AddToggle("BypassWater", { Text = "Anti Electrical Water", Default = false, Tooltip = "Prevents electric water from hurting you." })
+    Groupboxes.Main_Anti:AddToggle("BypassAlma", { Text = "Anti Alma", Default = false, Tooltip = "Prevents Alma from spawning." })
+    Groupboxes.Main_Anti:AddToggle("BypassDrones", { Text = "Anti Drones", Default = false, Tooltip = "Prevents Drones from attacking you." })
+    Groupboxes.Main_Anti:AddToggle("AntiScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Prevents Scribbles from attacking you." })
+    Groupboxes.Main_Anti:AddToggle("BypassDronesStampede", { Text = "Anti Stampede", Default = false, Tooltip = "Prevents The Drones Stampede from attacking you." })
+    Groupboxes.Main_Anti:AddToggle("AntiRansom", { Text = "Anti Ransom", Default = false, Tooltip = "Prevents Ransom from attacking you." })
+    Groupboxes.Main_Anti:AddToggle("AntiClosetTrash", { Text = "Anti Closet Trash", Default = false, Tooltip = "Prevents Closet Trash from spawning." })
+    Groupboxes.Main_Anti:AddToggle("DisableStairwellCrusherCollision", { Text = "Anti Crusher", Default = false, Tooltip = "Disables crusher collisions and removes their trigger parts." })
+    Groupboxes.Main_Anti:AddToggle("MeldRemover", { Text = "Anti Meld", Default = false, Tooltip = "Removes Meld objects." })
     Groupboxes.Main_Anti:AddToggle("BypassVacuum", {
         Text = "Anti Vacuum", Default = false,
         Tooltip = "Prevents you from falling into 'Vacuum' fake doors."
