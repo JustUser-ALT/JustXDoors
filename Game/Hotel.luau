@@ -33,7 +33,7 @@ function Module.Init(Shared)
 Groupboxes.Self_Automation:AddToggle("AutoBreakerBox", {
 	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box."
 })
-Groupboxes.Self_Automation:AddToggle("AutoSolveAnchors", {
+Groupboxes.Mines_Automation:AddToggle("AutoSolveAnchors", {
 	Text = "Auto Solve Anchors", Default = false,
 	Tooltip = "Automatically enters the correct code into anchors when you are near them."
 })
