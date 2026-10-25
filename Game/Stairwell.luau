@@ -9,7 +9,7 @@
 local Module = {}
 
 function Module.Init(Shared)
-	Shared.Tabs.Stairwell = Shared.Window:AddTab("Stairwell", "rbxassetid://80017304328364")
+	-- Stairwell controls are hosted in Main > Automation > Stairwell.
 end
 
 -- Main.luau calls Module.Stage(Shared) at the position where this code used to live.
@@ -24,7 +24,7 @@ function Module.Stage(Shared)
 	local OrbitDroppedItemsPauseUntil = 0
 	local droppedItemsIntervalRunning = false
 
-Groupboxes.Stairwell_Misc = Tabs.Stairwell:AddLeftGroupbox("Exploits / Anti / Misc")
+Groupboxes.Stairwell_Misc = Groupboxes.Stairwell_Automation
 
 
 
@@ -294,18 +294,7 @@ end)
 Groupboxes.Stairwell_Misc:AddDivider()
 
 
-Groupboxes.Stairwell_Misc:AddToggle("DisableStairwellCrusherCollision", {
-	Text = "Disable Crushers",
-	Default = false,
-})
-Groupboxes.Stairwell_Misc:AddToggle("DeleteStairwellCrusherExceptBasicWall", {
-	Text = "Delete Crushers",
-	Default = false,
-})
-Groupboxes.Stairwell_Misc:AddToggle("MeldRemover", {
-	Text = "Remove Meld",
-	Default = false,
-})
+-- Anti Crusher and Anti Meld are hosted in Main > Anti.
 
 Groupboxes.Stairwell_Misc:AddToggle("StairwellLandingSpam", {
 	Text = "TP to trash and drop trash.",
@@ -359,45 +348,6 @@ Toggles.DisableStairwellCrusherCollision:OnChanged(function(DisableStairwellCrus
 		end
 	end)
 end)
-Toggles.DeleteStairwellCrusherExceptBasicWall:OnChanged(function(DeleteStairwellCrusherExceptBasicWallState)
-	if not DeleteStairwellCrusherExceptBasicWallState then return end
-
-	task.spawn(function()
-		while Toggles.DeleteStairwellCrusherExceptBasicWall.Value do
-			for _, DeleteStairwellCrusherRoom in ipairs(workspace.CurrentRooms:GetChildren()) do
-				local DeleteStairwellCrusherAssets = DeleteStairwellCrusherRoom:FindFirstChild("Assets")
-				if DeleteStairwellCrusherAssets then
-					for _, DeleteStairwellCrusherContainer in ipairs(DeleteStairwellCrusherAssets:GetChildren()) do
-						if DeleteStairwellCrusherContainer.Name == "StairwellCrusherContainer1" then
-							local DeleteStairwellCrusherToDestroy = {}
-							for _, DeleteStairwellCrusherDescendant in ipairs(DeleteStairwellCrusherContainer:GetDescendants()) do
-								local DeleteStairwellCrusherUnderBasicWall = false
-								local DeleteStairwellCrusherParent = DeleteStairwellCrusherDescendant.Parent
-								while DeleteStairwellCrusherParent and DeleteStairwellCrusherParent ~= DeleteStairwellCrusherContainer do
-									if DeleteStairwellCrusherParent.Name == "BasicWall" then
-										DeleteStairwellCrusherUnderBasicWall = true
-										break
-									end
-									DeleteStairwellCrusherParent = DeleteStairwellCrusherParent.Parent
-								end
-								if not DeleteStairwellCrusherUnderBasicWall and DeleteStairwellCrusherDescendant.Name ~= "BasicWall" then
-									DeleteStairwellCrusherToDestroy[#DeleteStairwellCrusherToDestroy + 1] = DeleteStairwellCrusherDescendant
-								end
-							end
-							for _, DeleteStairwellCrusherInstance in ipairs(DeleteStairwellCrusherToDestroy) do
-								if DeleteStairwellCrusherInstance and DeleteStairwellCrusherInstance.Parent then
-									DeleteStairwellCrusherInstance:Destroy()
-								end
-							end
-						end
-					end
-				end
-			end
-			task.wait(0.5)
-		end
-	end)
-end)
-
 Toggles.MeldRemover:OnChanged(function(State)
 	if not State then return end
 	task.spawn(function()
@@ -566,7 +516,7 @@ Groupboxes.Stairwell_Misc:AddButton("Refresh Players", function()
 	Options.ShoppingCartTarget:SetValues(ShoppingCartPlayerNames)
 end)
 
-Groupboxes.Stairwell_Experimental = Tabs.Stairwell:AddRightGroupbox("Experimental")
+Groupboxes.Stairwell_Experimental = Groupboxes.Stairwell_Automation
 
 
 local function TPDropsToNearestGrinder()
