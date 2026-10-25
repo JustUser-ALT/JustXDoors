@@ -8,7 +8,7 @@
 local Module = {}
 
 function Module.Init(Shared)
-	Shared.Tabs.Archives = Shared.Window:AddTab("Archives", "rbxassetid://104508835882225")
+	-- Archives controls are hosted in Main > Automation > Archives.
 end
 
 -- Main.luau calls Module.Stage(Shared) at the position where this code used to live.
@@ -32,12 +32,9 @@ function Module.Stage(Shared)
 	local AntiScribbles_Connection
 	local DroneConnection
 
-Groupboxes.Archives_Misc = Tabs.Archives:AddRightGroupbox("Exploits / Anti")
-Groupboxes.Archives_Misc:AddToggle("AntiRansom", { Text = "Anti Ransom", Default = false, Tooltip = "Prevents 'Ransom' from attacking you." })
-Groupboxes.Archives_Misc:AddToggle("AntiClosetTrash", { Text = "Anti Closet Trash", Default = false, Tooltip = "Prevents 'Closet Trash' from spawning." })
-Groupboxes.Archives_Misc:AddToggle("ForgetMeNotSolver", { Text = "Forget Me Not Skipper", Default = false, Tooltip = "Automatically Skippes Forget Me Not doors." })
+Groupboxes.Archives_Misc = Groupboxes.Archives_Automation
+Groupboxes.Archives_Misc:AddToggle("ForgetMeNotSolver", { Text = "Forget Me Not Skipper", Default = false, Tooltip = "Automatically skips Forget Me Not doors." })
 Groupboxes.Archives_Misc:AddToggle("TimeShower", { Text = "Time Shower", Default = false, Tooltip = "Shows the Archives clock time." })
-Groupboxes.Archives_Misc:AddToggle("BypassDronesStampede", { Text = "Stop Time/Anti Stampede", Default = false, Tooltip = "Prevents 'The Drones Stampede' from attacking you." })
 Groupboxes.Archives_Misc:AddToggle("HonchoCorrectBoxESP", { Text = "Correct Box ESP/Auto Interact", Default = false, Tooltip = "ESP correct Archives boxes in the Honcho sequence and automatically interact with the correct deposit." })
 
 TimeShowerLabel = Instance.new("TextLabel")
@@ -306,13 +303,8 @@ Toggles.HonchoCorrectBoxESP:OnChanged(function(Value)
 end)
 
 
-Groupboxes.Archives_Bypasses = Tabs.Archives:AddLeftGroupbox("Bypasses")
-Groupboxes.Archives_Bypasses:AddToggle("BypassWater", { Text = "Bypass Electric Water", Default = false, Tooltip = "Prevents electric water from hurting you." })
-Groupboxes.Archives_Bypasses:AddToggle("BypassAlma", { Text = "Bypass Alma", Default = false, Tooltip = "Prevents 'Alma' from spawning." })
-Groupboxes.Archives_Bypasses:AddToggle("BypassDrones", { Text = "Bypass Drones", Default = false, Tooltip = "Prevents 'Drones' from attacking you." })
-Groupboxes.Archives_Bypasses:AddToggle("AntiScribbles", { Text = "Bypass Scribbles", Default = false, Tooltip = "Prevents 'Scribbles' from attacking you." })
-
-Groupboxes.Archives_Experimental = Tabs.Archives:AddLeftGroupbox("Experimental")
+Groupboxes.Archives_Bypasses = Groupboxes.Main_Anti
+Groupboxes.Archives_Experimental = Groupboxes.Archives_Automation
 
 Toggles.AntiClosetTrash:OnChanged(function(Value)
 	if AntiClosetTrash_Connection then
