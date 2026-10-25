@@ -14,25 +14,12 @@ function Module.Init(Shared)
 	local Functions, Globals, Groupboxes, Tabs, Window
 	   = Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.Tabs, Shared.Window
 
-	Tabs.Mines = Window:AddTab("Mines", "mines", { Columns = 3 })
+	-- Mines-specific controls are hosted in Main; no separate Mines tab is created.
 
 	-- Automation controls are now hosted in Main > Automation > Mines.
-	Groupboxes.Mines_Visual = Tabs.Mines:AddMiddleGroupbox("Visual")
+	Groupboxes.Mines_Visual = Groupboxes.Main_ESP
+	Groupboxes.Mines_Anti = Groupboxes.Main_Anti
 
-	Groupboxes.Mines_Anti = Tabs.Mines:AddRightGroupbox("Anti")
-	Groupboxes.Mines_Anti:AddToggle("BypassGiggle",         { Text = "Anti Giggle",           Default = false, Tooltip = "Prevents 'Giggle' from attacking you." })
-	Groupboxes.Mines_Anti:AddToggle("BypassGloombatEggs",   { Text = "Anti Gloombat Eggs",    Default = false, Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs." })
-	Groupboxes.Mines_Anti:AddToggle("RemoveFigureMines", {
-		Text = "Anti Figure", Default = false, Tooltip = "Completely removes the entity 'Figure' (doesn't always work).",
-		Risky = not (Shared.Floor == "Fools" or Shared.Floor == "OldHotel" or Shared.Floor == "Mines"),
-		Disabled = not Functions.CheckCompatability({"isnetworkowner"}), DisabledTooltip = Globals.IncompatibleMessage
-	})
-
-	Tabs.Mines:UpdateWarningBox({
-		Visible = true,
-		Title = "Compatability/Risk Warning",
-		Text = "Features highlighted in red are risky / dont work in the current floor.",
-	})
 end
 
 -- Skip Seek / Auto Steer Minecart / Auto Complete Dam Seek / Show Seek Path with their handlers (moved from the Floors tab).
