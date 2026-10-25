@@ -44,13 +44,37 @@ function Module.Init(Shared)
     Groupboxes.Main_Anti = Groupboxes.Main_AntiTabbox:AddTab("Anti")
     Groupboxes.Main_NoDamage = Groupboxes.Main_AntiTabbox:AddTab("No Damage")
 
+    Groupboxes.Main_Anti:AddToggle("BypassGiggle", {
+        Text = "Anti Giggle", Default = false,
+        Tooltip = "Prevents 'Giggle' from attacking you."
+    })
+    Groupboxes.Main_Anti:AddToggle("BypassGloombatEggs", {
+        Text = "Anti Gloombat Eggs", Default = false,
+        Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs."
+    })
+    Groupboxes.Main_Anti:AddToggle("RemoveFigureMines", {
+        Text = "Anti Figure", Default = false,
+        Tooltip = "Completely removes the entity 'Figure' (doesn't always work).",
+        Risky = not (Shared.Floor == "Fools" or Shared.Floor == "OldHotel" or Shared.Floor == "Mines"),
+        Disabled = not Functions.CheckCompatability({"isnetworkowner"}),
+        DisabledTooltip = Globals.IncompatibleMessage
+    })
+    Groupboxes.Main_Anti:AddToggle("RemoveSurge", {
+        Text = "Anti Surge", Default = false,
+        Tooltip = "Prevents 'Surge' from spawning."
+    })
+    Groupboxes.Main_NoDamage:AddToggle("NoSurgeDamage", {
+        Text = "No Surge Damage", Default = false,
+        Tooltip = "Prevents 'Surge' from hurting you."
+    })
+
     -- Shared entity options for Main ESP and Notifications. Vision entities live in Visions.
     local EntityOptions = {
         { Divider = "Hotel" },
         "Rush", "Ambush", "Eyes", "Halt", "Dupe", "Figure", "Snare", "Sally",
 
         { Divider = "Mines" },
-        "Rush", "Ambush", "Eyes", "Halt", "Dupe", "Giggle", "Gloombat Eggs", "Gloombat Swarm", "Grumble", "Figure", "Snare",
+        "Rush", "Ambush", "Eyes", "Halt", "Dupe", "Giggle", "Gloombat Eggs", "Grumble", "Figure", "Snare",
 
         { Divider = "Backdoors" },
         "Blitz", "Lookman",
