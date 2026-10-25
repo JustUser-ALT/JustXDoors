@@ -19,25 +19,22 @@ function Module.Init(Shared)
     Groupboxes.Self_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Hotel")
     Groupboxes.Mines_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Mines")
 
-    Groupboxes.Main_AutoClosetTabbox = Tabs.Main:AddLeftTabbox("Auto Closet")
-    Groupboxes.Main_AutoCloset = Groupboxes.Main_AutoClosetTabbox:AddTab("Auto Closet")
-    Groupboxes.Main_Spectate = Groupboxes.Main_AutoClosetTabbox:AddTab("Spectate")
-
-    Groupboxes.Main_AutoCloset:AddToggle("AutoClosetToggle", {
-        Text = "Auto Closet", Default = false,
+    -- Pinned controls are rendered in the shared area above the Hotel/Mines pages.
+    Groupboxes.Self_Automation:AddToggle("AutoClosetToggle", {
+        Text = "Auto Closet", Default = false, Pinned = true,
         Tooltip = "Automatically hides in a nearby closet when an entity is near."
     })
-    Groupboxes.Main_AutoCloset:AddDropdown("AutoClosetEntityList", {
-        Text = "Ignore List",
+    Groupboxes.Self_Automation:AddDropdown("AutoClosetEntityList", {
+        Text = "Ignore List", Pinned = true,
         Values = {"Rush", "Ambush", "Blitz", "DronesStampede", "Scribbles", "A-60", "A-120", "AR0xMBUSH", "RNIUSHCG=="},
         Multi = true, AllowNull = true
     })
-    Groupboxes.Main_Spectate:AddToggle("SpectateEntityToggle", {
-        Text = "Spectate Entity", Default = false,
+    Groupboxes.Self_Automation:AddToggle("SpectateEntityToggle", {
+        Text = "Spectate Entity", Default = false, Pinned = true,
         Tooltip = "Spectates the entity while auto hiding."
     })
-    Groupboxes.Main_Spectate:AddDropdown("SpecateEntityMode", {
-        Text = "Spectate Entity Mode",
+    Groupboxes.Self_Automation:AddDropdown("SpecateEntityMode", {
+        Text = "Spectate Entity Mode", Pinned = true,
         Values = {"Player to Entity", "Entity to Player"}, Default = 1, AllowNull = true
     })
     Groupboxes.Main_Notifications = Groupboxes.Main_InfoTabbox:AddTab("Notifications")
