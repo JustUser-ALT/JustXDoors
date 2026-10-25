@@ -19,8 +19,8 @@ function Module.Init(Shared)
     Groupboxes.Self_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Hotel")
     Groupboxes.Mines_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Mines")
 
-    local AutoClosetSection = Groupboxes.Self_Automation:MultiSection({
-        Title = "Auto Closet", Pages = {"Auto Closet", "Spectate"}, Layout = "Rows", Columns = 2
+    local AutoClosetSection = Tabs.Main:MultiSection({
+        Title = "Auto Closet", Column = 1, Pages = {"Auto Closet", "Spectate"}, Layout = "Rows", Columns = 2
     })
     AutoClosetSection:Page("Auto Closet"):Toggle({
         Flag = "AutoClosetToggle", Name = "Auto Closet", Shared = true, Default = false,
