@@ -26,9 +26,6 @@ function Module.Late(Shared)
 	local FakeEvents, Globals, Groupboxes, Toggles
 	   = Shared.FakeEvents, Shared.Globals, Shared.Groupboxes, Shared.Toggles
 
-Groupboxes.Outdoors_Anti:AddToggle("RemoveSurge", { Text = "Anti Surge", Default = false, Tooltip = "Prevents 'Surge' from spawning."})
-Groupboxes.Outdoors_NoDamage:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you." })
-
 Toggles.NoSurgeDamage:OnChanged(function(Value)
 	if Shared.RemotesFolder:FindFirstChild("SurgeRemote") then
 		if Value then
