@@ -18,6 +18,11 @@ function Module.Init(Shared)
     Groupboxes.Main_AutomationTabbox = Tabs.Main:AddLeftTabbox("Automation")
     Groupboxes.Self_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Hotel")
     Groupboxes.Mines_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Mines")
+    -- Reserved floor pages in the 3x3 Automation multisection layout.
+    Groupboxes.Backdoors_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Backdoors")
+    Groupboxes.Outdoors_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Outdoors")
+    Groupboxes.Archives_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Archives")
+    Groupboxes.Stairwell_Automation = Groupboxes.Main_AutomationTabbox:AddTab("Stairwell")
 
     -- Pinned controls are rendered in the shared area above the Hotel/Mines pages.
     Groupboxes.Self_Automation:AddToggle("AutoClosetToggle", {
@@ -44,6 +49,14 @@ function Module.Init(Shared)
     Groupboxes.Main_Anti = Groupboxes.Main_AntiTabbox:AddTab("Anti")
     Groupboxes.Main_NoDamage = Groupboxes.Main_AntiTabbox:AddTab("No Damage")
 
+    Groupboxes.Main_Anti:AddToggle("BypassLookman", {
+        Text = "Anti Lookman", Default = false,
+        Tooltip = "Prevents 'Lookman' from hurting you."
+    })
+    Groupboxes.Main_Anti:AddToggle("BypassVacuum", {
+        Text = "Anti Vacuum", Default = false,
+        Tooltip = "Prevents you from falling into 'Vacuum' fake doors."
+    })
     Groupboxes.Main_Anti:AddToggle("BypassGiggle", {
         Text = "Anti Giggle", Default = false,
         Tooltip = "Prevents 'Giggle' from attacking you."
@@ -111,6 +124,15 @@ function Module.Init(Shared)
     })
     Toggles.ShowEyestalkPathToggle:AddColorPicker("ShowEyestalkPathColor", { Text = "Eyestalk Path", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
 
+    Groupboxes.Main_Notifications:AddToggle("NotifyLibraryCode", {
+        Text = "Notify Library Code", Default = false,
+        Tooltip = "Automatically solves the code for the library padlock."
+    })
+    Groupboxes.Main_Notifications:AddToggle("NotifyOxygen", {
+        Text = "Notify Oxygen Level", Default = false,
+        Tooltip = "Shows how much oxygen you have remaining."
+    })
+    Groupboxes.Main_Notifications:AddDivider()
     Groupboxes.Main_Notifications:AddToggle("HotelNotifyEntitiesToggle", {
         Text = "Notify Entities", Default = false, Tooltip = "Sends a notification when the selected entities spawn."
     })
