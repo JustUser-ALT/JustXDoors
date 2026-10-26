@@ -256,10 +256,13 @@ function Module.Init(Shared)
 
     local function scan()
         local candidates = {}
-        local roots = {workspace:FindFirstChild("Drops"), workspace:FindFirstChild("CurrentRooms")}
+        local roots = {}
+        local dropsRoot = workspace:FindFirstChild("Drops")
+        local roomsRoot = workspace:FindFirstChild("CurrentRooms")
+        if dropsRoot then table.insert(roots, dropsRoot) end
+        if roomsRoot then table.insert(roots, roomsRoot) end
         for _, root in ipairs(roots) do
-            if root then
-                for _, object in ipairs(root:GetDescendants()) do
+            for _, object in ipairs(root:GetDescendants()) do
                     if object:IsA("Model") or object:IsA("BasePart") then
                         local def = getItemDef(object)
                         if def and not isPlayerCharacter(object) and not insideNonLootContainer(object) then
@@ -278,7 +281,6 @@ function Module.Init(Shared)
                     end
                 end
             end
-        end
         local workspaceAlarm = workspace:FindFirstChild("AlarmClockModel")
         if workspaceAlarm and not candidates[workspaceAlarm] then
             local def = ItemByName["Alarm Clock"]
