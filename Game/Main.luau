@@ -1296,6 +1296,8 @@ local GeneralModule = Abysall.LoadModule("General")
 GeneralModule.Init(Shared)
 local GameModule = Abysall.LoadModule("Game")
 GameModule.Init(Shared)
+local AutoModule = Abysall.LoadModule("Auto")
+AutoModule.Init(Shared)
 local HotelModule = Abysall.LoadModule("Hotel")
 HotelModule.Init(Shared)
 
