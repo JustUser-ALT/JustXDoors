@@ -154,9 +154,8 @@ function Module.Init(Shared)
     ESP:AddDivider()
     ESP:AddToggle("LootESPToggle", {Text="Loot ESP", Default=false, Tooltip="Highlights selected loot items and currency."})
     local ESPSelection = {}
-    ESP:ValueDropdown({
-        Flag="LootESPItems",
-        Text="Loot ESP Items", Options=ItemOptions, MultiSelect=true, Values=ItemValues, Search=true,
+    ESP:AddDropdown("LootESPItems", {
+        Text="Loot ESP Items", Values=ItemOptions, Multi=true, AllowNull=true, Search=true,
         Callback=function(Value) ESPSelection = Value or {} end
     })
 
