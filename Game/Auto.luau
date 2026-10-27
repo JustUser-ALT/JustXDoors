@@ -66,7 +66,7 @@ local ItemDefs = {
 
     {Name="Electrical Key", Names={"KeyElectrical","ElectricalKeyObtain"}, Category="Keys"},
     {Name="Skeleton Key", Names={"SkeletonKey"}, Category="Keys"},
-    {Name="Key", Names={"KeyObtain"}, Category="Keys"},
+
     {Name="Iron Key", Names={"KeyIron","IronKey","IronKeyForCrypt"}, Category="Keys"},
     {Name="Garage Key", Names={"KeyGarage","GarageKey"}, Category="Keys"},
     {Name="Jewelry Key", Names={"KeyJewelry"}, Category="Keys"},
@@ -76,6 +76,7 @@ local ItemDefs = {
     {Name="Threat Detector Drive", Names={"Drive"}, Category="Drives", DriveLabel="THREAT DETECTOR"},
     {Name="Charles Drive", Names={"Drive"}, Category="Drives", DriveLabel="CHARLES"},
 
+    {Name="Key", Names={"KeyObtain"}, Category="Objectives"},
     {Name="Book", Names={"HintBook","LibraryHintBook","BookHint"}, Category="Objectives"},
     {Name="Paper", Names={"HintPaper","LibraryHintPaper","LibraryHintPaperHard"}, Category="Objectives"},
     {Name="Fuse", Names={"FuseObtain","GeneratorFuse"}, Category="Objectives"},
@@ -147,9 +148,6 @@ function Module.Init(Shared)
         Text="Auto Interact", Default=false, Pinned=true,
         Tooltip="Automatically activates selected loot prompts when in range."
     })
-    Automation:AddDropdown("AutoInteractList", {
-        Text="Auto Interact List", Values=ItemOptions, Multi=true, AllowNull=true, Pinned=true
-    })
 
     ESP:AddDivider()
     ESP:AddToggle("LootESPToggle", {Text="Loot ESP", Default=false, Tooltip="Highlights selected loot items and currency."})
@@ -208,6 +206,12 @@ function Module.Init(Shared)
             end
         end
         return nil
+    end
+
+    local function isSelected(Value, Name)
+        if type(Value) ~= "table" then return Value == Name end
+        if Value[Name] == true then return true end
+        return table.find(Value, Name) ~= nil
     end
 
     local function isGoldInRange(Object, def)
@@ -339,9 +343,8 @@ function Module.Init(Shared)
             local def, prompt = data.Def, data.Prompt
             if not object.Parent or not prompt or not prompt.Parent or not prompt.Enabled then continue end
             if not withinRange(prompt) or tick() - data.LastFire < 0.5 then continue end
-            local lootSelected = Toggles.AutoLootToggle.Value and Options.AutoLootList.Value[def.Name]
-            local interactSelected = Toggles.AutoInteractToggle.Value and Options.AutoInteractList.Value[def.Name]
-            if not lootSelected and not interactSelected then continue end
+            local lootSelected = Toggles.AutoLootToggle.Value and isSelected(Options.AutoLootList.Value, def.Name)
+            if not lootSelected and not Toggles.AutoInteractToggle.Value then continue end
             if def.Gold then
                 local value = tonumber(object:GetAttribute("GoldValue")) or 1
                 if value < 1 or value > 6 then continue end
