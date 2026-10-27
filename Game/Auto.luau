@@ -224,6 +224,7 @@ function Module.Init(Shared)
     end
 
     local Tracked = {}
+    local InteractedPrompts = setmetatable({}, {__mode = "k"})
     local lastScan = 0
     local lastAuto = 0
     local function getItemDef(Object)
@@ -344,11 +345,8 @@ function Module.Init(Shared)
             if not object.Parent or not prompt or not prompt.Parent or not prompt.Enabled then continue end
             if not withinRange(prompt) or tick() - data.LastFire < 0.5 then continue end
             local lootSelected = Toggles.AutoLootToggle.Value and isSelected(Options.AutoLootList.Value, def.Name)
-            if not lootSelected and not Toggles.AutoInteractToggle.Value then continue end
-            if def.Gold then
-                local value = tonumber(object:GetAttribute("GoldValue")) or 1
-                if value < 1 or value > 6 then continue end
-            end
+            if not lootSelected then continue end
+            if def.Gold and not isGoldInRange(object, def) then continue end
             data.LastFire = tick()
             task.spawn(function()
                 if Functions.FirePrompt then
@@ -357,6 +355,24 @@ function Module.Init(Shared)
                     Abysall.Environment.fireproximityprompt(prompt)
                 end
             end)
+        end
+
+        -- Auto Interact is global: activate any enabled ProximityPrompt in range, not just loot.
+        if Toggles.AutoInteractToggle.Value then
+            for _, prompt in ipairs(workspace:GetDescendants()) do
+                if not prompt:IsA("ProximityPrompt") or not prompt.Enabled then continue end
+                if not withinRange(prompt) then continue end
+                local last = InteractedPrompts[prompt] or 0
+                if tick() - last < 0.75 then continue end
+                InteractedPrompts[prompt] = tick()
+                task.spawn(function()
+                    if Functions.FirePrompt then
+                        Functions.FirePrompt(prompt)
+                    elseif Abysall.Environment.fireproximityprompt then
+                        Abysall.Environment.fireproximityprompt(prompt)
+                    end
+                end)
+            end
         end
     end)
 
