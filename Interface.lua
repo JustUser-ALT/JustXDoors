@@ -486,6 +486,23 @@ function GroupboxMethods:AddDropdown(Idx, Cfg2)
     return D
 end
 
+function GroupboxMethods:AddValueDropdown(Idx, Cfg2)
+    Cfg2 = Cfg2 or {}
+    local D = NewObj("ValueDropdown", Idx, Cfg2)
+    D.Values = Cfg2.Values or {}
+    D.Value = type(Cfg2.Default) == "table" and Cfg2.Default or {}
+    D.Multi = Cfg2.Multi == true
+    function D:_apply(Value, FromUI)
+        if type(Value) ~= "table" then Value = {} end
+        self.Value = Value
+        if not FromUI then CallCtrl(self, "Set", Value) end
+        Fire(self)
+    end
+    Options[Idx] = D
+    table.insert(self.Elements, { Kind = "ValueDropdown", Obj = D })
+    return D
+end
+
 function GroupboxMethods:AddInput(Idx, Cfg2)
     local I = MakeInput(Idx, Cfg2 or {})
     table.insert(self.Elements, { Kind = "Input", Obj = I })
@@ -793,6 +810,22 @@ local function RenderElements(Sec, Box, Panel)
             RenderSlider(Sec, E.Obj, Risky)
         elseif Kind == "Dropdown" then
             RenderDropdown(Sec, E.Obj, Risky)
+        elseif Kind == "ValueDropdown" then
+            local D = E.Obj
+            local O = Merge({
+                Name = D.Text or D.Idx,
+                Options = D.Values,
+                MultiSelect = D.Multi,
+                Values = D.ValueValues or {},
+                Default = D.Value,
+                Flag = "Option_" .. D.Idx,
+                Tooltip = D.Tooltip,
+                Callback = function(V) D:_apply(V, true) end,
+            }, LockOpts(D))
+            D._ctrl = Sec:ValueDropdown(O)
+            local Ok, Got = pcall(function() return D._ctrl:Get() end)
+            if Ok and type(Got) == "table" then D.Value = Got end
+            if D.Risky and D.Text then Risky[D.Text] = true end
         elseif Kind == "Input" then
             RenderInput(Sec, E.Obj, Risky)
         elseif Kind == "Button" then
