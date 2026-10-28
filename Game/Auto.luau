@@ -141,8 +141,8 @@ function Module.Init(Shared)
         Text="Auto Loot", Default=false, Pinned=true,
         Tooltip="Automatically picks up selected loot using its proximity prompt."
     })
-    Automation:AddDropdown("AutoLootList", {
-        Text="Auto Loot List", Values=ItemOptions, Multi=true, AllowNull=true, Pinned=true
+    Automation:AddValueDropdown("AutoLootList", {
+        Text="Auto Loot List", Options=ItemOptions, Values=ItemValues, Multi=true, Pinned=true
     })
     Automation:AddToggle("AutoInteractToggle", {
         Text="Auto Interact", Default=false, Pinned=true,
@@ -152,16 +152,16 @@ function Module.Init(Shared)
     ESP:AddDivider()
     ESP:AddToggle("LootESPToggle", {Text="Loot ESP", Default=false, Tooltip="Highlights selected loot items and currency."})
     local ESPSelection = {}
-    ESP:AddDropdown("LootESPItems", {
-        Text="Loot ESP Items", Values=ItemOptions, Multi=true, AllowNull=true, Search=true,
+    ESP:AddValueDropdown("LootESPItems", {
+        Text="Loot ESP Items", Options=ItemOptions, Values=ItemValues, Multi=true,
         Callback=function(Value) ESPSelection = Value or {} end
     })
 
     Notifications:AddDivider()
     Notifications:AddToggle("LootNotifyToggle", {Text="Loot Notify", Default=false, Tooltip="Notifies when selected loot appears."})
     local NotifySelection = {}
-    Notifications:AddDropdown("LootNotifyItems", {
-        Text="Loot Notify Items", Values=ItemOptions, Multi=true, AllowNull=true,
+    Notifications:AddValueDropdown("LootNotifyItems", {
+        Text="Loot Notify Items", Options=ItemOptions, Values=ItemValues, Multi=true,
         Callback=function(Value) NotifySelection = Value or {} end
     })
 
@@ -210,7 +210,7 @@ function Module.Init(Shared)
 
     local function isSelected(Value, Name)
         if type(Value) ~= "table" then return Value == Name end
-        if Value[Name] == true then return true end
+        if Value[Name] ~= nil and Value[Name] ~= false then return true end
         return table.find(Value, Name) ~= nil
     end
 
