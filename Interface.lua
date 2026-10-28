@@ -489,7 +489,8 @@ end
 function GroupboxMethods:AddValueDropdown(Idx, Cfg2)
     Cfg2 = Cfg2 or {}
     local D = NewObj("ValueDropdown", Idx, Cfg2)
-    D.Values = Cfg2.Values or {}
+    D.Values = Cfg2.Options or {}
+    D.ValueValues = Cfg2.Values or {}
     D.Value = type(Cfg2.Default) == "table" and Cfg2.Default or {}
     D.Multi = Cfg2.Multi == true
     function D:_apply(Value, FromUI)
