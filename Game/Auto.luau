@@ -86,6 +86,11 @@ local ItemDefs = {
     {Name="Broken Headstone", Names={"BrokenHeadstone"}, Category="Event"},
     {Name="Giant Gummyworm", Names={"GiantGummyworm"}, Category="Event"},
     {Name="SmallCauldron", Names={"SmallCauldron"}, Category="Event"},
+    {Name="Wizard Hat", Names={"WizardHat"}, Category="Event"},
+    {Name="Haybale", Names={"Haybale"}, Category="Event"},
+    {Name="Chocolate Crate", Names={"ChocolateCrate"}, Category="Event"},
+    {Name="Large Candy Bag", Names={"LargeCandyBag"}, Category="Event"},
+    {Name="Candy Bag", Names={"CandyBag"}, Category="Event"},
 }
 
 local DefaultColors = {
