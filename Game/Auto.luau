@@ -21,6 +21,7 @@ local ItemDefs = {
     {Name="Bulklight", Names={"Bulklight"}, Category="Light"},
     {Name="Lantern", Names={"Lantern","LanternLitItem"}, Category="Light"},
     {Name="Shakelight", Names={"Shakelight"}, Category="Light"},
+    {Name="Flare", Names={"Flare","Flares"}, Category="Light"},
 
     {Name="Bandage", Names={"Bandage"}, Category="Healing"},
     {Name="Aloe Vera", Names={"AloeVera"}, Category="Healing"},
@@ -28,6 +29,7 @@ local ItemDefs = {
     {Name="Vitamins", Names={"Vitamins"}, Category="Healing"},
 
     {Name="Battery Pack", Names={"BatteryPack"}, Category="Utility"},
+    {Name="Jewelry Key", Names={"JewelryCase"}, Category="Utility"},
     {Name="Lockpick", Names={"Lockpick"}, Category="Utility"},
     {Name="Skeleton Key", Names={"SkeletonKey"}, Category="Utility"},
     {Name="Laser Pointer", Names={"LaserPointer"}, Category="Utility"},
@@ -67,7 +69,6 @@ local ItemDefs = {
 
     {Name="Iron Key", Names={"KeyIron","IronKey","IronKeyForCrypt"}, Category="Keys"},
     {Name="Garage Key", Names={"KeyGarage","GarageKey"}, Category="Keys"},
-    {Name="Jewelry Key", Names={"KeyJewelry"}, Category="Keys"},
 
     {Name="Translator Drive", Names={"Drive"}, Category="Drives", DriveLabel="TRANSLATOR"},
     {Name="Flashlight Drive", Names={"Drive"}, Category="Drives", DriveLabel="FLASHLIGHT"},
@@ -79,7 +80,12 @@ local ItemDefs = {
     {Name="Paper", Names={"HintPaper","LibraryHintPaper","LibraryHintPaperHard"}, Category="Objectives"},
     {Name="Fuse", Names={"FuseObtain","GeneratorFuse"}, Category="Objectives"},
 
-    {Name="Holy Hand Grenade", Names={"HolyGrenade"}, Category="Event"},
+    {Name="Holy Grenade", Names={"HolyGrenade"}, Category="Event"},
+    {Name="Candy", Names={"Candy"}, Category="Event"},
+    {Name="Candy Basket", Names={"CandyBasket"}, Category="Event"},
+    {Name="Broken Headstone", Names={"BrokenHeadstone"}, Category="Event"},
+    {Name="Giant Gummyworm", Names={"GiantGummyworm"}, Category="Event"},
+    {Name="SmallCauldron", Names={"SmallCauldron"}, Category="Event"},
 }
 
 local DefaultColors = {
@@ -204,6 +210,10 @@ function Module.Init(Shared)
     local function itemPrompt(Object)
         local prompt = Object:FindFirstChild("ModulePrompt", true)
         if prompt and prompt:IsA("ProximityPrompt") then return prompt end
+        if Object.Name == "JewelryCase" then
+            local unlockPrompt = Object:FindFirstChild("UnlockPrompt", true)
+            if unlockPrompt and unlockPrompt:IsA("ProximityPrompt") then return unlockPrompt end
+        end
         if Object.Name == "GoldPile" or Object.Name == "StardustPickup" then
             for _, child in ipairs(Object:GetDescendants()) do
                 if child:IsA("ProximityPrompt") then return child end
