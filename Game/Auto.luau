@@ -62,8 +62,6 @@ local ItemDefs = {
     {Name="Stop Sign", Names={"StopSign"}, Category="Battle"},
     {Name="Boxing Gloves", Names={"BoxingGloves"}, Category="Battle"},
 
-    {Name="Holy Grenade", Names={"HolyGrenade"}, Category="Events"},
-
     {Name="Electrical Key", Names={"KeyElectrical","ElectricalKeyObtain"}, Category="Keys"},
     {Name="Skeleton Key", Names={"SkeletonKey"}, Category="Keys"},
 
@@ -80,13 +78,15 @@ local ItemDefs = {
     {Name="Book", Names={"HintBook","LibraryHintBook","BookHint"}, Category="Objectives"},
     {Name="Paper", Names={"HintPaper","LibraryHintPaper","LibraryHintPaperHard"}, Category="Objectives"},
     {Name="Fuse", Names={"FuseObtain","GeneratorFuse"}, Category="Objectives"},
+
+    {Name="Holy Hand Grenade", Names={"HolyGrenade"}, Category="Event"},
 }
 
 local DefaultColors = {
     Currencies=Color3.fromRGB(255, 210, 70), Light=Color3.fromRGB(255, 245, 130),
     Healing=Color3.fromRGB(100, 255, 135), Utility=Color3.fromRGB(90, 190, 255),
     Edible=Color3.fromRGB(255, 145, 90), Battle=Color3.fromRGB(255, 85, 85),
-    Events=Color3.fromRGB(255, 100, 210), Keys=Color3.fromRGB(255, 205, 90),
+    Event=Color3.fromRGB(255, 100, 210), Keys=Color3.fromRGB(255, 205, 90),
     Drives=Color3.fromRGB(185, 135, 255), Objectives=Color3.fromRGB(100, 235, 255)
 }
 
@@ -96,6 +96,10 @@ local function makeOptions()
     local dividers = {}
     for _, def in ipairs(ItemDefs) do
         if not seen[def.Name] then
+            if def.Category == "Event" and not dividers.Trash then
+                table.insert(options, {Divider = "Trash"})
+                dividers.Trash = true
+            end
             if not dividers[def.Category] then
                 table.insert(options, {Divider = def.Category})
                 dividers[def.Category] = true
