@@ -217,6 +217,10 @@ local Entities = {
 		Alias = "Groundskeeper",
 		NotifyMessage = { Title = "Entity 'Groundskeeper' has spawned.", Body = "Avoid stepping on the grass." }
 	},
+	["Socker"] = {
+		Alias = "Socker",
+		NotifyMessage = { Title = "Entity 'Socker' has spawned.", Body = "Socker has appeared." }
+	},
 	["A60"] = {
 		Alias = "A-60",
 		NotifyMessage = { Title = "Entity 'A-60' has spawned.", Body = "Find a hiding spot." }
@@ -1569,7 +1573,7 @@ Groupboxes.Visuals_Entities     = Groupboxes.Visuals_RightTab:AddTab("Entities")
 
 Groupboxes.Visuals_Entities:AddDropdown("EntityList", {
 	Text = "Entity List",
-	Values = { "Rush","Bash","Scribbles","Teller","DronesStampede","Creak","Noise","Noise_TV","Balls","Portrait","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Bash","Scribbles","Teller","DronesStampede","Creak","Noise","Noise_TV","Balls","Portrait","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","AR0xMBUSH","RNIUSHCG==","Socker" },
 	Multi = true, AllowNull = true
 })
 Groupboxes.Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
@@ -1866,7 +1870,7 @@ Groupboxes.Visuals_ESP_Toggles:AddToggle("MiscESPToggle",       { Text = "Misc",
 Groupboxes.Visuals_ESP_Toggles:AddDivider()
 Groupboxes.Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
 	Text = "Entity List",
-	Values = { "Rush","Bash","Scribbles","Teller","DronesStampede","Creak","Noise","Noise_TV","Balls","Portrait","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Gloombat Eggs","Grumble","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Glitch Rush","Glitch Ambush" },
+	Values = { "Rush","Bash","Scribbles","Teller","DronesStampede","Creak","Noise","Noise_TV","Balls","Portrait","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Gloombat Eggs","Grumble","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Glitch Rush","Glitch Ambush","Socker" },
 	Multi = true,
 	AllowNull = true
 })
